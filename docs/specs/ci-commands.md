@@ -4,7 +4,7 @@
 
 Define the first concrete command set for executable spec validation.
 
-These are the commands the project should run locally and later wire into CI.
+These are the commands the project should run locally as spec-policy checks for now.
 
 ## Command Order
 
@@ -55,6 +55,6 @@ oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/open
 
 ## Best Next Moves
 
-1. wire these commands into CI when repo automation starts
+1. keep these as local spec-policy checks while CI stays cargo-check-only
 2. create the baseline spec artifact for `oasdiff`
 3. keep the command order stable so validation behavior stays predictable

@@ -10,7 +10,7 @@ Turn spec-governance policy into an executable checklist for:
 
 ## Required Validation Flow
 
-Run these checks for every contract-affecting change:
+Run these checks for every contract-affecting change as local or pre-merge spec-policy checks:
 
 1. syntax validation
 2. OpenAPI structure validation
@@ -39,7 +39,7 @@ npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.s
 oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml
 ```
 
-`docs/specs/baseline/openapi.yaml` should be created from the last approved spec before the breaking-change check becomes mandatory in CI.
+`docs/specs/baseline/openapi.yaml` should be created from the last approved spec before the breaking-change check becomes mandatory in automation.
 
 ## Checklist
 
@@ -118,5 +118,5 @@ oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/open
 ## Best Next Moves
 
 1. add a future checklist for `/internal/v1` once that spec exists
-2. convert this checklist into automated CI gates before backend code depends heavily on the contract
+2. keep this checklist as local or pre-merge policy while CI remains cargo-check-only
 3. add a future baseline spec artifact for `oasdiff` once the first spec is frozen

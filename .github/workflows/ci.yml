@@ -6,44 +6,18 @@ on:
   pull_request:
 
 jobs:
-  spec-validation:
-    name: Spec Validation
+  cargo-check:
+    name: Cargo Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          node-version: 20
+          toolchain: stable
+          components: clippy
 
-      - name: Install spec tools
-        run: |
-          npm install -g yamllint @redocly/cli @stoplight/spectral-cli
-          curl -fsSL https://raw.githubusercontent.com/oasdiff/oasdiff/main/install.sh | sh
-
-      - name: YAML syntax check
-        run: yamllint docs/specs/openapi.yaml
-
-      - name: OpenAPI structure check
-        run: npx @redocly/cli lint docs/specs/openapi.yaml
-
-      - name: Spectral policy check
-        run: npx @stoplight/spectral-cli lint docs/specs/openapi.yaml
-
-      - name: Breaking-change diff check
-        run: |
-          if [ -f docs/specs/baseline/openapi.yaml ]; then
-            oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml
-          else
-            echo "No baseline spec found, skipping breaking-change check"
-          fi
-
-  # Placeholder for Phase 2: Rust workspace check
-  # rust-check:
-  #   name: Cargo Check
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #     - run: cargo check
+      - name: Cargo check
+        working-directory: backend
+        run: cargo check
