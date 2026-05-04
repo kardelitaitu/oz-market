@@ -1,0 +1,919 @@
+openapi: 3.1.0
+info:
+  title: Project Marketplace API
+  version: 1.0.0
+  summary: HTTP API for the marketplace bridge server
+  description: >
+    Canonical API for the server, MCP-backed operations, and mobile clients.
+    This spec follows the frozen AI-facing listing contract and whitepaper state
+    rules.
+servers:
+  - url: /v1
+security:
+  - bearerAuth: []
+tags:
+  - name: listings
+  - name: search
+  - name: negotiations
+  - name: contact-reveals
+paths:
+  /listings:
+    post:
+      tags: [listings]
+      summary: Create listing
+      description: >
+        Create one seller-owned listing using the canonical AI-facing payload.
+        The caller must be a seller-linked credential with listing write
+        permission.
+      operationId: createListing
+      x-required-scopes: [listing:create]
+      x-allowed-roles: [seller_listing_writer, admin]
+      x-ownership-rule: caller seller_account_id must match listing owner_id mapping
+      x-audit-required: true
+      x-idempotency-required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListingRequest'
+      responses:
+        '201':
+          description: Listing created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateListingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /listings/{listing_id}:
+    get:
+      tags: [listings]
+      summary: Get listing
+      description: Fetch one listing by identifier.
+      operationId: getListing
+      x-required-scopes: [listing:read]
+      x-allowed-roles: [seller_listing_writer, seller_negotiator, seller_contact_reveal_approver, buyer_searcher, buyer_negotiator, admin, support_reviewer]
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Listing fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /listings/search:
+    get:
+      tags: [search]
+      summary: Search listings
+      description: >
+        Indexed listing search. The canonical search input is the SearchRequest
+        object; HTTP maps the same fields into query parameters. Sorting must be
+        deterministic and ties are broken by listing_id.
+      operationId: searchListings
+      x-required-scopes: [listing:search]
+      x-allowed-roles: [seller_listing_writer, seller_negotiator, seller_contact_reveal_approver, buyer_searcher, buyer_negotiator, admin, support_reviewer]
+      parameters:
+        - name: query
+          in: query
+          description: Free-text search term for indexed product text.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/Category'
+        - name: condition
+          in: query
+          schema:
+            $ref: '#/components/schemas/Condition'
+        - name: currency
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyCode'
+        - name: min_amount
+          in: query
+          schema:
+            type: number
+            exclusiveMinimum: 0
+        - name: max_amount
+          in: query
+          schema:
+            type: number
+            exclusiveMinimum: 0
+        - name: country_code
+          in: query
+          schema:
+            $ref: '#/components/schemas/CountryCode'
+        - name: city
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ListingStatus'
+        - name: sort_by
+          in: query
+          schema:
+            $ref: '#/components/schemas/SearchSort'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /negotiations:
+    post:
+      tags: [negotiations]
+      summary: Open negotiation
+      description: >
+        Create one buyer-owned negotiation against an active listing.
+        The caller must have buyer negotiation permission.
+      operationId: openNegotiation
+      x-required-scopes: [negotiation:create]
+      x-allowed-roles: [buyer_negotiator, admin]
+      x-ownership-rule: caller buyer-side identity must own the negotiation participant context
+      x-audit-required: true
+      x-idempotency-required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenNegotiationRequest'
+      responses:
+        '201':
+          description: Negotiation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /negotiations/{negotiation_id}:
+    get:
+      tags: [negotiations]
+      summary: Get negotiation status
+      description: >
+        Fetch the current negotiation state. The caller must be an authorized
+        negotiation participant or privileged read role.
+      operationId: getNegotiationStatus
+      x-required-scopes: [negotiation:read]
+      x-allowed-roles: [seller_negotiator, seller_contact_reveal_approver, buyer_negotiator, admin, support_reviewer]
+      x-ownership-rule: caller must be a negotiation participant or a privileged read role
+      parameters:
+        - $ref: '#/components/parameters/NegotiationId'
+      responses:
+        '200':
+          description: Negotiation fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /negotiations/{negotiation_id}/offers:
+    post:
+      tags: [negotiations]
+      summary: Submit negotiation offer
+      description: >
+        Submit a new offer or counter-offer. The current negotiation state,
+        reservation status, and idempotency key must all validate.
+      operationId: submitOffer
+      x-required-scopes: [negotiation:offer:submit]
+      x-allowed-roles: [seller_negotiator, buyer_negotiator, admin]
+      x-ownership-rule: caller must match the authorized seller or buyer side for the negotiation
+      x-audit-required: true
+      x-idempotency-required: true
+      parameters:
+        - $ref: '#/components/parameters/NegotiationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitOfferRequest'
+      responses:
+        '200':
+          description: Offer accepted by API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /negotiations/{negotiation_id}/request-contact-reveal:
+    post:
+      tags: [contact-reveals]
+      summary: Request contact reveal
+      description: >
+        Request a seller-approved phone reveal for a reserved negotiation.
+        The negotiation must already be in a valid reserved state.
+      operationId: requestContactReveal
+      x-required-scopes: [negotiation:reveal:request]
+      x-allowed-roles: [seller_negotiator, buyer_negotiator, admin]
+      x-ownership-rule: caller must match the reserved negotiation participant context
+      x-audit-required: true
+      x-idempotency-required: true
+      parameters:
+        - $ref: '#/components/parameters/NegotiationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestContactRevealRequest'
+      responses:
+        '200':
+          description: Contact reveal requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactRevealResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /contact-reveals/{reveal_id}/approve:
+    post:
+      tags: [contact-reveals]
+      summary: Approve contact reveal
+      description: >
+        Approve a pending reveal request and return only a controlled phone
+        reference. The caller must be an authorized seller-side approver.
+      operationId: approveContactReveal
+      x-required-scopes: [reveal:approve]
+      x-allowed-roles: [seller_contact_reveal_approver, admin]
+      x-ownership-rule: caller seller_account_id must own the listing tied to the reveal request
+      x-audit-required: true
+      x-idempotency-required: false
+      parameters:
+        - $ref: '#/components/parameters/RevealId'
+      responses:
+        '200':
+          description: Contact reveal approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactRevealResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ListingId:
+      name: listing_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    NegotiationId:
+      name: negotiation_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    RevealId:
+      name: reveal_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated but not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Version, reservation, or transition conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Rate limit or quota exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ResourceId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      example: lst_123
+    Category:
+      type: string
+      enum: [laptop, phone, tablet, desktop, monitor, accessory, camera, audio, gaming, appliance, furniture, vehicle_part, other]
+      example: laptop
+    Condition:
+      type: string
+      enum: [new, used, refurbished]
+      example: used
+    CurrencyCode:
+      type: string
+      pattern: '^[A-Z]{3}$'
+      example: USD
+    CountryCode:
+      type: string
+      pattern: '^[A-Z]{2}$'
+      example: JP
+    ListingStatus:
+      type: string
+      enum: [draft, active, reserved, sold, archived]
+      example: active
+    NegotiationStatus:
+      type: string
+      enum: [open, countered, near_close, reserved, contact_requested, contact_revealed, closed, cancelled]
+      example: open
+    ContactRevealStatus:
+      type: string
+      enum: [pending, approved, rejected, expired]
+      example: pending
+    SearchSort:
+      type: string
+      description: >
+        If query exists, default sort is relevance. Otherwise default sort is
+        newest. Ties are broken by listing_id.
+      enum: [relevance, newest, price_asc, price_desc]
+      example: relevance
+    Price:
+      type: object
+      additionalProperties: false
+      required: [currency, amount]
+      properties:
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        amount:
+          type: number
+          exclusiveMinimum: 0
+      example:
+        currency: USD
+        amount: 450
+    SearchPriceFilter:
+      type: object
+      additionalProperties: false
+      properties:
+        currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        min_amount:
+          type: number
+          exclusiveMinimum: 0
+        max_amount:
+          type: number
+          exclusiveMinimum: 0
+      example:
+        currency: USD
+        min_amount: 300
+        max_amount: 500
+    ListingLocation:
+      type: object
+      additionalProperties: false
+      required: [country_code, country_name, city]
+      properties:
+        country_code:
+          $ref: '#/components/schemas/CountryCode'
+        country_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        city:
+          type: string
+          minLength: 1
+          maxLength: 120
+      example:
+        country_code: JP
+        country_name: Japan
+        city: Osaka
+    SearchLocationFilter:
+      type: object
+      additionalProperties: false
+      properties:
+        country_code:
+          $ref: '#/components/schemas/CountryCode'
+        city:
+          type: string
+          minLength: 1
+          maxLength: 120
+      example:
+        country_code: JP
+        city: Osaka
+    ListingPayload:
+      type: object
+      additionalProperties: false
+      required: [schema_version, owner_id, category, product_name, condition, price, location, description]
+      properties:
+        schema_version:
+          type: string
+          const: '1.0'
+        owner_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        category:
+          $ref: '#/components/schemas/Category'
+        product_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        condition:
+          $ref: '#/components/schemas/Condition'
+        price:
+          $ref: '#/components/schemas/Price'
+        location:
+          $ref: '#/components/schemas/ListingLocation'
+        picture_urls:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uri
+        description:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        attributes:
+          type: object
+          additionalProperties:
+            anyOf:
+              - type: string
+              - type: number
+              - type: boolean
+      example:
+        schema_version: '1.0'
+        owner_id: seller-123
+        category: laptop
+        product_name: Lenovo ThinkPad T480
+        condition: used
+        price:
+          currency: USD
+          amount: 450
+        location:
+          country_code: JP
+          country_name: Japan
+          city: Osaka
+        picture_urls:
+          - https://example.com/item.jpg
+          - https://example.com/item2.jpg
+        description: Good battery health, no major scratches
+        attributes:
+          brand: Lenovo
+          model: ThinkPad T480
+    ListingSummary:
+      type: object
+      additionalProperties: false
+      required: [listing_id, status, version, listing]
+      properties:
+        listing_id:
+          $ref: '#/components/schemas/ResourceId'
+        status:
+          $ref: '#/components/schemas/ListingStatus'
+        version:
+          type: integer
+          minimum: 1
+        listing:
+          $ref: '#/components/schemas/ListingPayload'
+      example:
+        listing_id: lst_123
+        status: active
+        version: 1
+        listing:
+          schema_version: '1.0'
+          owner_id: seller-123
+          category: laptop
+          product_name: Lenovo ThinkPad T480
+          condition: used
+          price:
+            currency: USD
+            amount: 450
+          location:
+            country_code: JP
+            country_name: Japan
+            city: Osaka
+          picture_urls:
+            - https://example.com/item.jpg
+          description: Good battery health, no major scratches
+          attributes:
+            brand: Lenovo
+            model: ThinkPad T480
+    CreateListingRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotency_key, listing]
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        listing:
+          $ref: '#/components/schemas/ListingPayload'
+      example:
+        idempotency_key: create-listing-001
+        listing:
+          schema_version: '1.0'
+          owner_id: seller-123
+          category: laptop
+          product_name: Lenovo ThinkPad T480
+          condition: used
+          price:
+            currency: USD
+            amount: 450
+          location:
+            country_code: JP
+            country_name: Japan
+            city: Osaka
+          picture_urls:
+            - https://example.com/item.jpg
+            - https://example.com/item2.jpg
+          description: Good battery health, no major scratches
+          attributes:
+            brand: Lenovo
+            model: ThinkPad T480
+    CreateListingResponse:
+      type: object
+      additionalProperties: false
+      required: [listing_id, status, version, created_at]
+      properties:
+        listing_id:
+          $ref: '#/components/schemas/ResourceId'
+        status:
+          $ref: '#/components/schemas/ListingStatus'
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+      example:
+        listing_id: lst_123
+        status: active
+        version: 1
+        created_at: '2026-05-04T00:00:00Z'
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: '#/components/schemas/Category'
+        condition:
+          $ref: '#/components/schemas/Condition'
+        price:
+          $ref: '#/components/schemas/SearchPriceFilter'
+        location:
+          $ref: '#/components/schemas/SearchLocationFilter'
+        status:
+          $ref: '#/components/schemas/ListingStatus'
+        sort_by:
+          $ref: '#/components/schemas/SearchSort'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+        cursor:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+      example:
+        query: thinkpad
+        category: laptop
+        condition: used
+        price:
+          currency: USD
+          min_amount: 300
+          max_amount: 500
+        location:
+          country_code: JP
+          city: Osaka
+        status: active
+        sort_by: relevance
+        limit: 20
+        cursor: null
+    SearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items, applied_sort_by]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListingSummary'
+        applied_sort_by:
+          $ref: '#/components/schemas/SearchSort'
+        next_cursor:
+          type:
+            - string
+            - 'null'
+      example:
+        items:
+          - listing_id: lst_123
+            status: active
+            version: 1
+            listing:
+              schema_version: '1.0'
+              owner_id: seller-123
+              category: laptop
+              product_name: Lenovo ThinkPad T480
+              condition: used
+              price:
+                currency: USD
+                amount: 450
+              location:
+                country_code: JP
+                country_name: Japan
+                city: Osaka
+              picture_urls:
+                - https://example.com/item.jpg
+              description: Good battery health, no major scratches
+              attributes:
+                brand: Lenovo
+                model: ThinkPad T480
+        applied_sort_by: relevance
+        next_cursor: cur_456
+    OpenNegotiationRequest:
+      type: object
+      additionalProperties: false
+      required: [listing_id, buyer_agent_id, offer_currency, offer_amount, idempotency_key]
+      properties:
+        listing_id:
+          $ref: '#/components/schemas/ResourceId'
+        buyer_agent_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        offer_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        offer_amount:
+          type: number
+          exclusiveMinimum: 0
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+      example:
+        listing_id: lst_123
+        buyer_agent_id: buyer-agent-1
+        offer_currency: USD
+        offer_amount: 430
+        idempotency_key: open-negotiation-001
+    SubmitOfferRequest:
+      type: object
+      additionalProperties: false
+      required: [offer_currency, offer_amount, idempotency_key]
+      properties:
+        offer_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        offer_amount:
+          type: number
+          exclusiveMinimum: 0
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+      example:
+        offer_currency: USD
+        offer_amount: 440
+        idempotency_key: offer-001
+    RequestContactRevealRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotency_key]
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+      example:
+        idempotency_key: reveal-001
+    NegotiationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - negotiation_id
+        - listing_id
+        - buyer_agent_id
+        - status
+        - offer_currency
+        - latest_offer_amount
+        - version
+        - updated_at
+      properties:
+        negotiation_id:
+          $ref: '#/components/schemas/ResourceId'
+        listing_id:
+          $ref: '#/components/schemas/ResourceId'
+        buyer_agent_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        status:
+          $ref: '#/components/schemas/NegotiationStatus'
+        offer_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        latest_offer_amount:
+          type: number
+          exclusiveMinimum: 0
+        reservation_lease_id:
+          oneOf:
+            - $ref: '#/components/schemas/ResourceId'
+            - type: 'null'
+        final_offer_amount:
+          type:
+            - number
+            - 'null'
+          exclusiveMinimum: 0
+        version:
+          type: integer
+          minimum: 1
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        negotiation_id: neg_123
+        listing_id: lst_123
+        buyer_agent_id: buyer-agent-1
+        status: open
+        offer_currency: USD
+        latest_offer_amount: 430
+        reservation_lease_id: null
+        final_offer_amount: null
+        version: 1
+        updated_at: '2026-05-04T00:00:00Z'
+    ContactRevealResponse:
+      type: object
+      additionalProperties: false
+      required: [reveal_id, negotiation_id, reveal_status, updated_at]
+      properties:
+        reveal_id:
+          $ref: '#/components/schemas/ResourceId'
+        negotiation_id:
+          $ref: '#/components/schemas/ResourceId'
+        reveal_status:
+          $ref: '#/components/schemas/ContactRevealStatus'
+        revealed_phone_reference:
+          type:
+            - string
+            - 'null'
+        expires_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        approved_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        reveal_id: rev_123
+        negotiation_id: neg_123
+        reveal_status: pending
+        revealed_phone_reference: null
+        expires_at: '2026-05-04T00:15:00Z'
+        approved_at: null
+        updated_at: '2026-05-04T00:00:00Z'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_field
+                - missing_field
+                - conflict
+                - not_found
+                - rate_limited
+                - unauthorized
+                - forbidden
+                - owner_mismatch
+                - credential_revoked
+                - quota_exceeded
+                - trust_review_required
+                - reservation_conflict
+                - version_conflict
+                - invalid_transition
+            message:
+              type: string
+            field:
+              type:
+                - string
+                - 'null'
+      example:
+        error:
+          code: invalid_field
+          message: condition must be one of: new, used, refurbished
+          field: condition

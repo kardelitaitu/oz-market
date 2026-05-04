@@ -1,0 +1,27 @@
+extends:
+  - recommended
+
+rules:
+  # OpenAPI 3.1 validation
+  spec-strict-refs: error
+  no-unused-components: warn
+  operation-operationId-unique: error
+  operation-operationId-valid-in-url: error
+
+  # Security scheme references must resolve
+  no-unresolved-refs: error
+
+  # Operation structure checks
+  operation-description: warn
+  operation-tags: warn
+  operation-summary: warn
+
+  # Parameter and response checks
+  boolean-parameter-prefixes: warn
+  path-http-verb-allowed: error
+  path-not-include-query: error
+  path-params-defined: error
+  path-segment-plural: warn
+
+lint:
+  spectral-ruleset: .spectral.yaml

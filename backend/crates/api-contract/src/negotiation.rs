@@ -1,0 +1,75 @@
+use crate::listing::{CurrencyCode, ResourceId};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NegotiationStatus {
+    Open,
+    Countered,
+    NearClose,
+    Reserved,
+    ContactRequested,
+    ContactRevealed,
+    Closed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContactRevealStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenNegotiationRequest {
+    pub listing_id: ResourceId,
+    pub buyer_agent_id: String,
+    pub offer_currency: CurrencyCode,
+    pub offer_amount: f64,
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SubmitOfferRequest {
+    pub offer_currency: CurrencyCode,
+    pub offer_amount: f64,
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RequestContactRevealRequest {
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NegotiationResponse {
+    pub negotiation_id: ResourceId,
+    pub listing_id: ResourceId,
+    pub buyer_agent_id: String,
+    pub status: NegotiationStatus,
+    pub offer_currency: CurrencyCode,
+    pub latest_offer_amount: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reservation_lease_id: Option<ResourceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_offer_amount: Option<f64>,
+    pub version: u64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContactRevealResponse {
+    pub reveal_id: ResourceId,
+    pub negotiation_id: ResourceId,
+    pub reveal_status: ContactRevealStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revealed_phone_reference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_at: Option<String>,
+    pub updated_at: String,
+}

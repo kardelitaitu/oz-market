@@ -1,0 +1,77 @@
+extends: [[spectral:oas, all]]
+rules:
+  # Require x-required-scopes on protected operations
+  operation-required-scopes:
+    description: "Protected operations must declare x-required-scopes"
+    message: "Operation {{path}} must have x-required-scopes"
+    severity: error
+    given: $.paths.*[?( @property === 'get' || @property === 'post' || @property === 'put' || @property === 'delete' || @property === 'patch' )]
+    then:
+      field: x-required-scopes
+      function: truthy
+
+  # Require x-allowed-roles on protected operations
+  operation-allowed-roles:
+    description: "Protected operations must declare x-allowed-roles"
+    message: "Operation {{path}} must have x-allowed-roles"
+    severity: error
+    given: $.paths.*[?( @property === 'get' || @property === 'post' || @property === 'put' || @property === 'delete' || @property === 'patch' )]
+    then:
+      field: x-allowed-roles
+      function: truthy
+
+  # Require x-audit-required on write operations
+  operation-audit-required:
+    description: "Write operations must declare x-audit-required"
+    message: "Operation {{path}} must have x-audit-required"
+    severity: error
+    given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' || @property === 'delete' )]
+    then:
+      field: x-audit-required
+      function: truthy
+
+  # Require x-idempotency-required on write operations
+  operation-idempotency-required:
+    description: "Write operations must declare x-idempotency-required"
+    message: "Operation {{path}} must have x-idempotency-required"
+    severity: error
+    given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' )]
+    then:
+      field: x-idempotency-required
+      function: truthy
+
+  # Require canonical error responses for write operations
+  operation-write-error-responses:
+    description: "Write operations must document 400, 401, and 403"
+    message: "Operation {{path}} must define {{error}} response"
+    severity: error
+    given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' || @property === 'delete' )]
+    then:
+      - field: responses.400
+        function: truthy
+      - field: responses.401
+        function: truthy
+      - field: responses.403
+        function: truthy
+
+  # Replay-sensitive writes should document 409 and 429
+  operation-replay-sensitive-errors:
+    description: "Replay-sensitive writes should document 409 and 429"
+    message: "Operation {{path}} should define {{error}} response"
+    severity: warning
+    given: $.paths.*.post[?(@.x-idempotency-required === true)]
+    then:
+      - field: responses.409
+        function: truthy
+      - field: responses.429
+        function: truthy
+
+  # Require additionalProperties to be explicit on public schemas
+  schema-explicit-additional-properties:
+    description: "Public schemas should explicitly set additionalProperties"
+    message: "Schema {{path}} should explicitly set additionalProperties"
+    severity: warning
+    given: $.components.schemas.*~
+    then:
+      field: additionalProperties
+      function: defined
