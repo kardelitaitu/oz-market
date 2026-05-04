@@ -28,11 +28,11 @@ yamllint docs/specs/openapi.yaml
 ```
 
 ```text
-npx @redocly/cli lint docs/specs/openapi.yaml
+npx @redocly/cli lint docs/specs/openapi.yaml --config docs/specs/redocly.yaml
 ```
 
 ```text
-npx @stoplight/spectral-cli lint docs/specs/openapi.yaml
+npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.spectral.yaml
 ```
 
 ```text

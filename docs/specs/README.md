@@ -10,6 +10,8 @@ This folder is for implementation-ready specifications.
 - `spectral-rules.md`
 - `redocly-notes.md`
 - `ci-commands.md`
+- `.spectral.yaml`
+- `redocly.yaml`
 - schema component definitions
 - request/response validation notes
 - generated client/server contract artifacts

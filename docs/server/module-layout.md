@@ -42,24 +42,21 @@ backend/
       lib.rs
       app.rs
       config.rs
-      http/
-        mod.rs
-      auth/
-        mod.rs
-      domain/
-        mod.rs
-      services/
-        mod.rs
-      repositories/
-        mod.rs
       models/
         mod.rs
-      errors/
+        db.rs
+      repositories/
         mod.rs
-      observability/
-        mod.rs
-      background/
-        mod.rs
+        listings.rs
+        negotiations.rs
+        reservations.rs
+        contact_reveals.rs
+        audit_events.rs
+        outbox_events.rs
+        seller_accounts.rs
+        agent_credentials.rs
+    migrations/
+      0001_init.sql
   mcp/
     src/
       main.rs

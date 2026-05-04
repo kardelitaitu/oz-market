@@ -26,13 +26,13 @@ yamllint docs/specs/openapi.yaml
 ### 2. OpenAPI Structure Check
 
 ```text
-npx @redocly/cli lint docs/specs/openapi.yaml
+npx @redocly/cli lint docs/specs/openapi.yaml --config docs/specs/redocly.yaml
 ```
 
 ### 3. Spectral Policy Check
 
 ```text
-npx @stoplight/spectral-cli lint docs/specs/openapi.yaml
+npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.spectral.yaml
 ```
 
 ### 4. Breaking-Change Diff Check

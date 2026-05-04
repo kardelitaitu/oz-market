@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "TODO.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "TODO"
+              "title": "README"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "TODO.md",
+                "file": "README.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for TODO"
+              "title": "Backlinks for README"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "TODO.md",
+                "file": "README.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from TODO"
+              "title": "Outgoing links from README"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "TODO.md",
+                "file": "README.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of TODO"
+              "title": "Outline of README"
             }
           }
         ]
@@ -185,20 +185,20 @@
   },
   "active": "fa18bea9886ea3bb",
   "lastOpenFiles": [
-    "backend/target/debug/marketplace-server.d",
-    "backend/target/debug/libmarketplace_server.d",
-    "backend/target/debug/marketplace-mcp.d",
-    "backend/target/debug/libmarketplace_mcp.d",
-    "backend/target/debug/libmarketplace_core.d",
-    "backend/target/debug/libmarketplace_auth_core.d",
-    "backend/target/debug/libmarketplace_api_contract.d",
-    "backend/target/debug/marketplace_server.pdb",
-    "backend/target/debug/marketplace_mcp.pdb",
-    "backend/target/debug/marketplace-server.exe",
-    "backend/target/debug/marketplace-mcp.exe",
+    "docs/specs/redocly.yaml",
+    "backend/target/debug/deps/marketplace_server.pdb",
+    "backend/target/debug/deps/marketplace_server.exe",
+    "backend/target/debug/deps/rustcdv20yS/symbols.o",
+    "backend/target/debug/deps/rustcdv20yS",
+    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/work-products.bin",
+    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/query-cache.bin",
+    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/eujuryg9f88n5oti06ynz2l0u.o",
+    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/di4x542h7y89u199nve77gyk0.o",
+    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/dep-graph.bin",
+    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/c9g26zefgxdghyqo4zek9sof9.o",
+    "TODO.md",
     "docs/specs/ci-commands.md",
     "AGENTS.md",
-    "TODO.md",
     "docs/specs/redocly-notes.md",
     "docs/specs/spectral-rules.md",
     "docs/specs/validation-checklist.md",

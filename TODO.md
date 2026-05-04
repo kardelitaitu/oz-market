@@ -53,12 +53,13 @@ Short reason:
 
 ### Phase 3: Implementation After Validation
 
-- [ ] relational schema for `listings`
-- [ ] relational schema for `negotiations`
-- [ ] `reservation_leases`
-- [ ] `contact_reveals`
-- [ ] `audit_events`
-- [ ] `outbox_events`
+- [x] ~~relational schema for `listings`~~
+- [x] ~~relational schema for `negotiations`~~
+- [x] ~~`reservation_leases`~~
+- [x] ~~`contact_reveals`~~
+- [x] ~~`audit_events`~~
+- [x] ~~`outbox_events`~~
+- [x] ~~repository contracts for listings, negotiations, reservations, contact reveals, audit events, outbox events, seller accounts, and agent credentials~~
 - [ ] authz enforcement
 - [ ] idempotency enforcement
 - [ ] indexed search path
