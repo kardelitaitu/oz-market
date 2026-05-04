@@ -70,3 +70,9 @@ Important planning docs:
 2. implement the first API surface from `docs/specs/openapi.yaml`
 3. map MCP tools to the same shared backend services
 4. define Android and iOS auth/session flows
+
+## LICENSE
+
+*Permission is granted to use, copy, modify, and distribute this software* 
+*for non-commercial purposes only. Commercial use is prohibited without* 
+*explicit written permission from the author.*

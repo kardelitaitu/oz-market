@@ -1,0 +1,24 @@
+# Rust
+backend/target/
+**/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Obsidian
+.obsidian
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
