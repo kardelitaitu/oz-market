@@ -142,4 +142,20 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 CREATE INDEX IF NOT EXISTS idx_outbox_events_pending ON outbox_events (published_at, available_at);
 CREATE INDEX IF NOT EXISTS idx_outbox_events_aggregate ON outbox_events (aggregate_type, aggregate_id);
 
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    idempotency_key TEXT NOT NULL,
+    actor_subject TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    request_fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'succeeded', 'failed')),
+    response_payload JSONB,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (idempotency_key, actor_subject, operation)
+);
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_actor_operation ON idempotency_keys (actor_subject, operation);
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires_at ON idempotency_keys (expires_at);
+
 COMMIT;

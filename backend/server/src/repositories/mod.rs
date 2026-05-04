@@ -1,6 +1,7 @@
 pub mod agent_credentials;
 pub mod audit_events;
 pub mod contact_reveals;
+pub mod idempotency_keys;
 pub mod listings;
 pub mod negotiations;
 pub mod outbox_events;
@@ -47,6 +48,7 @@ impl std::error::Error for RepositoryError {}
 pub use agent_credentials::AgentCredentialRepository;
 pub use audit_events::AuditEventRepository;
 pub use contact_reveals::ContactRevealRepository;
+pub use idempotency_keys::IdempotencyKeyRepository;
 pub use listings::ListingRepository;
 pub use negotiations::NegotiationRepository;
 pub use outbox_events::OutboxEventRepository;

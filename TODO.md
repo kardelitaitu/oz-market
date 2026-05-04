@@ -60,8 +60,8 @@ Short reason:
 - [x] ~~`audit_events`~~
 - [x] ~~`outbox_events`~~
 - [x] ~~repository contracts for listings, negotiations, reservations, contact reveals, audit events, outbox events, seller accounts, and agent credentials~~
-- [ ] authz enforcement
-- [ ] idempotency enforcement
+- [x] ~~authz enforcement layer and service wrappers~~
+- [x] ~~idempotency enforcement layer and service guard~~
 - [ ] indexed search path
 
 ## Working Rule

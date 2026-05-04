@@ -148,3 +148,23 @@ pub struct AgentCredentialRow {
     pub created_at: String,
     pub updated_at: String,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdempotencyKeyStatus {
+    Pending,
+    Succeeded,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IdempotencyKeyRow {
+    pub idempotency_key: String,
+    pub actor_subject: String,
+    pub operation: String,
+    pub request_fingerprint: String,
+    pub status: IdempotencyKeyStatus,
+    pub response_payload: Option<Value>,
+    pub expires_at: String,
+    pub created_at: String,
+    pub updated_at: String,
+}

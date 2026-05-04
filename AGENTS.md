@@ -75,3 +75,9 @@ For MCP behavior, check:
 - prefer explicit SQL and strong typed contracts
 - keep the listing/search payload aligned with the frozen V1 contract
 - avoid introducing new root-level structure unless there is a strong repo-wide reason
+
+## Change Logging Rule
+
+- after making code changes, summarize the changes briefly in the response
+- after making code changes, append a short journal entry to `JOURNAL.md`
+- journal entries should record what changed and why, not just file names
