@@ -19,7 +19,7 @@ Event delivery should help clients react faster, but it should not replace:
 
 - `GET /v1/listings/{id}`
 - `GET /v1/negotiations/{id}`
-- future reveal-status reads when needed
+- later reveal-status reads if needed
 
 ## Delivery Options
 
@@ -114,5 +114,5 @@ Suggested internal event types:
 ## Best Next Moves
 
 1. keep polling as the first guaranteed integration path
-2. define a future webhook signature model before adding delivery endpoints
+2. define a webhook signature model before adding delivery endpoints later
 3. tie event publication to audit or outbox design in the server docs later

@@ -5,6 +5,7 @@
 Define the first concrete command set for executable spec validation.
 
 These are the commands the project should run locally as spec-policy checks for now.
+Use them as local or pre-merge checks.
 
 ## Command Order
 
@@ -20,7 +21,7 @@ Run in this order:
 ### 1. YAML Syntax Check
 
 ```text
-yamllint docs/specs/openapi.yaml
+yamllint -c docs/specs/yamllint.yaml docs/specs/openapi.yaml
 ```
 
 ### 2. OpenAPI Structure Check
@@ -38,7 +39,7 @@ npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.s
 ### 4. Breaking-Change Diff Check
 
 ```text
-oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml
+pwsh -File docs/specs/run-oasdiff-breaking.ps1 docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml
 ```
 
 ## Baseline Rule
@@ -52,9 +53,10 @@ oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/open
 - use Redocly next because it catches OpenAPI structure issues early
 - use Spectral after structural validation because it carries project policy
 - use `oasdiff` only when a baseline spec exists
+- use the local `oasdiff` wrapper because the upstream CLI exits nonzero on no-change cases
 
 ## Best Next Moves
 
 1. keep these as local spec-policy checks while CI stays cargo-check-only
-2. create the baseline spec artifact for `oasdiff`
+2. keep `docs/specs/baseline/openapi.yaml` as the approved `oasdiff` baseline
 3. keep the command order stable so validation behavior stays predictable

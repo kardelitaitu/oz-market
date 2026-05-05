@@ -24,7 +24,6 @@ The product goal is:
     server/
     mcp/
     crates/
-      marketplace-core/
       api-contract/
       auth-core/
   mobile/
@@ -39,6 +38,7 @@ The product goal is:
 - backend shared logic should live under `backend/crates/`
 - HTTP transport belongs in `backend/server`
 - MCP transport belongs in `backend/mcp`
+- keep shared backend dependencies minimal and long-lived
 - mobile apps should consume the same backend contract, not implement business rules locally
 
 ## Docs
@@ -70,6 +70,14 @@ Important planning docs:
 2. implement the first API surface from `docs/specs/openapi.yaml`
 3. map MCP tools to the same shared backend services
 4. define Android and iOS auth/session flows
+
+## Local Postgres Dev
+
+Use the repo-local Postgres container when you want to run backend benchmarks or Postgres integration tests:
+
+1. start the database with `docker compose -p marketplace -f compose.postgres.yml up -d`
+2. run `backend/server/scripts/run-local-postgres-dev.ps1` to do both the benchmark and the Postgres tests
+3. use `backend/server/scripts/run-phase5-bench-local.ps1` or `backend/server/scripts/run-postgres-tests-local.ps1` when you want to run one step only
 
 ## LICENSE
 

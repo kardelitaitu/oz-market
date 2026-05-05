@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::BTreeMap;
 
 pub type ResourceId = String;
 pub type CurrencyCode = String;
@@ -83,7 +81,7 @@ pub struct ListingPayload {
     pub picture_urls: Vec<String>,
     pub description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attributes: Option<BTreeMap<String, Value>>,
+    pub attributes: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

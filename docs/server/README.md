@@ -1,6 +1,6 @@
 # Server Docs
 
-This folder is for server-specific documentation.
+This folder contains server-specific documentation.
 
 ## Intended Contents
 
@@ -19,3 +19,5 @@ The first server module plan lives in `./module-layout.md`. Core product and API
 1. migration strategy
 2. environment configuration notes
 3. deployment runbook
+4. benchmark runbook for `phase5_bench`
+5. local Postgres compose notes for benchmark runs

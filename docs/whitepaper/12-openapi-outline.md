@@ -4,7 +4,7 @@
 
 Turn the frozen marketplace contract into an implementation-oriented API outline.
 
-This is not a full OpenAPI file yet. It is the schema and endpoint plan to guide the first spec.
+Keep this outline aligned with the frozen OpenAPI file and the canonical contract.
 
 ## API Version
 
@@ -257,7 +257,7 @@ Response:
 
 ## Best Next Moves
 
-1. Convert this outline into a real OpenAPI YAML file.
-2. Define shared reusable schema components for `Price`, `Location`, and `ErrorResponse`.
-3. Add auth headers and permission notes per endpoint.
-4. Add negotiation and reservation response schemas.
+1. keep this outline aligned with `docs/specs/openapi.yaml`
+2. keep shared reusable schema components documented here when the spec expands
+3. keep auth headers and permission notes explicit per endpoint
+4. keep negotiation and reservation response shapes aligned with the frozen contract

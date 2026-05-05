@@ -7,4 +7,7 @@ publish = false
 [dependencies]
 marketplace-api-contract = { path = "../crates/api-contract" }
 marketplace-auth-core = { path = "../crates/auth-core" }
-marketplace-core = { path = "../crates/marketplace-core" }
+marketplace-server = { path = "../server" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

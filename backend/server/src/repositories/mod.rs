@@ -47,10 +47,17 @@ impl std::error::Error for RepositoryError {}
 
 pub use agent_credentials::AgentCredentialRepository;
 pub use audit_events::AuditEventRepository;
-pub use contact_reveals::ContactRevealRepository;
+pub use contact_reveals::{
+    ContactRevealRepository, InMemoryContactRevealRepository, PostgresContactRevealRepository,
+};
 pub use idempotency_keys::IdempotencyKeyRepository;
-pub use listings::ListingRepository;
+pub use listings::{ListingRepository, InMemoryListingRepository, PostgresListingRepository};
 pub use negotiations::NegotiationRepository;
 pub use outbox_events::OutboxEventRepository;
-pub use reservations::ReservationLeaseRepository;
-pub use seller_accounts::SellerAccountRepository;
+pub use reservations::{
+    InMemoryReservationLeaseRepository, PostgresReservationLeaseRepository,
+    ReservationLeaseRepository,
+};
+pub use seller_accounts::{
+    InMemorySellerAccountRepository, PostgresSellerAccountRepository, SellerAccountRepository,
+};

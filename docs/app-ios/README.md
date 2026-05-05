@@ -1,6 +1,6 @@
 # iOS App Docs
 
-This folder is for iOS client documentation.
+This folder contains iOS client documentation.
 
 ## Intended Contents
 

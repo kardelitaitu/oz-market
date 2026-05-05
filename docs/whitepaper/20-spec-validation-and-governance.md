@@ -120,10 +120,10 @@ Recommended first CI tools:
 
 Recommended first CI gates:
 
-- `yamllint docs/specs/openapi.yaml`
-- `redocly lint docs/specs/openapi.yaml`
-- `spectral lint docs/specs/openapi.yaml`
-- `oasdiff breaking --fail-on-diff <base-spec> docs/specs/openapi.yaml`
+- `yamllint -c docs/specs/yamllint.yaml docs/specs/openapi.yaml`
+- `npx @redocly/cli lint docs/specs/openapi.yaml --config docs/specs/redocly.yaml`
+- `npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.spectral.yaml`
+- `pwsh -File docs/specs/run-oasdiff-breaking.ps1 docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml`
 
 ## Failure Policy
 

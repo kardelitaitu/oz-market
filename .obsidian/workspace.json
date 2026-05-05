@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
-                "mode": "source",
+                "file": "docs/whitepaper/01-overview.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "01-overview"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "README.md",
+                "file": "docs/whitepaper/01-overview.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for README"
+              "title": "Backlinks for 01-overview"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "README.md",
+                "file": "docs/whitepaper/01-overview.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from README"
+              "title": "Outgoing links from 01-overview"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "README.md",
+                "file": "docs/whitepaper/01-overview.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of README"
+              "title": "Outline of 01-overview"
             }
           }
         ]
@@ -185,41 +185,41 @@
   },
   "active": "fa18bea9886ea3bb",
   "lastOpenFiles": [
-    "docs/specs/redocly.yaml",
-    "backend/target/debug/deps/marketplace_server.pdb",
-    "backend/target/debug/deps/marketplace_server.exe",
-    "backend/target/debug/deps/rustcdv20yS/symbols.o",
-    "backend/target/debug/deps/rustcdv20yS",
-    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/work-products.bin",
-    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/query-cache.bin",
-    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/eujuryg9f88n5oti06ynz2l0u.o",
-    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/di4x542h7y89u199nve77gyk0.o",
-    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/dep-graph.bin",
-    "backend/target/debug/incremental/marketplace_server-38elwcz4dd3tr/s-hi79cfvyw2-04a30tb-0drao2r152tq9jxeg8x0p1p47/c9g26zefgxdghyqo4zek9sof9.o",
-    "TODO.md",
-    "docs/specs/ci-commands.md",
-    "AGENTS.md",
-    "docs/specs/redocly-notes.md",
-    "docs/specs/spectral-rules.md",
-    "docs/specs/validation-checklist.md",
-    "docs/whitepaper/24-audit-events-and-outbox.md",
-    "docs/specs/internal-api-outline.md",
-    "docs/whitepaper/23-event-delivery.md",
-    "docs/whitepaper/22-admin-and-support-surfaces.md",
-    "docs/whitepaper/21-auth-scopes-and-claims.md",
-    "docs/whitepaper/20-spec-validation-and-governance.md",
-    "docs/whitepaper/19-test-strategy.md",
-    "docs/whitepaper/18-implementation-checklist.md",
-    "docs/whitepaper/17-decision-log.md",
-    "docs/whitepaper/16-risks-and-assumptions.md",
-    "docs/whitepaper/15-non-functional-requirements.md",
-    "docs/whitepaper/14-state-machines.md",
-    "docs/whitepaper/13-role-permission-matrix.md",
-    "README.md",
+    "sed5GFbkk",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/work-products.bin",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/query-cache.bin",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/ew5iw5iczk0xj4wnm63j2gq2w.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/ew01vsmpf1ttc3e5i33pfpbuk.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/evj5cjlq0ztqfjtk8rdzdratx.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/etx9s1tl2qq1lb7nec6zhexpq.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/ekelub4lwoz23rfk7y1xz6z2w.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/ek81xgcwfyey9l5sb3ir1rama.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/ejy1ifwk583bh78gi2f8qrl2x.o",
+    "backend/target/debug/incremental/marketplace_server-1i6bn911tlpa3/s-hi8eycel67-0lmyw61-d1wxhhww55xa208p30wxqwo51/eiaev7g2qw9703z1v2ch2wuc2.o",
     "docs/DOCS-README.md",
-    "docs/app-ios/first-user-flow.md",
-    "docs/app-android/first-user-flow.md",
-    "docs/mcp/tool-catalog.md",
-    "docs/server/module-layout.md"
+    "TODO.md",
+    "backend/server/scripts/README.md",
+    "docs/server/module-layout.md",
+    "docs/specs/internal-api-outline.md",
+    "docs/specs/ci-commands.md",
+    "docs/specs/validation-checklist.md",
+    "docs/specs/spectral-rules.md",
+    "docs/specs/redocly-notes.md",
+    "docs/specs/README.md",
+    "mobile/app-ios/ui/polling.md",
+    "mobile/app-android/ui/polling.md",
+    "mobile/app-ios/contract/payload.md",
+    "mobile/app-android/contract/payload.md",
+    "mobile/app-ios/setup/openrouter-free.md",
+    "mobile/app-android/setup/openrouter-free.md",
+    "mobile/app-ios/setup/session.md",
+    "mobile/app-android/setup/session.md",
+    "mobile/app-ios/contract/identity.md",
+    "mobile/app-android/contract/identity.md",
+    "JOURNAL.md",
+    "mobile/app-ios/ui/README.md",
+    "mobile/app-ios/setup/README.md",
+    "mobile/app-ios/contract/README.md",
+    "mobile/app-android/ui/README.md"
   ]
 }

@@ -113,7 +113,7 @@ Track accepted, rejected, and deferred architecture decisions so the codebase do
 - `status`: deferred
 - `decision`: whether MCP runs inside the main binary or as sidecar
 - `reason`: depends on implementation and operational tradeoffs
-- `owner`: `to_assign_backend_lead`
+- `owner`: `dev (interim)`
 - `target_stage`: before MCP runtime implementation starts
 
 ### D-202: Money Precision Policy
@@ -121,7 +121,7 @@ Track accepted, rejected, and deferred architecture decisions so the codebase do
 - `status`: deferred
 - `decision`: whether `price.amount` remains simple numeric or moves to stricter minor-unit representation
 - `reason`: depends on real payment and accounting requirements
-- `owner`: `to_assign_backend_lead`
+- `owner`: `dev (interim)`
 - `target_stage`: before database migrations are finalized
 
 ### D-203: Location Normalization Depth
@@ -129,7 +129,7 @@ Track accepted, rejected, and deferred architecture decisions so the codebase do
 - `status`: deferred
 - `decision`: whether `location.city` remains free text or becomes normalized
 - `reason`: depends on search quality and data-cleaning needs
-- `owner`: `to_assign_search_and_data_lead`
+- `owner`: `dev (interim)`
 - `target_stage`: before search ranking and indexing implementation hardens
 
 ### D-204: Provider Fallback Beyond openrouter/free
@@ -137,7 +137,7 @@ Track accepted, rejected, and deferred architecture decisions so the codebase do
 - `status`: deferred
 - `decision`: whether mobile apps support more than `openrouter/free` in V1
 - `reason`: depends on product and cost pressure
-- `owner`: `to_assign_mobile_product_lead`
+- `owner`: `dev (interim)`
 - `target_stage`: before mobile agent settings are finalized
 
 ### D-205: Support Reviewer Access Depth
@@ -145,7 +145,7 @@ Track accepted, rejected, and deferred architecture decisions so the codebase do
 - `status`: deferred
 - `decision`: how much negotiation detail support reviewers may inspect
 - `reason`: depends on privacy and operations policy
-- `owner`: `to_assign_operations_and_trust_lead`
+- `owner`: `dev (interim)`
 - `target_stage`: before support tooling or admin surfaces are implemented
 
 ## Update Rule

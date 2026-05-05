@@ -33,14 +33,15 @@ backend/
     auth-core/
       src/
         lib.rs
-    marketplace-core/
-      src/
-        lib.rs
   server/
     src/
       main.rs
       lib.rs
       app.rs
+      http/
+        mod.rs
+        handlers.rs
+        runtime.rs
       config.rs
       models/
         mod.rs
@@ -70,7 +71,6 @@ backend/
 | --- | --- |
 | `api-contract/` | shared request/response and error schemas |
 | `auth-core/` | claims, roles, scopes, ownership checks |
-| `marketplace-core/` | core business rules and state transitions |
 | `server/http/` | route registration, request parsing, response mapping |
 | `server/auth/` | bearer auth, role checks, ownership checks |
 | `server/domain/` | server-side domain orchestration glue |
@@ -85,12 +85,12 @@ backend/
 
 Recommended direction:
 
-- `server -> api-contract + auth-core + marketplace-core`
+- `server -> api-contract + auth-core`
 - `http -> services`
 - `services -> domain + repositories + auth`
 - `repositories -> models/db`
 - `domain` should not depend on `http`
-- `api-contract`, `auth-core`, and `marketplace-core` should stay transport-agnostic
+- `api-contract` and `auth-core` should stay transport-agnostic
 
 ## Shared Service Rule
 

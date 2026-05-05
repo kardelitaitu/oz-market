@@ -18,7 +18,6 @@ backend/
   server/
   mcp/
   crates/
-    marketplace-core/
     api-contract/
     auth-core/
 mobile/
@@ -38,7 +37,6 @@ docs/
 
 - `backend/server`: HTTP API transport and server runtime
 - `backend/mcp`: MCP transport and desktop-agent integration
-- `backend/crates/marketplace-core`: marketplace domain and shared business logic
 - `backend/crates/api-contract`: shared typed contracts derived from the frozen API contract
 - `backend/crates/auth-core`: auth, permission, and identity helpers
 - `mobile/app-android`: Android client
@@ -74,6 +72,7 @@ For MCP behavior, check:
 - prefer `Rust` for backend code
 - prefer explicit SQL and strong typed contracts
 - keep the listing/search payload aligned with the frozen V1 contract
+- avoid reviving removed core crates unless they solve a real long-term dependency boundary
 - avoid introducing new root-level structure unless there is a strong repo-wide reason
 
 ## Change Logging Rule

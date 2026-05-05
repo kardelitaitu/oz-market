@@ -1,0 +1,5 @@
+{
+  "platform": "ios",
+  "contract_source": "../../docs/specs/openapi.yaml",
+  "flow_doc": "../../docs/app-ios/first-user-flow.md"
+}

@@ -1,6 +1,6 @@
 # Project Whitepaper
 
-This folder defines the planning pass for a minimal `AI-agent marketplace bridge` for new and used products.
+This folder contains the planning docs for a minimal `AI-agent marketplace bridge` for new and used products.
 
 ## End Product
 

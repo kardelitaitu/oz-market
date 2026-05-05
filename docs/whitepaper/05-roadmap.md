@@ -12,28 +12,28 @@
 
 ## Phase 2: Negotiation
 
-- Add offer and counter-offer flow
-- Add negotiation state machine
-- Add reservation lease and versioning rules
-- Add audit event tracking
-- Add idempotency and retry safety
+- Offer and counter-offer flow
+- Negotiation state machine
+- Reservation lease and versioning rules
+- Audit event tracking
+- Idempotency and retry safety
 - Expose negotiation actions through MCP
 - Expose negotiation actions to Android and iOS app flows
 
 ## Phase 3: Contact Reveal
 
 - Store private seller contact separately
-- Add reveal request and approval flow
-- Add expiring reveal records
+- Reveal request and approval flow
+- Expiring reveal records
 
 ## Phase 4: Hardening
 
-- Add auth and rate limits
-- Add observability and error tracking
-- Add duplicate listing and abuse controls
-- Add anti-spam controls for fake listings and agent abuse
+- Auth and rate limits
+- Observability and error tracking
+- Duplicate listing and abuse controls
+- Anti-spam controls for fake listings and agent abuse
 - Load test toward the throughput target
-- Add MCP tool-level validation and usage analytics
+- MCP tool-level validation and usage analytics
 - Harden mobile app agent integration and provider fallback handling
 - Revisit external search only if PostgreSQL indexing becomes the bottleneck
 
@@ -62,7 +62,7 @@
 21. Define machine validation and compatibility rules for the API spec.
 22. Define explicit auth scopes and token-claim shape for HTTP, MCP, and mobile.
 23. Define admin and support operational surfaces before internal tooling grows ad hoc.
-24. Define event delivery strategy for polling, webhooks, and future push flows.
+24. Define event delivery strategy for polling, webhooks, and push flows later if needed.
 25. Define audit-event and outbox boundaries before asynchronous delivery grows.
 
 ## Alternatives To Consider
@@ -70,7 +70,7 @@
 | Alternative | Pros | Cons |
 | --- | --- | --- |
 | Start with backend API only | Fastest path, best for agent-first system | No human-facing fallback at first |
-| Add a minimal seller dashboard early | Easier manual operations and testing | Slightly slower performance-focused progress |
+| Keep a minimal seller dashboard early | Easier manual operations and testing | Slightly slower performance-focused progress |
 | Start with chat-platform bot interface | Very easy early interaction model | Harder long-term system control and throughput predictability |
 
 ## Open Questions

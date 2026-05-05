@@ -152,6 +152,73 @@ Output:
 }
 ```
 
+### `request_contact_reveal`
+
+Input:
+
+```json
+{
+  "negotiation_id": "neg_123",
+  "idempotency_key": "reveal-001"
+}
+```
+
+Output:
+
+```json
+{
+  "reveal_id": "rev_123",
+  "negotiation_id": "neg_123",
+  "reveal_status": "pending"
+}
+```
+
+### `approve_contact_reveal`
+
+Input:
+
+```json
+{
+  "reveal_id": "rev_123"
+}
+```
+
+Output:
+
+```json
+{
+  "reveal_id": "rev_123",
+  "negotiation_id": "neg_123",
+  "reveal_status": "approved",
+  "revealed_phone_reference": "phone_ref_stub"
+}
+```
+
+## Event Consumption Model
+
+MCP clients should consume state changes by polling the shared read tools instead of subscribing directly to events in V1.
+
+Recommended polling tools:
+
+- `get_listing`
+- `get_negotiation_status`
+- `get_contact_reveal`
+
+Model:
+
+- request a write tool
+- wait briefly
+- poll the matching read tool until the new state is visible
+- treat `409` and idempotency replay responses as retry signals, not separate business states
+- do not add a separate MCP event stream until the shared delivery model is ready
+
+## Conflict And Retry Examples
+
+- if `create_listing` is replayed with the same `idempotency_key` and same fingerprint, return the original result
+- if `create_listing` is replayed with the same `idempotency_key` but a different fingerprint, return a machine-readable conflict
+- if `open_negotiation` is retried after a reservation already exists, return the existing reserved response or the conflict reason, not a duplicate reservation
+- keep these examples aligned with the shared backend service behavior, not MCP-only logic
+
 ## Reliability Rules For MCP
 
 - require schema validation on every tool input

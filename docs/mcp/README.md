@@ -1,6 +1,6 @@
 # MCP Docs
 
-This folder is for marketplace MCP server documentation.
+This folder contains marketplace MCP server documentation.
 
 ## Intended Contents
 

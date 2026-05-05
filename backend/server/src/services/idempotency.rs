@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 use std::sync::RwLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,9 +40,7 @@ pub struct IdempotencyAttempt<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum IdempotencyDecision {
     FirstUse,
-    ReplayAccepted {
-        response_payload: Option<Value>,
-    },
+    ReplayAccepted { response_payload: Option<Value> },
     InFlight,
 }
 
@@ -76,11 +75,11 @@ impl Display for IdempotencyError {
 impl std::error::Error for IdempotencyError {}
 
 pub struct IdempotencyGuard<R> {
-    repository: R,
+    repository: Arc<R>,
 }
 
 impl<R> IdempotencyGuard<R> {
-    pub fn new(repository: R) -> Self {
+    pub fn new(repository: Arc<R>) -> Self {
         Self { repository }
     }
 }
@@ -98,6 +97,7 @@ where
 
         match self
             .repository
+            .as_ref()
             .get(
                 attempt.actor_subject,
                 attempt.operation.as_str(),
@@ -123,6 +123,7 @@ where
             )),
             None => {
                 self.repository
+                    .as_ref()
                     .reserve(IdempotencyKeyRow {
                         idempotency_key: attempt.idempotency_key.to_string(),
                         actor_subject: attempt.actor_subject.to_string(),
@@ -148,6 +149,7 @@ where
         response_payload: Value,
     ) -> Result<(), IdempotencyError> {
         self.repository
+            .as_ref()
             .mark_succeeded(
                 attempt.actor_subject,
                 attempt.operation.as_str(),
@@ -164,6 +166,7 @@ where
         response_payload: Option<Value>,
     ) -> Result<(), IdempotencyError> {
         self.repository
+            .as_ref()
             .mark_failed(
                 attempt.actor_subject,
                 attempt.operation.as_str(),
@@ -330,15 +333,18 @@ mod tests {
     #[tokio::test]
     async fn first_use_reserves_record() {
         let repo = InMemoryIdempotencyRepository::new();
-        let guard = IdempotencyGuard::new(repo);
-        let decision = guard.begin(&attempt(), "2026-05-04T00:00:00Z").await.unwrap();
+        let guard = IdempotencyGuard::new(Arc::new(repo));
+        let decision = guard
+            .begin(&attempt(), "2026-05-04T00:00:00Z")
+            .await
+            .unwrap();
         assert!(matches!(decision, IdempotencyDecision::FirstUse));
     }
 
     #[tokio::test]
     async fn replay_same_fingerprint_returns_accepted() {
         let repo = InMemoryIdempotencyRepository::new();
-        let guard = IdempotencyGuard::new(repo);
+        let guard = IdempotencyGuard::new(Arc::new(repo));
         let attempt = attempt();
         let _ = guard.begin(&attempt, "2026-05-04T00:00:00Z").await.unwrap();
         guard
@@ -357,7 +363,7 @@ mod tests {
     #[tokio::test]
     async fn reused_key_with_different_fingerprint_conflicts() {
         let repo = InMemoryIdempotencyRepository::new();
-        let guard = IdempotencyGuard::new(repo);
+        let guard = IdempotencyGuard::new(Arc::new(repo));
         let attempt = attempt();
         let _ = guard.begin(&attempt, "2026-05-04T00:00:00Z").await.unwrap();
         let conflicting = IdempotencyAttempt {
@@ -365,6 +371,12 @@ mod tests {
             ..attempt
         };
         let decision = guard.begin(&conflicting, "2026-05-04T00:00:01Z").await;
-        assert!(matches!(decision, Err(IdempotencyError { kind: IdempotencyErrorKind::Conflict, .. })));
+        assert!(matches!(
+            decision,
+            Err(IdempotencyError {
+                kind: IdempotencyErrorKind::Conflict,
+                ..
+            })
+        ));
     }
 }

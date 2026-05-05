@@ -2,14 +2,14 @@
 
 ## Goal
 
-Make the chosen Spectral lint direction concrete enough for implementation planning and preserve it as the source policy doc for the future Spectral config.
+Document the Spectral lint policy used by the active ruleset.
 
-This is not a full ruleset file yet. It is the documented lint policy the future ruleset should enforce.
+`docs/specs/.spectral.yaml` is the source of truth.
 
 ## Recommended Base
 
 - start from the OpenAPI rules in `@stoplight/spectral-cli`
-- add small project-specific checks only where the whitepaper requires them
+- add only the project-specific checks required by the whitepaper
 
 ## Project-Specific Policy
 
@@ -57,15 +57,15 @@ Replay-sensitive writes should also document:
 ## Suggested CI Command
 
 ```text
-spectral lint docs/specs/openapi.yaml
+npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.spectral.yaml
 ```
 
 ## Source Of Truth
 
-This note is the current source of truth for project-specific Spectral policy until a real `.spectral.yaml` or equivalent config file is added.
+`docs/specs/.spectral.yaml` is the source of truth for Spectral policy.
 
 ## Best Next Moves
 
-1. convert this note into a real Spectral rules file when repo automation starts
+1. keep the custom rules small
 2. add internal-spec rules later for `/internal/v1`
-3. keep custom rules small so lint stays reliable and easy to understand
+3. keep lint behavior reliable and easy to understand

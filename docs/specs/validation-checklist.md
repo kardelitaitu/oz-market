@@ -5,7 +5,7 @@
 Turn spec-governance policy into an executable checklist for:
 
 - `openapi.yaml`
-- future internal API specs
+- internal API specs
 - MCP-facing contract review
 
 ## Required Validation Flow
@@ -24,7 +24,7 @@ Run these checks for every contract-affecting change as local or pre-merge spec-
 Run in this order:
 
 ```text
-yamllint docs/specs/openapi.yaml
+yamllint -c docs/specs/yamllint.yaml docs/specs/openapi.yaml
 ```
 
 ```text
@@ -36,10 +36,10 @@ npx @stoplight/spectral-cli lint docs/specs/openapi.yaml --ruleset docs/specs/.s
 ```
 
 ```text
-oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml
+pwsh -File docs/specs/run-oasdiff-breaking.ps1 docs/specs/baseline/openapi.yaml docs/specs/openapi.yaml
 ```
 
-`docs/specs/baseline/openapi.yaml` should be created from the last approved spec before the breaking-change check becomes mandatory in automation.
+`docs/specs/baseline/openapi.yaml` is the last approved spec snapshot for the breaking-change check.
 
 ## Checklist
 
@@ -111,12 +111,14 @@ oasdiff breaking --fail-on-diff docs/specs/baseline/openapi.yaml docs/specs/open
 ## Practical Notes
 
 - `yamllint` is the first fast gate and should fail on basic YAML issues.
-- `@redocly/cli` should be the structural gate for OpenAPI conformance.
+- `@redocly/cli` is the structural gate for OpenAPI conformance.
 - `@stoplight/spectral-cli` should carry the project-specific rules.
-- `oasdiff` should only run once a baseline spec artifact exists.
+- `oasdiff` should run against `docs/specs/baseline/openapi.yaml`.
+- `yamllint` uses `docs/specs/yamllint.yaml` so the contract file can stay readable without style noise.
+- `oasdiff` uses a small wrapper because the upstream CLI exits nonzero on no-change cases.
 
 ## Best Next Moves
 
-1. add a future checklist for `/internal/v1` once that spec exists
+1. add a checklist for `/internal/v1` once that spec exists
 2. keep this checklist as local or pre-merge policy while CI remains cargo-check-only
-3. add a future baseline spec artifact for `oasdiff` once the first spec is frozen
+3. keep `docs/specs/baseline/openapi.yaml` aligned with the last approved spec snapshot

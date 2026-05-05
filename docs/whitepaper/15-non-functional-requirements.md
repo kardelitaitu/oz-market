@@ -85,6 +85,18 @@ Do not present one blended throughput number unless the request mix is explicitl
 | trusted seller | `100 listings per day`, `30 listings per hour` |
 
 These are recommended first numbers, not permanent policy. They should be reviewed after real traffic data exists.
+Use the Postgres-backed `phase5_bench` path before changing them so the quota review is based on the real storage path, not the in-memory fallback.
+
+## Tuning Targets
+
+After the Postgres rerun, review these first:
+
+- new seller daily and hourly listing quota
+- per-token create-write rate
+- per-IP search request rate
+- trusted seller lift relative to `new` and `verified`
+
+If the benchmark still shows pressure, adjust the search path and index strategy before widening write quotas.
 
 ### Search and negotiation quotas
 

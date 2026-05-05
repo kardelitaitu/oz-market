@@ -12,10 +12,7 @@ pub trait IdempotencyKeyRepository: Send + Sync {
         idempotency_key: &str,
     ) -> Result<Option<IdempotencyKeyRow>, RepositoryError>;
 
-    async fn reserve(
-        &self,
-        record: IdempotencyKeyRow,
-    ) -> Result<(), RepositoryError>;
+    async fn reserve(&self, record: IdempotencyKeyRow) -> Result<(), RepositoryError>;
 
     async fn mark_succeeded(
         &self,
@@ -35,7 +32,10 @@ pub trait IdempotencyKeyRepository: Send + Sync {
 }
 
 pub fn status_is_terminal(status: IdempotencyKeyStatus) -> bool {
-    matches!(status, IdempotencyKeyStatus::Succeeded | IdempotencyKeyStatus::Failed)
+    matches!(
+        status,
+        IdempotencyKeyStatus::Succeeded | IdempotencyKeyStatus::Failed
+    )
 }
 
 pub fn storage(message: impl Into<String>) -> RepositoryError {

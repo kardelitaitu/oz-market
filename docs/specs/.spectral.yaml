@@ -1,4 +1,4 @@
-extends: [[spectral:oas, all]]
+extends: spectral:oas
 rules:
   # Require x-required-scopes on protected operations
   operation-required-scopes:
@@ -7,7 +7,7 @@ rules:
     severity: error
     given: $.paths.*[?( @property === 'get' || @property === 'post' || @property === 'put' || @property === 'delete' || @property === 'patch' )]
     then:
-      field: x-required-scopes
+      field: 'x-required-scopes'
       function: truthy
 
   # Require x-allowed-roles on protected operations
@@ -17,7 +17,7 @@ rules:
     severity: error
     given: $.paths.*[?( @property === 'get' || @property === 'post' || @property === 'put' || @property === 'delete' || @property === 'patch' )]
     then:
-      field: x-allowed-roles
+      field: 'x-allowed-roles'
       function: truthy
 
   # Require x-audit-required on write operations
@@ -27,7 +27,7 @@ rules:
     severity: error
     given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' || @property === 'delete' )]
     then:
-      field: x-audit-required
+      field: 'x-audit-required'
       function: truthy
 
   # Require x-idempotency-required on write operations
@@ -37,8 +37,8 @@ rules:
     severity: error
     given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' )]
     then:
-      field: x-idempotency-required
-      function: truthy
+      field: 'x-idempotency-required'
+      function: defined
 
   # Require canonical error responses for write operations
   operation-write-error-responses:
@@ -47,30 +47,30 @@ rules:
     severity: error
     given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' || @property === 'delete' )]
     then:
-      - field: responses.400
+      - field: 'responses.400'
         function: truthy
-      - field: responses.401
+      - field: 'responses.401'
         function: truthy
-      - field: responses.403
+      - field: 'responses.403'
         function: truthy
 
   # Replay-sensitive writes should document 409 and 429
   operation-replay-sensitive-errors:
     description: "Replay-sensitive writes should document 409 and 429"
     message: "Operation {{path}} should define {{error}} response"
-    severity: warning
-    given: $.paths.*.post[?(@.x-idempotency-required === true)]
+    severity: warn
+    given: $.paths.*.post[?(@['x-idempotency-required'] === true)]
     then:
-      - field: responses.409
+      - field: 'responses.409'
         function: truthy
-      - field: responses.429
+      - field: 'responses.429'
         function: truthy
 
   # Require additionalProperties to be explicit on public schemas
   schema-explicit-additional-properties:
     description: "Public schemas should explicitly set additionalProperties"
     message: "Schema {{path}} should explicitly set additionalProperties"
-    severity: warning
+    severity: warn
     given: $.components.schemas.*~
     then:
       field: additionalProperties

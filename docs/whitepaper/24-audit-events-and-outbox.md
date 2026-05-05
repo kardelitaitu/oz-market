@@ -9,7 +9,7 @@ This doc connects:
 - auditability
 - event delivery
 - retry safety
-- future webhook or push delivery
+- webhook or push delivery later
 
 ## Core Rule
 
@@ -135,4 +135,4 @@ Recommended minimum:
 
 1. reflect `audit_events` and `outbox_events` in the data-model doc later
 2. keep webhook delivery dependent on outbox rather than direct inline callbacks
-3. add audit and outbox checks to the future server test strategy
+3. add audit and outbox checks to the server test strategy

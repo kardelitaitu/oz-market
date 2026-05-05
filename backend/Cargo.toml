@@ -1,9 +1,8 @@
 [workspace]
 members = [
-    "crates/api-contract",
-    "crates/auth-core",
-    "crates/marketplace-core",
-    "server",
-    "mcp",
+  "crates/api-contract",
+  "crates/auth-core",
+  "server",
+  "mcp",
 ]
 resolver = "2"

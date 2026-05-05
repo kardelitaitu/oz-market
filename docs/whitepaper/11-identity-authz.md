@@ -85,6 +85,16 @@ Recommended rule:
 - internal system maps `owner_id` to `seller_account_id`
 - create/update actions fail if the caller is not authorized for that owner
 
+## V1 Seller Onboarding Policy
+
+Start with a verified-account model:
+
+- each seller must have a verified `seller_account`
+- new sellers start in a low-trust state with tight quotas
+- trusted seller actions require a short-lived agent credential
+- risky actions can trigger manual review or `trust_review_required`
+- onboarding should stay simple enough for small sellers, but never skip ownership checks
+
 ## Agent Credential Rule
 
 Every non-human agent should authenticate with its own credential.
@@ -189,6 +199,15 @@ Use these controls together:
 - anomaly detection
 - optional `hardware_id` as abuse signal only
 
+## Trust-Level Progression
+
+Use a simple progression for V1:
+
+1. `new` - verified seller account exists, but quotas are low and abuse checks are strict
+2. `verified` - seller has passed the first trust gate and can use normal write access
+3. `trusted` - seller has a stable history and can get higher quotas or fewer manual checks
+4. `restricted` - seller lost privileges because of abuse, repeated conflicts, or policy violations
+
 ## Suggested Failure Codes
 
 - `unauthorized`
@@ -204,4 +223,4 @@ Use these controls together:
 1. Add `seller_account_id` and `agent_credential_id` to the internal data model.
 2. Decide whether V1 auth uses signed tokens only or key-based agent credentials.
 3. Define exact role-to-endpoint permissions.
-4. Define seller onboarding and trust-level upgrade rules.
+4. Keep trust-level rules aligned with the V1 onboarding policy above.

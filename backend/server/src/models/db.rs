@@ -3,7 +3,6 @@ use marketplace_api_contract::{
     NegotiationStatus, ResourceId,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListingRow {
@@ -20,7 +19,7 @@ pub struct ListingRow {
     pub city: String,
     pub picture_urls: Vec<String>,
     pub description: String,
-    pub attributes: Option<BTreeMap<String, Value>>,
+    pub attributes: Option<Value>,
     pub status: ListingStatus,
     pub version: i64,
     pub create_idempotency_key: String,
@@ -124,11 +123,12 @@ pub struct OutboxEventRow {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SellerAccountRow {
     pub seller_account_id: ResourceId,
     pub owner_id: String,
     pub trust_level: String,
+    pub quota_override: Option<i32>,
     pub status: String,
     pub hardware_fingerprint: Option<String>,
     pub verified_at: Option<String>,

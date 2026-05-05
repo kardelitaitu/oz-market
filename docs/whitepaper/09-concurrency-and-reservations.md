@@ -129,6 +129,11 @@ Recommended relational constraints:
 - negotiation cannot enter `reserved` unless listing is `reserved`
 - contact reveal cannot be approved without active matching lease
 
+Current server direction:
+
+- `reservation_leases` is backed by Postgres in the shared runtime
+- `contact_reveals` is backed by Postgres in the shared runtime
+
 ## Conflict Handling
 
 When two buyers race for the same listing:
@@ -240,7 +245,7 @@ MCP must not become a bypass around listing safety.
 ## Best Next Moves
 
 1. Add `version` fields to `listings` and `negotiations` in the schema plan.
-2. Add `reservation_leases` to the data model.
+2. Keep `reservation_leases` in the data model.
 3. Define the exact `accept -> reserve -> reveal -> complete` state machine.
 4. Define seller onboarding and initial listing quota policy.
 5. Decide whether `hardware_id` is collected at all, and if yes, keep it optional.

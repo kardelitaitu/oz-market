@@ -221,6 +221,10 @@ Required checks:
 - quota controls are enforced
 - initial benchmark results are measured
 
+## Benchmark Run Note
+
+Use `backend/server/scripts/run-phase5-bench.ps1` with a real `DATABASE_URL` when measuring quota and index changes. The in-memory fallback is useful for smoke checks, but it is not the basis for tuning.
+
 ## Best Next Moves
 
 1. map each whitepaper rule to at least one test category

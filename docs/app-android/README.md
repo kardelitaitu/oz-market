@@ -1,6 +1,6 @@
 # Android App Docs
 
-This folder is for Android client documentation.
+This folder contains Android client documentation.
 
 ## Intended Contents
 

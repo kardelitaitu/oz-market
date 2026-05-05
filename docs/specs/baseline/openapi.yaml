@@ -7,15 +7,25 @@ info:
     Canonical API for the server, MCP-backed operations, and mobile clients.
     This spec follows the frozen AI-facing listing contract and whitepaper state
     rules.
+  license:
+    name: Proprietary
+    identifier: Proprietary
+  contact:
+    name: Project Marketplace API Team
+    email: api-support@example.com
 servers:
   - url: /v1
 security:
   - bearerAuth: []
 tags:
   - name: listings
+    description: Listing creation and read flows.
   - name: search
+    description: Indexed listing search.
   - name: negotiations
+    description: Negotiation and offer state flows.
   - name: contact-reveals
+    description: Controlled contact reveal flows.
 paths:
   /listings:
     post:
@@ -323,6 +333,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContactRevealResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -449,22 +461,6 @@ components:
       example:
         currency: USD
         amount: 450
-    SearchPriceFilter:
-      type: object
-      additionalProperties: false
-      properties:
-        currency:
-          $ref: '#/components/schemas/CurrencyCode'
-        min_amount:
-          type: number
-          exclusiveMinimum: 0
-        max_amount:
-          type: number
-          exclusiveMinimum: 0
-      example:
-        currency: USD
-        min_amount: 300
-        max_amount: 500
     ListingLocation:
       type: object
       additionalProperties: false
@@ -483,19 +479,6 @@ components:
       example:
         country_code: JP
         country_name: Japan
-        city: Osaka
-    SearchLocationFilter:
-      type: object
-      additionalProperties: false
-      properties:
-        country_code:
-          $ref: '#/components/schemas/CountryCode'
-        city:
-          type: string
-          minLength: 1
-          maxLength: 120
-      example:
-        country_code: JP
         city: Osaka
     ListingPayload:
       type: object
@@ -648,51 +631,6 @@ components:
         status: active
         version: 1
         created_at: '2026-05-04T00:00:00Z'
-    SearchRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        query:
-          type: string
-          minLength: 1
-          maxLength: 200
-        category:
-          $ref: '#/components/schemas/Category'
-        condition:
-          $ref: '#/components/schemas/Condition'
-        price:
-          $ref: '#/components/schemas/SearchPriceFilter'
-        location:
-          $ref: '#/components/schemas/SearchLocationFilter'
-        status:
-          $ref: '#/components/schemas/ListingStatus'
-        sort_by:
-          $ref: '#/components/schemas/SearchSort'
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 50
-          default: 20
-        cursor:
-          type:
-            - string
-            - 'null'
-          minLength: 1
-      example:
-        query: thinkpad
-        category: laptop
-        condition: used
-        price:
-          currency: USD
-          min_amount: 300
-          max_amount: 500
-        location:
-          country_code: JP
-          city: Osaka
-        status: active
-        sort_by: relevance
-        limit: 20
-        cursor: null
     SearchResponse:
       type: object
       additionalProperties: false
@@ -915,5 +853,5 @@ components:
       example:
         error:
           code: invalid_field
-          message: condition must be one of: new, used, refurbished
+          message: "condition must be one of: new, used, refurbished"
           field: condition

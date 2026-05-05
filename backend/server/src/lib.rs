@@ -11,5 +11,5 @@ pub mod repositories;
 pub mod services;
 
 pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    Ok(())
+    http::runtime::run()
 }

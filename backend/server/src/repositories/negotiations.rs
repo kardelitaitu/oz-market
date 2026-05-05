@@ -1,7 +1,5 @@
 use crate::repositories::{RepositoryError, RepositoryErrorKind};
-use marketplace_api_contract::{
-    NegotiationResponse, OpenNegotiationRequest, SubmitOfferRequest,
-};
+use marketplace_api_contract::{NegotiationResponse, OpenNegotiationRequest, SubmitOfferRequest};
 
 #[async_trait::async_trait]
 pub trait NegotiationRepository: Send + Sync {

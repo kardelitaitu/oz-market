@@ -43,7 +43,7 @@ Recommendation:
 
 ## Recommended Internal Endpoints
 
-These are planning placeholders, not frozen public API:
+These internal routes are already wired in the server, but they stay out of the frozen public API:
 
 - `GET /internal/v1/listings/{listing_id}`
 - `GET /internal/v1/negotiations/{negotiation_id}`
@@ -82,8 +82,8 @@ Recommended override guardrails:
 Recommendation:
 
 - document internal endpoints in whitepaper now
-- keep public spec clean first
-- add internal spec only when internal endpoints actually start implementation
+- keep the public spec clean first
+- add or expand an internal spec only when internal route validation needs to be machine-checked
 
 ## Support Reviewer Rule
 
@@ -105,4 +105,4 @@ Recommendation:
 
 1. decide whether `/internal/v1` stays in the same binary or behind a separate access gateway
 2. document required internal scopes alongside these routes
-3. keep internal endpoints out of the public client contract until implementation begins
+3. keep internal endpoints out of the public client contract unless they become a supported public-like surface later

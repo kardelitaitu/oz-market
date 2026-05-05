@@ -1,5 +1,11 @@
 BEGIN;
 
+CREATE SEQUENCE IF NOT EXISTS listing_id_seq;
+CREATE SEQUENCE IF NOT EXISTS reservation_lease_id_seq;
+CREATE SEQUENCE IF NOT EXISTS contact_reveal_id_seq;
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE IF NOT EXISTS seller_accounts (
     seller_account_id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL UNIQUE,
@@ -31,7 +37,7 @@ CREATE TABLE IF NOT EXISTS listings (
     product_name TEXT NOT NULL,
     "condition" TEXT NOT NULL CHECK ("condition" IN ('new', 'used', 'refurbished')),
     price_currency CHAR(3) NOT NULL,
-    price_amount NUMERIC(20, 2) NOT NULL CHECK (price_amount > 0),
+    price_amount DOUBLE PRECISION NOT NULL CHECK (price_amount > 0),
     country_code CHAR(2) NOT NULL,
     country_name TEXT NOT NULL,
     city TEXT NOT NULL,
@@ -41,12 +47,7 @@ CREATE TABLE IF NOT EXISTS listings (
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'reserved', 'sold', 'archived')),
     version BIGINT NOT NULL DEFAULT 1,
     create_idempotency_key TEXT NOT NULL UNIQUE,
-    search_text TSVECTOR GENERATED ALWAYS AS (
-        to_tsvector(
-            'simple',
-            concat_ws(' ', product_name, description, category, country_name, city, "condition")
-        )
-    ) STORED,
+    search_text TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -56,7 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_listings_status ON listings (status);
 CREATE INDEX IF NOT EXISTS idx_listings_category_status ON listings (category, status);
 CREATE INDEX IF NOT EXISTS idx_listings_location ON listings (country_code, city);
 CREATE INDEX IF NOT EXISTS idx_listings_price ON listings (price_currency, price_amount);
-CREATE INDEX IF NOT EXISTS idx_listings_search_text ON listings USING GIN (search_text);
+CREATE INDEX IF NOT EXISTS idx_listings_search_text ON listings USING GIN (search_text gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS negotiations (
     negotiation_id TEXT PRIMARY KEY,
@@ -64,9 +65,9 @@ CREATE TABLE IF NOT EXISTS negotiations (
     buyer_agent_id TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('open', 'countered', 'near_close', 'reserved', 'contact_requested', 'contact_revealed', 'closed', 'cancelled')),
     offer_currency CHAR(3) NOT NULL,
-    latest_offer_amount NUMERIC(20, 2) NOT NULL CHECK (latest_offer_amount > 0),
+    latest_offer_amount DOUBLE PRECISION NOT NULL CHECK (latest_offer_amount > 0),
     reservation_lease_id TEXT UNIQUE,
-    final_offer_amount NUMERIC(20, 2) CHECK (final_offer_amount > 0),
+    final_offer_amount DOUBLE PRECISION CHECK (final_offer_amount > 0),
     version BIGINT NOT NULL DEFAULT 1,
     open_idempotency_key TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

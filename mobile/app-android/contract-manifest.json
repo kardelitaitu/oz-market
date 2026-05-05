@@ -1,0 +1,5 @@
+{
+  "platform": "android",
+  "contract_source": "../../docs/specs/openapi.yaml",
+  "flow_doc": "../../docs/app-android/first-user-flow.md"
+}

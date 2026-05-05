@@ -110,3 +110,14 @@ Only consider an external search engine if:
 - write amplification from index maintenance becomes too costly
 
 Until then, `PostgreSQL-first search` is the better engineering choice.
+
+## First Tuning Targets
+
+If Postgres search still needs help after benchmarking, review these first:
+
+- `idx_listings_search_text`
+- `idx_listings_category_status`
+- `idx_listings_location`
+- query shape for `status = active` searches
+
+Keep the tuning focused on the existing hybrid search path before adding new search infrastructure.
