@@ -767,7 +767,7 @@ mod tests {
         ListingPayload, ListingStatus, ListingSummary, OpenNegotiationRequest, Price,
         RequestContactRevealRequest, SearchRequest, SearchResponse, SearchSort,
     };
-    use marketplace_auth_core::{Claims, Role, Scope};
+    use marketplace_auth_core::Claims;
     use serde_json::json;
 
     struct SoldListingRepository;
@@ -818,39 +818,11 @@ mod tests {
     }
 
     fn claims() -> Claims {
-        Claims {
-            sub: "sub-1".to_string(),
-            roles: vec![
-                Role::SellerListingWriter,
-                Role::BuyerNegotiator,
-                Role::SellerContactRevealApprover,
-            ],
-            scopes: vec![
-                Scope::ListingRead,
-                Scope::ListingSearch,
-                Scope::ListingCreate,
-                Scope::NegotiationCreate,
-                Scope::NegotiationRead,
-                Scope::NegotiationRevealRequest,
-                Scope::RevealApprove,
-            ],
-            seller_account_id: Some("seller-1".to_string()),
-            buyer_agent_id: Some("buyer-1".to_string()),
-            hardware_id: None,
-            exp: None,
-        }
+        crate::test_support::seller_claims()
     }
 
     fn admin_claims() -> Claims {
-        Claims {
-            sub: "admin-1".to_string(),
-            roles: vec![Role::Admin],
-            scopes: vec![Scope::ListingRead, Scope::NegotiationRead],
-            seller_account_id: None,
-            buyer_agent_id: None,
-            hardware_id: None,
-            exp: None,
-        }
+        crate::test_support::admin_claims()
     }
 
     fn create_request() -> CreateListingRequest {
@@ -1107,6 +1079,74 @@ mod tests {
         let last = events.last().unwrap();
         assert_eq!(last.action, "release_reservation");
         assert!(last.payload.to_string().contains("admin cleanup"));
+    }
+
+    #[tokio::test]
+    async fn shared_app_rejects_internal_archive_for_support_reviewer() {
+        let audit_repo = Arc::new(InMemoryAuditEventRepository::new());
+        let outbox_repo = Arc::new(InMemoryOutboxEventRepository::new());
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            audit_repo,
+            outbox_repo,
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let claims = crate::test_support::support_claims();
+
+        let error = app
+            .archive_listing(&claims, "lst_000001", "cleanup", "2026-05-04T00:00:00Z")
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::http::handlers::HandlerError::Repository(RepositoryError {
+                kind: RepositoryErrorKind::PermissionDenied,
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn shared_app_allows_internal_archive_for_admin() {
+        let audit_repo = Arc::new(InMemoryAuditEventRepository::new());
+        let outbox_repo = Arc::new(InMemoryOutboxEventRepository::new());
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            audit_repo,
+            outbox_repo,
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let seller = crate::test_support::seller_claims();
+        let admin = crate::test_support::admin_claims();
+
+        let created = app
+            .create_listing(
+                &seller,
+                &create_request(),
+                "fp-create-admin-archive",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let archived = app
+            .archive_listing(
+                &admin,
+                &created.listing_id,
+                "cleanup",
+                "2026-05-04T00:01:00Z",
+            )
+            .await
+            .unwrap();
+
+        assert!(archived.is_some());
+        assert_eq!(archived.unwrap().status, ListingStatus::Archived);
     }
 
     #[tokio::test]

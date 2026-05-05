@@ -387,6 +387,18 @@
 05-05-26--10-04
 - added a small runtime request helper so HTTP auth tests share one claim/header builder instead of repeating request formatting
 - added a denied create-listing route test for missing seller role so the write-path auth check is covered at the boundary
+
+05-05-26--10-05
+- moved common seller/admin/support claims into a shared server test-support module so auth fixtures stay consistent across app and runtime tests
+- added a denied internal archive route test for non-admin callers so internal write auth is covered separately from read auth
+
+05-05-26--10-06
+- added a runtime JSON request helper so the HTTP auth tests can build request bodies from structured values instead of raw strings
+- added an app-level denial test for internal archive access from a support reviewer so the server auth boundary is covered on both transport and service paths
+
+05-05-26--10-07
+- added the admin allow-side tests for internal archive at both app and HTTP layers so the deny/allow pair is explicit
+- kept the shared test-support fixtures in use across app and runtime auth tests to reduce drift in claim setup
 05-05-26--12-25
 - added internal admin scopes to auth-core: InternalListingArchive, InternalSellerTrustLevel, InternalSellerQuotaOverride
 - added quota_override field to SellerAccountRow and updated SellerAccountRepository trait
@@ -412,4 +424,12 @@ echo "Done"
 - updated all MarketplaceApp::new() calls in tests and benchmarks to pass seller_accounts repository
 - all 30 tests in marketplace-server pass; marketplace-mcp has type inference issues to fix later
 - marked Phase 2 internal admin routes as complete for server crate
+
+05-05-26--15-13
+- fixed MCP type inference issues by using concrete type InMemoryApp instead of generic parameters
+- added run() function to mcp/src/lib.rs
+- fixed build_claims() and build_admin_claims() function names to avoid variable shadowing
+- added NegotiationRevealRequest and RevealApprove scopes to build_claims()
+- all 5 MCP tests now pass (mcp_delegates_search, create, open, contact_reveal, release)
+- Phase 2b (MCP Integration) is now COMPLETE
 

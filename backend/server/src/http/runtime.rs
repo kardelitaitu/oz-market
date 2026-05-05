@@ -907,48 +907,19 @@ mod tests {
     use marketplace_api_contract::{
         Category, Condition, CreateListingRequest, ListingLocation, ListingPayload, Price,
     };
-    use marketplace_auth_core::{Claims, Role, Scope};
+    use marketplace_auth_core::{Claims, Role};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn claims() -> Claims {
-        Claims {
-            sub: "sub-1".to_string(),
-            roles: vec![Role::SellerListingWriter, Role::BuyerNegotiator],
-            scopes: vec![
-                Scope::ListingCreate,
-                Scope::ListingRead,
-                Scope::ListingSearch,
-                Scope::NegotiationCreate,
-            ],
-            seller_account_id: Some("seller-1".to_string()),
-            buyer_agent_id: Some("buyer-1".to_string()),
-            hardware_id: None,
-            exp: None,
-        }
+        crate::test_support::seller_claims()
     }
 
     fn admin_claims() -> Claims {
-        Claims {
-            sub: "admin-1".to_string(),
-            roles: vec![Role::Admin],
-            scopes: vec![Scope::ListingRead, Scope::NegotiationRead],
-            seller_account_id: None,
-            buyer_agent_id: None,
-            hardware_id: None,
-            exp: None,
-        }
+        crate::test_support::admin_claims()
     }
 
     fn reviewer_claims() -> Claims {
-        Claims {
-            sub: "support-1".to_string(),
-            roles: vec![Role::SupportReviewer],
-            scopes: vec![Scope::ListingRead, Scope::NegotiationRead],
-            seller_account_id: None,
-            buyer_agent_id: None,
-            hardware_id: None,
-            exp: None,
-        }
+        crate::test_support::support_claims()
     }
 
     fn claims_header_for(claims: &Claims) -> String {
@@ -976,6 +947,16 @@ mod tests {
                 "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
             )
         }
+    }
+
+    fn json_request(
+        method: &str,
+        path: &str,
+        claims: Option<&Claims>,
+        body: serde_json::Value,
+    ) -> String {
+        let body = body.to_string();
+        http_request(method, path, claims, Some(&body))
     }
 
     fn create_body() -> String {
@@ -1187,6 +1168,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runtime_returns_forbidden_for_internal_write_without_admin_role() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &json_request(
+                "POST",
+                "/internal/v1/listings/lst_000001/archive",
+                Some(&reviewer_claims()),
+                serde_json::json!({ "reason": "cleanup" }),
+            ),
+        )
+        .await;
+
+        assert!(response.contains("\"code\":\"forbidden\""));
+        assert!(response.contains("internal write route requires admin role"));
+    }
+
+    #[tokio::test]
     async fn runtime_returns_forbidden_for_create_listing_without_role() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap().to_string();
@@ -1208,6 +1216,48 @@ mod tests {
 
         assert!(response.contains("\"code\":\"forbidden\""));
         assert!(response.contains("missing required role"));
+    }
+
+    #[tokio::test]
+    async fn runtime_allows_admin_internal_archive() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().await.unwrap();
+                let observability = Arc::new(ServerObservability::new());
+                let app = Arc::clone(&accept_app);
+                tokio::spawn(async move {
+                    let _ = handle_connection(stream, app, observability).await;
+                });
+            }
+        });
+
+        let created = round_trip(
+            &address,
+            &json_request(
+                "POST",
+                "/v1/listings",
+                Some(&claims()),
+                serde_json::from_str::<serde_json::Value>(&create_body()).unwrap(),
+            ),
+        )
+        .await;
+        assert!(created.contains("\"listing_id\":\"lst_000001\""));
+
+        let archived = round_trip(
+            &address,
+            &json_request(
+                "POST",
+                "/internal/v1/listings/lst_000001/archive",
+                Some(&admin_claims()),
+                serde_json::json!({ "reason": "cleanup" }),
+            ),
+        )
+        .await;
+        assert!(archived.contains("\"status\":\"archived\""));
     }
 
 }
