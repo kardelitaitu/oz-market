@@ -16,6 +16,7 @@ pub enum HandlerError {
     Idempotency(crate::services::idempotency::IdempotencyError),
     Search(crate::services::search::SearchError),
     Repository(RepositoryError),
+    QuotaExceeded { message: String },
 }
 
 impl Display for HandlerError {
@@ -25,6 +26,7 @@ impl Display for HandlerError {
             Self::Idempotency(error) => write!(f, "{error:?}"),
             Self::Search(error) => write!(f, "{error:?}"),
             Self::Repository(error) => write!(f, "{error}"),
+            Self::QuotaExceeded { message } => write!(f, "quota exceeded: {message}"),
         }
     }
 }

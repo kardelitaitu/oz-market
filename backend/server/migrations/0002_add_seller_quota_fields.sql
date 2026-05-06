@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE seller_accounts ADD COLUMN IF NOT EXISTS listings_created INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE seller_accounts ADD COLUMN IF NOT EXISTS quota_override INTEGER;
+
+COMMIT;

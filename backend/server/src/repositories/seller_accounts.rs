@@ -22,6 +22,11 @@ pub trait SellerAccountRepository: Send + Sync {
         seller_account_id: &str,
         quota_override: Option<i32>,
     ) -> Result<Option<SellerAccountRow>, RepositoryError>;
+
+    async fn increment_listings_created(
+        &self,
+        seller_account_id: &str,
+    ) -> Result<Option<SellerAccountRow>, RepositoryError>;
 }
 
 pub fn not_found(message: impl Into<String>) -> RepositoryError {
@@ -86,6 +91,19 @@ impl SellerAccountRepository for InMemorySellerAccountRepository {
             Ok(None)
         }
     }
+
+    async fn increment_listings_created(
+        &self,
+        seller_account_id: &str,
+    ) -> Result<Option<SellerAccountRow>, RepositoryError> {
+        let mut guard = self.accounts.write().expect("seller account write lock");
+        if let Some(account) = guard.get_mut(seller_account_id) {
+            account.listings_created += 1;
+            Ok(Some(account.clone()))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 // Postgres Implementation
@@ -111,7 +129,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "SELECT seller_account_id, owner_id, trust_level, quota_override, status, hardware_fingerprint, verified_at, created_at, updated_at FROM seller_accounts WHERE owner_id = $1",
+            "SELECT seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at FROM seller_accounts WHERE owner_id = $1",
         )
         .bind(owner_id)
         .fetch_optional(&mut *conn)
@@ -122,6 +140,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             owner_id: r.get("owner_id"),
             trust_level: r.get("trust_level"),
             quota_override: r.get("quota_override"),
+            listings_created: r.get("listings_created"),
             status: r.get("status"),
             hardware_fingerprint: r.get("hardware_fingerprint"),
             verified_at: r.get("verified_at"),
@@ -141,7 +160,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "UPDATE seller_accounts SET trust_level = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, trust_level, quota_override, status, hardware_fingerprint, verified_at, created_at, updated_at",
+            "UPDATE seller_accounts SET trust_level = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
         )
         .bind(trust_level)
         .bind(seller_account_id)
@@ -153,6 +172,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             owner_id: r.get("owner_id"),
             trust_level: r.get("trust_level"),
             quota_override: r.get("quota_override"),
+            listings_created: r.get("listings_created"),
             status: r.get("status"),
             hardware_fingerprint: r.get("hardware_fingerprint"),
             verified_at: r.get("verified_at"),
@@ -172,7 +192,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "UPDATE seller_accounts SET quota_override = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, trust_level, quota_override, status, hardware_fingerprint, verified_at, created_at, updated_at",
+            "UPDATE seller_accounts SET quota_override = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
         )
         .bind(quota_override)
         .bind(seller_account_id)
@@ -184,6 +204,37 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             owner_id: r.get("owner_id"),
             trust_level: r.get("trust_level"),
             quota_override: r.get("quota_override"),
+            listings_created: r.get("listings_created"),
+            status: r.get("status"),
+            hardware_fingerprint: r.get("hardware_fingerprint"),
+            verified_at: r.get("verified_at"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
+        }))
+    }
+
+    async fn increment_listings_created(
+        &self,
+        seller_account_id: &str,
+    ) -> Result<Option<SellerAccountRow>, RepositoryError> {
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
+        let row = sqlx::query(
+            "UPDATE seller_accounts SET listings_created = listings_created + 1, updated_at = now() WHERE seller_account_id = $1 RETURNING seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
+        )
+        .bind(seller_account_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
+        Ok(row.map(|r| SellerAccountRow {
+            seller_account_id: r.get("seller_account_id"),
+            owner_id: r.get("owner_id"),
+            trust_level: r.get("trust_level"),
+            quota_override: r.get("quota_override"),
+            listings_created: r.get("listings_created"),
             status: r.get("status"),
             hardware_fingerprint: r.get("hardware_fingerprint"),
             verified_at: r.get("verified_at"),

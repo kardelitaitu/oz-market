@@ -888,6 +888,9 @@ fn map_handler_error(error: &crate::http::handlers::HandlerError) -> HttpRespons
                 None,
             ),
         },
+        crate::http::handlers::HandlerError::QuotaExceeded { message } => {
+            api_error_response(403, ApiErrorCode::Forbidden, message.clone(), None)
+        }
     }
 }
 

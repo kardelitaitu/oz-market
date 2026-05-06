@@ -433,3 +433,100 @@ echo "Done"
 - all 5 MCP tests now pass (mcp_delegates_search, create, open, contact_reveal, release)
 - Phase 2b (MCP Integration) is now COMPLETE
 
+
+05-05-26--15-47
+- Phase 3 (MCP Finishing) considered complete (TODO has strikethrough)
+- V1 event consumption model from 23-event-delivery.md uses polling via existing MCP methods (get_listing, get_negotiation_status, etc.)
+- Conflict/retry examples can be added but core MCP functionality works (all 5 tests pass)
+
+
+05-05-26--15-47
+- Phase 2 COMPLETE: Internal Admin Routes (30 marketplace-server tests pass)
+- Phase 2b COMPLETE: MCP Integration (5 marketplace-mcp tests pass)
+- Phase 3 marked complete in TODO (V1 event consumption = polling via existing MCP methods)
+
+05-05-26--18-43
+- ALL THREE RECOMMENDATIONS COMPLETED SUCCESSFULLY:
+  1. ✅ Added validation helper functions to api-contract (validate_resource_id, validate_currency_code, validate_country_code) with regex dependency
+  2. ✅ Fixed ALL mcp warnings: removed unused SearchSort import, added #[allow(dead_code)] to unused functions (build_claims, build_admin_claims, build_create_request), fixed unused variable warnings (open, create)
+  3. ✅ Ran full test suite: all 47 tests pass (7 auth-core + 5 mcp + 35 server) with ZERO warnings
+- Fixed CreateListingResponse alignment with OpenAPI spec throughout server and mcp code
+- Fixed test failures by correcting admin_claims() with proper scopes (RevealApprove, ListingCreate, etc.)
+- Fixed mcp and server tests to use get_listing() for verification instead of accessing non-existent listing field
+- All backend crates compile cleanly with no errors or warnings
+
+
+
+05-05-26--21-09
+- added utoipa v5 to api-contract crate for OpenAPI ToSchema support
+- updated error.rs: added ToSchema derive to ApiErrorCode enum, ApiErrorDetail and ApiErrorResponse structs
+- updated listing.rs: added ToSchema derive to 4 enums (Category, Condition, ListingStatus, SearchSort) and 10 structs (Price, ListingLocation, ListingPayload, CreateListingRequest, ListingSummary, CreateListingResponse, SearchPriceFilter, SearchLocationFilter, SearchRequest, SearchResponse)
+- updated negotiation.rs: added ToSchema derive to 2 enums (NegotiationStatus, ContactRevealStatus) and 5 structs (OpenNegotiationRequest, SubmitOfferRequest, RequestContactRevealRequest, NegotiationResponse, ContactRevealResponse)
+- added #[schema(value_type = String)] to fields using ResourceId, CurrencyCode, CountryCode type aliases
+- added #[schema(format = DateTime)] to timestamp fields (created_at, updated_at, expires_at, approved_at)
+- entire backend workspace compiles cleanly: all 47 tests pass with no warnings
+
+
+05-05-26--05-43
+- fulfilled Option B: created internal /internal/v1 API spec
+- created docs/specs/internal-api-spec.md documenting all implemented internal endpoints (7 total)
+- documented: 3 read endpoints (listing, negotiation, contact-reveal) + 4 override endpoints (archive, release-reservation, trust-level, quota-override)
+- added request/response shapes, auth scopes, audit requirements, guardrails
+- cross-referenced with server implementation (runtime.rs, app.rs)
+- marked item #3 as complete (?) in docs/specs/README.md
+- remaining planned endpoints: agent-credentials/revoke, audit-events (outline only)
+
+
+06-05-26--06-32
+- Option C quota enforcement mostly complete:
+- added list;ings_created: i32 to SellerAccountRow
+- added increment_listings_created to SellerAccountRepository (InMemory + Postgres)
+- created migration 0002_add_seller_quota_fields.sql
+- added default quota constants: NEW=5, VERIFIED=20, TRUSTED=100, RESTRICTED=0
+- rewrote seller_accounts.rs with all updates
+- code compiles with 5 unused constant warnings
+- REMAINING: add quota check in create_listing (after authorize)
+- REMAINING: increment counter after successful creation
+- text matching issues with edit tool for last 2 steps
+
+
+06-05-26--06-32
+- Option C quota enforcement MOSTLY complete:
+- added list;ings_created: i32 to SellerAccountRow (models/db.rs)
+- created migration 0002_add_seller_quota_fields.sql
+- updated SellerAccountRepository trait + InMemory/Postgres implementations
+- added default quota constants: NEW=5, VERIFIED=20, TRUSTED=100, RESTRICTED=0
+- rewrote seller_accounts.rs with all Postgres fixes
+- code compiles (5 unused constant warnings)
+- REMAINING: add quota check in create_listing (after authorize)
+- REMAINING: increment counter after successful creation (text matching issues)
+
+- Item #2 generated contract notes COMPLETE (docs/specs/generated-contract-notes.md)
+- docs/specs/README.md updated: #2 ?, #3 ?
+
+
+06-05-26--06-33
+- Option C quota enforcement MOSTLY complete:
+- added list;ings_created: i32 to SellerAccountRow (models/db.rs)
+- created migration 0002_add_seller_quota_fields.sql
+- updated SellerAccountRepository trait + InMemory + Postgres implementations
+- added default quota constants: NEW=5, VERIFIED=20, TRUSTED=100, RESTRICTED=0
+- rewrote seller_accounts.rs with all Postgres fixes
+- code compiles (5 unused constant warnings)
+- REMAINING: add quota check in create_listing (text matching issues)
+- REMAINING: increment counter after successful creation (text matching issues)
+
+- Item #2 generated contract notes COMPLETE (docs/specs/generated-contract-notes.md)
+- docs/specs/README.md updated: #2 ?, #3 ?, #4 ??
+
+06-05-26--20-52
+- completed Option C quota enforcement for create_listing:
+  - added `listings_created: i32` field to `SellerAccountRow`
+  - added `increment_listings_created()` method to `SellerAccountRepository` trait with InMemory and Postgres implementations
+  - added quota check in `create_listing()` that verifies seller hasn't exceeded their quota (based on trust level or override)
+  - added increment of `listings_created` after successful listing creation
+  - added `QuotaExceeded` variant to `HandlerError` with proper error response mapping in `runtime.rs`
+  - added `default_quota()` helper function with trust-level-based defaults (NEW=5, VERIFIED=20, TRUSTED=100, RESTRICTED=0)
+  - fixed `seller_claims()` test helper to include `Role::SellerContactRevealApprover` for contact reveal approval tests
+- all 37 tests now pass (35 unit + 2 postgres integration)
+- cleaned up temporary files (`app.jsr`, `runtime.rs.bak`)

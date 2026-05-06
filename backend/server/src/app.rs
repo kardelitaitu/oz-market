@@ -24,6 +24,21 @@ use std::sync::Arc;
 pub const APP_NAME: &str = "marketplace-server";
 const NEGOTIATION_RESERVATION_TTL_SECONDS: i64 = 3600;
 
+// Default quota per trust level (max active listings)
+const DEFAULT_QUOTA_NEW: i32 = 5;
+const DEFAULT_QUOTA_VERIFIED: i32 = 20;
+const DEFAULT_QUOTA_TRUSTED: i32 = 100;
+const DEFAULT_QUOTA_RESTRICTED: i32 = 0;
+
+fn default_quota(trust_level: &str) -> i32 {
+    match trust_level {
+        "verified" => DEFAULT_QUOTA_VERIFIED,
+        "trusted" => DEFAULT_QUOTA_TRUSTED,
+        "restricted" => DEFAULT_QUOTA_RESTRICTED,
+        _ => DEFAULT_QUOTA_NEW, // "new" or unknown
+    }
+}
+
 pub struct MarketplaceApp<LR, IR, RR, CR> {
     listing_repository: Arc<LR>,
     search: SearchService<LR>,
@@ -293,6 +308,29 @@ where
         now_rfc3339: &str,
     ) -> Result<CreateListingResponse, crate::http::handlers::HandlerError> {
         crate::services::authz::authorize_create_listing(claims, &request.listing.owner_id)?;
+
+        // Check quota before proceeding
+        let owner_id = &request.listing.owner_id;
+        let seller_account = self
+            .seller_accounts
+            .get_by_owner_id(owner_id)
+            .await
+            .map_err(crate::http::handlers::HandlerError::from)?;
+
+        if let Some(account) = seller_account {
+            let effective_quota = account
+                .quota_override
+                .unwrap_or_else(|| default_quota(&account.trust_level));
+            if account.listings_created >= effective_quota {
+                return Err(crate::http::handlers::HandlerError::QuotaExceeded {
+                    message: format!(
+                        "seller has exceeded quota: {} listings created (quota: {})",
+                        account.listings_created, effective_quota
+                    ),
+                });
+            }
+        }
+
         let attempt = crate::services::idempotency::IdempotencyAttempt {
             actor_subject: &claims.sub,
             operation: crate::services::idempotency::IdempotencyOperation::CreateListing,
@@ -308,6 +346,20 @@ where
                     .as_ref()
                     .insert_listing(request)
                     .await?;
+
+                // Increment the seller's listing count
+                if let Some(account) = self
+                    .seller_accounts
+                    .get_by_owner_id(owner_id)
+                    .await
+                    .map_err(crate::http::handlers::HandlerError::from)?
+                {
+                    self.seller_accounts
+                        .increment_listings_created(&account.seller_account_id)
+                        .await
+                        .map_err(crate::http::handlers::HandlerError::from)?;
+                }
+
                 self.idempotency
                     .commit_success(&attempt, json!(response))
                     .await?;

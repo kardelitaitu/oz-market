@@ -24,8 +24,8 @@ Contains the frozen `openapi.yaml` and the active validation policy files. The p
 
 ## Next Docs To Add
 
-1. shared schema component definitions
-2. generated client/server contract notes
-3. internal `/internal/v1` spec when the internal surface needs machine-checked contract gates
-4. CI workflow file when automation starts
+1. ✅ shared schema component definitions (see `schemas/README.md`)
+2. ✅ generated client/server contract notes (see `generated-contract-notes.md`)
+3. ✅ internal `/internal/v1` spec (see `internal-api-spec.md`)
+4. 🔜 CI workflow file when automation starts (in progress - quota enforcement mostly done)
 5. any `/internal/v1` policy docs when the internal surface needs extra validation detail

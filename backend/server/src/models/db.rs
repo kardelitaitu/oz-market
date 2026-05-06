@@ -129,6 +129,7 @@ pub struct SellerAccountRow {
     pub owner_id: String,
     pub trust_level: String,
     pub quota_override: Option<i32>,
+    pub listings_created: i32,
     pub status: String,
     pub hardware_fingerprint: Option<String>,
     pub verified_at: Option<String>,
