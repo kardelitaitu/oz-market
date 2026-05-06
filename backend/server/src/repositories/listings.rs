@@ -303,50 +303,92 @@ impl PostgresListingRepository {
         let mut builder = QueryBuilder::<Postgres>::new(
             "SELECT listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version FROM listings",
         );
-        {
-            let mut where_clause = builder.separated(" WHERE ");
-            if let Some(category) = request.category {
-                where_clause
-                    .push("category = ")
-                    .push_bind(db_enum_value(&category));
+        let mut where_added = false;
+        
+        if let Some(category) = request.category {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
             }
-            if let Some(condition) = request.condition {
-                where_clause
-                    .push("\"condition\" = ")
-                    .push_bind(db_enum_value(&condition));
+            builder.push("category = ").push_bind(db_enum_value(&category));
+        }
+        if let Some(condition) = request.condition {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
             }
-            if let Some(status) = request.status {
-                where_clause
-                    .push("status = ")
-                    .push_bind(db_enum_value(&status));
+            builder.push("\"condition\" = ").push_bind(db_enum_value(&condition));
+        }
+        if let Some(status) = request.status {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
             }
-            if let Some(price) = &request.price {
-                if let Some(currency) = &price.currency {
-                    where_clause.push("price_currency = ").push_bind(currency);
+            builder.push("status = ").push_bind(db_enum_value(&status));
+        }
+        if let Some(price) = &request.price {
+            if let Some(currency) = &price.currency {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
                 }
-                if let Some(min_amount) = price.min_amount {
-                    where_clause.push("price_amount >= ").push_bind(min_amount);
-                }
-                if let Some(max_amount) = price.max_amount {
-                    where_clause.push("price_amount <= ").push_bind(max_amount);
-                }
+                builder.push("price_currency = ").push_bind(currency);
             }
-            if let Some(location) = &request.location {
-                if let Some(country_code) = &location.country_code {
-                    where_clause.push("country_code = ").push_bind(country_code);
+            if let Some(min_amount) = price.min_amount {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
                 }
-                if let Some(city) = &location.city {
-                    where_clause
-                        .push("LOWER(city) = ")
-                        .push_bind(city.to_ascii_lowercase());
+                builder.push("price_amount >= ").push_bind(min_amount);
+            }
+            if let Some(max_amount) = price.max_amount {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
                 }
+                builder.push("price_amount <= ").push_bind(max_amount);
             }
-            if let Some(query) = &request.query {
-                where_clause.push("search_text LIKE ").push_bind(format!(
-                    "%{}%",
-                    query.to_ascii_lowercase()
-                ));
+        }
+        if let Some(location) = &request.location {
+            if let Some(country_code) = &location.country_code {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder.push("country_code = ").push_bind(country_code);
             }
+            if let Some(city) = &location.city {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder.push("LOWER(city) = ").push_bind(city.to_ascii_lowercase());
+            }
+        }
+        if let Some(query) = &request.query {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("search_text LIKE ").push_bind(format!("%{}%", query.to_ascii_lowercase()));
         }
 
         let mut conn = self
