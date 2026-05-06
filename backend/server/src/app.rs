@@ -6,6 +6,7 @@ use crate::repositories::{
     AuditEventRepository, IdempotencyKeyRepository, ListingRepository, OutboxEventRepository,
     RepositoryError, RepositoryErrorKind, ReservationLeaseRepository, SellerAccountRepository,
 };
+use crate::repositories::negotiations::NegotiationRepository;
 use crate::services::audit_events::AuditEventService;
 use crate::services::contact_reveals::ContactRevealService;
 use crate::services::idempotency::IdempotencyGuard;
@@ -45,6 +46,7 @@ pub struct MarketplaceApp<LR, IR, RR, CR> {
     idempotency: IdempotencyGuard<IR>,
     reservations: ReservationLeaseService<RR>,
     contact_reveals: ContactRevealService<CR>,
+    negotiations: Arc<dyn NegotiationRepository>,
     audit_events: AuditEventService,
     outbox_events: OutboxEventService,
     seller_accounts: Arc<dyn SellerAccountRepository>,
@@ -62,6 +64,7 @@ where
         idempotency_repository: IR,
         reservation_repository: RR,
         contact_reveal_repository: CR,
+        negotiation_repository: Arc<dyn NegotiationRepository>,
         audit_event_repository: Arc<dyn AuditEventRepository>,
         outbox_event_repository: Arc<dyn OutboxEventRepository>,
         seller_account_repository: Arc<dyn SellerAccountRepository>,
@@ -76,6 +79,7 @@ where
             idempotency: IdempotencyGuard::new(idempotency_repository),
             reservations: ReservationLeaseService::new(reservation_repository),
             contact_reveals: ContactRevealService::new(contact_reveal_repository),
+            negotiations: negotiation_repository,
             audit_events: AuditEventService::new(audit_event_repository),
             outbox_events: OutboxEventService::new(outbox_event_repository),
             seller_accounts: seller_account_repository,
