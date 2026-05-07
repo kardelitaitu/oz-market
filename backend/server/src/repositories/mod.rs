@@ -7,10 +7,13 @@ pub mod negotiations;
 pub mod outbox_events;
 pub mod reservations;
 pub mod seller_accounts;
+pub mod reviews;
 
 use std::fmt::{Display, Formatter};
 
 pub const MODULE_NAME: &str = "repositories";
+
+pub use reviews::{ReviewRepository, InMemoryReviewRepository, PostgresReviewRepository};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepositoryErrorKind {

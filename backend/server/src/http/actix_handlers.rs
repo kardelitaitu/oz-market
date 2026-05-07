@@ -300,3 +300,42 @@ pub async fn set_seller_quota_override(
         Err(e) => map_handler_error(&e),
     }
 }
+
+/// Admin: Recalculate seller_rating for a seller
+pub async fn recalculate_seller_rating(
+    pool: web::Data<sqlx::postgres::PgPool>,
+    seller_id: web::Path<String>,
+    req: HttpRequest,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    
+    // Check admin role
+    if !claims.roles.iter().any(|r| r == "admin") {
+        return HttpResponse::Forbidden().json(json!({
+            "error_code": "FORBIDDEN",
+            "message": "Admin access required"
+        }));
+    }
+    
+    let pool = pool.get_ref();
+    let result = sqlx::query(
+        "UPDATE seller_accounts SET seller_rating = (
+            SELECT AVG(rating)::DECIMAL(3,2) FROM reviews 
+            WHERE seller_account_id = $1 AND status = 'approved'
+        ) WHERE seller_account_id = $1"
+    )
+    .bind(seller_id.as_str())
+    .execute(pool)
+    .await;
+    
+    match result {
+        Ok(_) => HttpResponse::NoContent().finish(),
+        Err(e) => {
+            eprintln!("Recalculate rating error: {}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}

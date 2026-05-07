@@ -151,6 +151,20 @@ pub struct SellerAccountRow {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReviewRow {
+    pub review_id: ResourceId,
+    pub listing_id: String,
+    pub seller_account_id: String,
+    pub reviewer_id: String,
+    pub rating: i32,
+    pub title: String,
+    pub body: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentCredentialRow {
     pub credential_id: ResourceId,
