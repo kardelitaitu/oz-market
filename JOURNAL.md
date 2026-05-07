@@ -763,3 +763,55 @@ Add marketplace fields to API contract, database, and server implementation.
 
 ### Commits
 - `d1dd807` - feat(api): Update get_listing() to fetch seller info
+
+## 2026-05-08 (2): Seller Info Enhancement
+
+### Goal
+1. Use `display_name` from `seller_accounts` for `seller_name`
+2. Calculate/store `seller_rating` (added field)
+3. Update `fetch_rows()` to JOIN with `seller_accounts` for search results
+
+### Changes Made
+1. **Migration 0005** (`backend/server/migrations/0005_add_seller_display_name_and_rating.sql`):
+   - Added `display_name VARCHAR(200)` to `seller_accounts`
+   - Added `seller_rating DECIMAL(3,2)` (0.00-5.00) to `seller_accounts`
+   - Applied successfully via Rust migration runner
+
+2. **API Contract** (`backend/crates/api-contract/src/listing.rs`):
+   - Changed `seller_rating` type from `Option<f32>` to `Option<f64>` (matches DB precision)
+
+3. **Database Model** (`backend/server/src/models/db.rs`):
+   - Updated `SellerAccountRow` to include `display_name: Option<String>` and `seller_rating: Option<f64>`
+
+4. **Seller Accounts Repository** (`backend/server/src/repositories/seller_accounts.rs`):
+   - Updated ALL SELECT/RETURNING queries to include `display_name` and `seller_rating`
+   - Updated row mappings to extract new fields
+
+5. **Listings Repository** (`backend/server/src/repositories/listings.rs`):
+   - Updated `row_to_summary()` to use `display_name` and `seller_rating` from JOIN
+   - Updated `fetch_rows()` to LEFT JOIN `seller_accounts` (search now returns seller info!)
+   - Updated `get_listing()` to LEFT JOIN `seller_accounts` and select seller fields
+   - Updated `update_listing_status()` to RETURN marketplace fields
+
+### Technical Details
+- **LEFT JOIN**: Used `LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id` to preserve listings even without seller account
+- **Optional extraction**: Used `row.try_get("column").ok()` pattern for graceful handling of missing columns
+- **Type precision**: Changed `seller_rating` to `f64` to match PostgreSQL `DECIMAL(3,2)` precision
+- **Search results**: Now include `seller_name`, `seller_rating`, `seller_verified` in `ListingSummary`
+
+### Results
+- ✅ `cargo check --workspace` passes
+- ✅ All tests pass (37 tests)
+- ✅ `display_name` used for `seller_name` in API responses
+- ✅ `seller_rating` stored in DB and returned in API
+- ✅ Search results now include seller info (via JOIN in `fetch_rows()`)
+- ✅ Code pushed to `main` (commit `77defbe`)
+
+### Behavior Change
+**Before**: `seller_name` was "Seller (trust_level)", `seller_rating` was always None
+**After**: `seller_name` is `display_name` from DB, `seller_rating` is the actual rating from DB
+
+### Commits
+- `77defbe` - feat(api): Add display_name and seller_rating to seller accounts
+- `d1dd807` - feat(api): Update get_listing() to fetch seller info
+- `681c15e` - docs: Update JOURNAL with migration and seller info integration
