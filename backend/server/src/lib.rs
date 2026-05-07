@@ -9,9 +9,14 @@ pub mod models;
 pub mod observability;
 pub mod repositories;
 pub mod services;
-#[cfg(test)]
 pub mod test_support;
 
+#[cfg(not(test))]
+pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    http::actix_runtime::run()
+}
+
+#[cfg(test)]
 pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     http::runtime::run()
 }

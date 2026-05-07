@@ -894,7 +894,7 @@ fn map_handler_error(error: &crate::http::handlers::HandlerError) -> HttpRespons
     }
 }
 
-fn current_time_marker() -> String {
+pub fn current_time_marker() -> String {
     // Use chrono::Utc::now() to get current time in RFC3339 format
     let now = chrono::Utc::now();
     now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)

@@ -193,6 +193,25 @@
 - labeled each remaining TODO ownership item as code owner, product owner, or admin owner
 - kept the governance split explicit so decision ownership stays visible at a glance
 
+07-05-26--16-34
+- implemented Phase 1 (Actix + Moka) based on backend/optimization/01-actix-moka.md plan:
+  - added actix-web 4, actix-rt 2, moka 0.12 dependencies to server/Cargo.toml
+  - created http/actix_handlers.rs with handlers for get_listing, search_listings, create_listing, open_negotiation, request_contact_reveal
+  - created http/actix_runtime.rs with Actix-web server setup and Moka cache initialization
+  - updated http/mod.rs to include new modules (only for #[cfg(not(test))])
+  - updated lib.rs to use actix_runtime::run() for production, kept http::runtime::run() for #[cfg(test)]
+  - made runtime::current_time_marker() public for use in actix handlers
+  - FIXED admin handlers (archive_listing, release_reservation, set_seller_trust_level, set_seller_quota_override)
+- server compiles cleanly with no warnings
+- all 37 tests pass (35 unit + 2 postgres integration)
+- Phase 1 target: ~5,000 ops/s on listing-read (15-20x improvement over baseline 321 ops/s)
+- NOTE: phase5_bench runs against MarketplaceApp directly, not Actix HTTP layer
+  - benchmark shows 316 ops/s (same as 321 baseline) because Moka cache is in Actix handlers
+  - to measure true Phase 1 improvement, need HTTP benchmark against running Actix server
+- server compiles cleanly with no warnings
+- all 37 tests pass (35 unit + 2 postgres integration)
+- Phase 1 target: ~5,000 ops/s on listing-read (15-20x improvement over baseline 321 ops/s)
+
 05-05-26--09-17
 - mapped the remaining TODO ownership items to the current decision-log placeholders
 - added a note that the placeholders are interim owners until real people are assigned
@@ -544,3 +563,54 @@ echo "Done"
   - search-heavy: 77.12 ops/sec (500 ops in 6483ms)  
   - negotiation-burst: 85.03 ops/sec (300 ops in 3528ms)
 - all 37 tests pass (35 unit + 2 Postgres integration)
+
+07-05-26--16-15
+- reviewed all 5 optimization plan files in backend/optimization/
+- fixed typos in benchmark-plan.md: replaced "carlo" with "cargo" throughout
+- updated 01-actix-moka.md: replaced placeholder CachedApp<...> with concrete generic parameters and added comments
+- updated 03-flamegraph-redis.md: added note about adding redis_pool field to CachedApp for Redis L2 cache
+- ant colony review completed but no patches injected; manual review and fixes applied
+- plans are now more consistent and clearer
+
+07-05-26--17-02
+- Phase 1 (Actix + Moka) HTTP benchmark results:
+  - Health endpoint: 2,376 ops/s (baseline for Actix server)
+  - Search/listing endpoints: require x-marketplace-claims header (JSON Claims)
+  - Server runs on 127.0.0.1:3000 with Actix-web
+  - Moka cache not yet benchmarked due to auth header requirement
+- Next steps for full benchmark:
+  - Add middleware to read x-marketplace-claims header and inject Claims into request extensions
+  - Or send header in benchmark with valid Claims JSON
+  - Target: ~5,000 ops/s on cached reads (listing-read)
+- Server implementation complete: actix_handlers.rs, actix_runtime.rs, updated lib.rs
+
+07-05-26--17-22
+- Phase 1 (Actix + Moka) implementation summary:
+  - Modified get_listing and search_listings handlers to read x-marketplace-claims header directly
+  - Added extract_claims() helper function in actix_handlers.rs
+  - Server compiles successfully (no errors)
+  - Health endpoint benchmark: 2,376 ops/s (baseline for Actix server)
+  - Authenticated endpoints (search, get_listing) still return "Missing expected request extension data"
+  - Issue: extract_claims() reads header but web::ReqData<Claims> extraction still fails
+  - Server binary locked during rebuild (had to kill processes multiple times)
+- Next steps to complete benchmark:
+  1. Debug why web::ReqData<Claims> still fails despite header being sent
+  2. Or: modify handlers to not use web::ReqData<Claims> but pass Claims directly
+  3. Run full HTTP benchmark to verify Moka cache (~5,000 ops/s target)
+- Current status: Phase 1 code complete, but auth header integration needs debugging
+
+07-05-26--19-03
+- Phase 1 (Actix + Moka) optimization progress:
+  - Fixed x-marketplace-claims header parsing: Role enum uses snake_case ("admin" not "Admin")
+  - Fixed route ordering: /listings/search now registered BEFORE /listings/{listing_id}
+  - Fixed http_bench.rs to send correct snake_case roles and scopes
+  - Authentication now working: 200/200 search requests succeed
+  - Benchmark results (1000 ops): 959 ops/s for search listings
+  - Health endpoint: ~2300 ops/s (Actix baseline)
+  - Target: ~4000-5000 ops/s (Phase 1 goal)
+  - Added debug logging to verify Moka cache hits/misses
+  - Next optimization steps:
+    - Verify Moka cache is actually being used (check logs)
+    - Consider increasing cache size or TTL
+    - May need 5000+ iterations to see cache warming effect
+    - Profile with flamegraph to identify bottlenecks
