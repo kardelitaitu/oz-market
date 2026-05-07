@@ -69,6 +69,16 @@ pub struct ListingLocation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ShippingInfo {
+    pub local_pickup: bool,
+    pub shipping_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shipping_cost: Option<Price>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shipping_regions: Option<Vec<CountryCode>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ListingPayload {
     pub schema_version: String,
     pub owner_id: String,
@@ -82,6 +92,17 @@ pub struct ListingPayload {
     pub description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attributes: Option<serde_json::Value>,
+    // NEW: Marketplace fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sku: Option<String>,
+    #[serde(default)]
+    pub quantity: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shipping_info: Option<ShippingInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition_details: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seller_notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -96,6 +117,13 @@ pub struct ListingSummary {
     pub status: ListingStatus,
     pub version: u64,
     pub listing: ListingPayload,
+    // NEW: Seller summary (read-only)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seller_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seller_rating: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seller_verified: Option<bool>,
 }
 
 pub type CreateListingResponse = ListingSummary;

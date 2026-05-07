@@ -521,6 +521,26 @@ components:
               - type: string
               - type: number
               - type: boolean
+        # NEW: Marketplace fields
+        sku:
+          type: string
+          description: Seller's inventory SKU
+          example: "LAPTOP-001"
+        quantity:
+          type: integer
+          description: Number of identical items available
+          default: 1
+          example: 3
+        shipping_info:
+          $ref: '#/components/schemas/ShippingInfo'
+        condition_details:
+          type: string
+          description: Granular condition description
+          example: "Like new, only used for 2 months"
+        seller_notes:
+          type: string
+          description: Additional notes for buyers
+          example: "Includes original box and charger"
       example:
         schema_version: '1.0'
         owner_id: seller-123
@@ -541,6 +561,13 @@ components:
         attributes:
           brand: Lenovo
           model: ThinkPad T480
+        sku: "LAPTOP-001"
+        quantity: 3
+        shipping_info:
+          local_pickup: true
+          shipping_available: false
+        condition_details: "Like new, only used for 2 months"
+        seller_notes: "Includes original box and charger"
     ListingSummary:
       type: object
       additionalProperties: false
@@ -555,6 +582,21 @@ components:
           minimum: 1
         listing:
           $ref: '#/components/schemas/ListingPayload'
+        # NEW: Seller summary (read-only)
+        seller_name:
+          type: string
+          description: Seller's display name
+          example: "TechSeller Japan"
+        seller_rating:
+          type: number
+          description: Average rating (0.0-5.0)
+          minimum: 0.0
+          maximum: 5.0
+          example: 4.5
+        seller_verified:
+          type: boolean
+          description: Whether seller is verified/trusted
+          example: true
       example:
         listing_id: lst_123
         status: active
@@ -578,6 +620,9 @@ components:
           attributes:
             brand: Lenovo
             model: ThinkPad T480
+        seller_name: "TechSeller Japan"
+        seller_rating: 4.5
+        seller_verified: true
     CreateListingRequest:
       type: object
       additionalProperties: false
