@@ -1,7 +1,7 @@
 use marketplace_api_contract::{
     Category, Condition, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
     ListingSummary, NegotiationResponse, OpenNegotiationRequest, RequestContactRevealRequest,
-    SearchRequest, SearchResponse, SearchSort,
+    SearchRequest, SearchResponse,
 };
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
