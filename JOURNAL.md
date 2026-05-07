@@ -629,3 +629,21 @@ echo "Done"
   - Search listings (cached): 7281 ops/s
   - All 37 tests pass, auth working correctly
   - Phase 1 goals achieved - ready for Phase 2 (optional Zero-Copy + Pool)
+
+07-05-26--19-56
+- Phase2 (Zero-Copy + Pool) attempt:
+  - Added deadpool-postgres and tokio-postgres dependencies
+  - Modified PostgresListingRepository to include deadpool field
+  - Added summary_from_tokio_row helper function
+  - Attempted to modify get_listing to use deadpool
+  - Encountered multiple API compatibility issues:
+    * deadpool-postgres Config struct has different fields (no url, pool_max_size)
+    * Generic argument mismatches with deadpool::managed_reexports
+    * tokio-postgres version constraints
+  - Decision: REVERT all Phase2 changes
+  - Rationale: 
+    * Phase1 already exceeded target (7,281 ops/s vs 5,000 target)
+    * Phase2 ROI is poor (~2x max, high complexity)
+    * API compatibility issues would require extensive refactoring
+    * Better to focus on production hardening or Phase3 (Redis L2) if multi-instance needed
+  - Phase2 status: SKIPPED (not worth the effort given Phase1 success)
