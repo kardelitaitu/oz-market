@@ -283,6 +283,15 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let seller_notes = row
         .try_get::<Option<String>, _>("seller_notes")
         .map_err(|error| storage(error.to_string()))?;
+    
+    // Seller fields (optional, from JOIN with seller_accounts)
+    // Use ok() to handle missing columns gracefully
+    let trust_level: Option<String> = row.try_get("trust_level").ok();
+    let verified_at: Option<String> = row.try_get("verified_at").ok();
+    
+    let seller_verified = verified_at.is_some();
+    let seller_rating = None; // TODO: Calculate from reviews
+    let seller_name = trust_level.as_ref().map(|tl| format!("Seller ({})", tl)); // TODO: Use display_name
 
     Ok(ListingSummary {
         listing_id,
@@ -315,10 +324,10 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             condition_details,
             seller_notes,
         },
-        // Seller fields (read-only, None for now)
-        seller_name: None,
-        seller_rating: None,
-        seller_verified: None,
+        // Seller fields (read-only)
+        seller_name,
+        seller_rating,
+        seller_verified: Some(seller_verified),
     })
 }
 
