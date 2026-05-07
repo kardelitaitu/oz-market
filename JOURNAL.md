@@ -614,3 +614,18 @@ echo "Done"
     - Consider increasing cache size or TTL
     - May need 5000+ iterations to see cache warming effect
     - Profile with flamegraph to identify bottlenecks
+
+07-05-26--19-30
+- Phase 1 (Actix + Moka) OPTIMIZATION COMPLETE:
+  - Final benchmark result: 7281 ops/s (target: 5000 ops/s) ✅
+  - 22.7x improvement over ~321 ops/s baseline
+  - Optimizations applied:
+    * JSON string caching (pre-serialized responses in Moka)
+    * Release build (cargo build --release)
+    * Removed debug logging (eprintln! overhead)
+    * Fixed auth: snake_case roles ("admin" not "Admin")
+    * Fixed route ordering for /listings/search
+  - Health endpoint: 6875 ops/s
+  - Search listings (cached): 7281 ops/s
+  - All 37 tests pass, auth working correctly
+  - Phase 1 goals achieved - ready for Phase 2 (optional Zero-Copy + Pool)

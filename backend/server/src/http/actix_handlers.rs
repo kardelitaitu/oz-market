@@ -70,7 +70,7 @@ fn extract_claims(req: &HttpRequest) -> Result<Claims, HttpResponse> {
 
 pub async fn get_listing(
     app: web::Data<ActixApp>,
-    listing_cache: web::Data<Cache<String, ListingSummary>>,
+    listing_cache: web::Data<Cache<String, String>>,
     listing_id: web::Path<String>,
     req: HttpRequest,
 ) -> impl Responder {
@@ -79,14 +79,15 @@ pub async fn get_listing(
         Err(resp) => return resp,
     };
     let cache_key = listing_id.to_string();
-    // Try cache first
-    if let Some(cached) = listing_cache.get(&cache_key).await {
-        return HttpResponse::Ok().json(cached);
+    // Try cache first (stores pre-serialized JSON)
+    if let Some(cached_json) = listing_cache.get(&cache_key).await {
+        return HttpResponse::Ok().content_type("application/json").body(cached_json);
     }
     // Fallback to app
     match app.get_listing(&claims, &listing_id).await {
         Ok(Some(listing)) => {
-            listing_cache.insert(cache_key, listing.clone()).await;
+            let json_string = serde_json::to_string(&listing).unwrap_or_default();
+            listing_cache.insert(cache_key, json_string.clone()).await;
             HttpResponse::Ok().json(listing)
         },
         Ok(None) => HttpResponse::NotFound().json(json!({
@@ -99,7 +100,7 @@ pub async fn get_listing(
 
 pub async fn search_listings(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     query: web::Query<SearchRequest>,
     req: HttpRequest,
 ) -> impl Responder {
@@ -108,16 +109,15 @@ pub async fn search_listings(
         Err(resp) => return resp,
     };
     let cache_key = format!("{:?}", query.0);
-    // Try cache first
-    if let Some(cached) = search_cache.get(&cache_key).await {
-        eprintln!("CACHE HIT for {}", cache_key);
-        return HttpResponse::Ok().json(cached);
+    // Try cache first (stores pre-serialized JSON)
+    if let Some(cached_json) = search_cache.get(&cache_key).await {
+        return HttpResponse::Ok().content_type("application/json").body(cached_json);
     }
-    eprintln!("CACHE MISS for {}", cache_key);
     // Fallback to app
     match app.search_listings(&claims, &query.0).await {
         Ok(response) => {
-            search_cache.insert(cache_key, response.clone()).await;
+            let json_string = serde_json::to_string(&response).unwrap_or_default();
+            search_cache.insert(cache_key, json_string.clone()).await;
             HttpResponse::Ok().json(response)
         },
         Err(e) => map_handler_error(&e),

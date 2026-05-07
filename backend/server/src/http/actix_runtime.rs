@@ -31,9 +31,9 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let app = build_app(pool, audit_repo, outbox_repo);
     let observability = Arc::new(ServerObservability::new());
     
-    // Create Moka caches for Actix handlers
-    let listing_cache: Cache<String, ListingSummary> = Cache::new(10_000);
-    let search_cache: Cache<String, SearchResponse> = Cache::new(1_000);
+    // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
+    let listing_cache: Cache<String, String> = Cache::new(10_000);
+    let search_cache: Cache<String, String> = Cache::new(1_000);
     
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
