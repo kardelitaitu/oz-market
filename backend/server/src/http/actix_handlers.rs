@@ -10,7 +10,7 @@ use marketplace_api_contract::{
     SearchRequest, CreateListingRequest,
     OpenNegotiationRequest, RequestContactRevealRequest,
 };
-use marketplace_auth_core::Claims;
+use marketplace_auth_core::{Claims, Role};
 use serde_json::json;
 use moka::future::Cache;
 use std::sync::Arc;
@@ -313,7 +313,7 @@ pub async fn recalculate_seller_rating(
     };
     
     // Check admin role
-    if !claims.roles.iter().any(|r| r == "admin") {
+    if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
         return HttpResponse::Forbidden().json(json!({
             "error_code": "FORBIDDEN",
             "message": "Admin access required"

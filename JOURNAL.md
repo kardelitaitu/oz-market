@@ -815,3 +815,73 @@ Add marketplace fields to API contract, database, and server implementation.
 - `77defbe` - feat(api): Add display_name and seller_rating to seller accounts
 - `d1dd807` - feat(api): Update get_listing() to fetch seller info
 - `681c15e` - docs: Update JOURNAL with migration and seller info integration
+
+## 2026-05-08 (3): Reviews System & Seller Rating
+
+### Goal
+1. Create reviews table and calculate seller_rating from reviews
+2. Create admin endpoint or background job to recalculate seller_rating
+
+### Changes Made
+1. **Migration 0006** (`backend/server/migrations/0006_create_reviews_table.sql`):
+   - Created `reviews` table with: review_id, listing_id, seller_account_id, reviewer_id, rating (1-5), title, body, status
+   - Added indexes on listing_id, seller_account_id, status
+   - Applied successfully ✅
+
+2. **Migration 0006 Triggers** (`backend/server/migrations/0006_triggers.sql`):
+   - Created PL/pgSQL function `update_seller_rating()` to auto-update `seller_accounts.seller_rating`
+   - Created triggers for INSERT/UPDATE/DELETE on reviews table
+   - **NOTE**: Must be run manually in psql (cannot execute PL/pgSQL via sqlx):
+     ```bash
+     psql "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable" -f backend/server/migrations/0006_triggers.sql
+     ```
+
+3. **ReviewRow Model** (`backend/server/src/models/db.rs`):
+   - Added `ReviewRow` struct with fields matching the reviews table
+
+4. **Reviews Repository** (`backend/server/src/repositories/reviews.rs`):
+   - Created `ReviewRepository` trait with methods: create_review, get_reviews_for_listing, get_reviews_for_seller, update_review_status, get_by_id
+   - Implemented `InMemoryReviewRepository` (for testing)
+   - Implemented `PostgresReviewRepository` (with full SQL queries)
+   - Removed `#[cfg(feature = "postgres")]` guards for simplicity
+
+5. **Exports Updated**:
+   - `backend/server/src/models/mod.rs`: Added `ReviewRow` to exports
+   - `backend/server/src/repositories/mod.rs`: Added `ReviewRepository`, `InMemoryReviewRepository`, `PostgresReviewRepository` to exports
+
+6. **Admin Endpoint** (`backend/server/src/http/actix_handlers.rs`):
+   - Added `recalculate_seller_rating()` endpoint
+   - Route: `POST /admin/recalculate-rating/{seller_id}`
+   - Checks admin role, then runs SQL to recalculate rating from approved reviews
+   - **NOTE**: Route registration in `actix_runtime.rs` still needed
+
+### Technical Details
+- **PL/pgSQL Triggers**: PostgreSQL triggers auto-update `seller_rating` when reviews change (insert/update/delete)
+- **Rating Calculation**: `AVG(rating)::DECIMAL(3,2)` from approved reviews only
+- **Admin Endpoint**: Manual recalculation via SQL (bypasses triggers if needed)
+- **Feature Guards Removed**: Simplified by removing `#[cfg(feature = "postgres")]` guards
+
+### Results
+- ✅ `reviews` table created and migration applied
+- ✅ `ReviewRow` model and repository created
+- ✅ Admin endpoint for manual recalculation added
+- ✅ `cargo check --workspace` passes
+- ❌ Triggers need manual psql execution (PL/pgSQL limitation with sqlx)
+- ❌ Review HTTP endpoints not yet created (create/list/update)
+- ❌ Admin endpoint route not registered in `actix_runtime.rs`
+
+### Behavior Change
+**Before**: `seller_rating` was manually set (NULL by default)
+**After**: 
+- `reviews` table stores buyer reviews (1-5 stars)
+- `seller_rating` auto-calculated from approved reviews (via triggers)
+- Admin can manually recalculate via endpoint
+
+### Commits
+- `8fc6cc1` - feat(api): Add reviews system and seller_rating calculation
+
+### Next Steps
+1. **Enable triggers**: Run `0006_triggers.sql` in psql
+2. **Register route**: Add `recalculate_seller_rating` to `actix_runtime.rs`
+3. **Add review endpoints**: POST /listings/{id}/reviews, GET /listings/{id}/reviews, etc.
+4. **Test**: Insert a review and verify `seller_rating` updates automatically
