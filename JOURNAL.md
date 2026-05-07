@@ -662,3 +662,61 @@ echo "Done"
   - /metrics endpoint returns basic Prometheus metrics
   - Benchmark: 5058 ops/s (above 5000 target, maintains Phase1 gains)
 - Changes committed and pushed to main
+
+## 2026-05-07: API Improvements Phase — Marketplace Fields
+
+### Goal
+Add marketplace fields to API contract, database, and server implementation.
+
+### Changes Made
+1. **API Contract** (`backend/crates/api-contract/src/listing.rs`):
+   - Added `ShippingInfo` struct (weight, dimensions, shipping class, origin zip)
+   - Added to `ListingPayload`: `sku`, `quantity`, `shipping_info`, `condition_details`, `seller_notes`
+   - Added to `ListingSummary`: `seller_name`, `seller_rating`, `seller_verified`
+
+2. **Database Model** (`backend/server/src/models/db.rs`):
+   - Added new fields to `ListingRow`
+   - Updated `into_payload()` to map new fields
+
+3. **Repository Layer** (`backend/server/src/repositories/listings.rs`):
+   - Updated `row_to_summary()` to extract and map new fields from DB
+   - Updated `summary_to_row()` to include new fields
+   - Updated `insert_listing()` in `PostgresListingRepository` with new columns
+   - Updated `fetch_rows()` and `get_listing()` SELECT queries
+   - Added seller fields (None) to all `ListingSummary` constructors
+
+4. **OpenAPI Spec** (`docs/specs/openapi.yaml`):
+   - Added `ShippingInfo` schema definition
+   - Updated `ListingPayload` schema with new fields and examples
+   - Updated `ListingSummary` schema with seller fields
+
+5. **Tests & Benchmarks**:
+   - Updated all `ListingPayload` constructions in test/benchmark code
+   - Fixed compilation errors across workspace (server, mcp)
+   - All 37 tests pass ✅
+
+6. **Migration**:
+   - Created `backend/server/migrations/0004_add_marketplace_fields.sql`
+
+### Technical Details
+- **Compilation fixes**: Spent ~2 hours fighting syntax errors in `listings.rs` (nested braces, Python heredoc issues)
+- **Final approach**: Reverted file to last commit, applied edits step-by-step with `edit` tool
+- **Key learning**: Complex nested Rust structs need careful brace matching; Python heredocs in bash are problematic on Windows
+
+### Results
+- ✅ `cargo check --workspace` passes
+- ✅ All tests pass (37 tests)
+- ✅ OpenAPI spec updated
+- ✅ Code pushed to `main`
+
+### Next Steps
+1. Apply database migration `0004_add_marketplace_fields.sql` to dev/prod
+2. Update `get_listing()` handler to fetch seller info from `seller_accounts` table
+3. Consider adding seller summary to search results (optional)
+4. Mobile client updates (Phase 4)
+
+### Commits
+- `878956d` - feat(api): Add marketplace fields to API contract and DB model
+- `06b379d` - feat(api): Update OpenAPI spec with marketplace fields
+- `1a203e4` - feat(api): Add marketplace fields to ListingPayload and ListingSummary
+- `6422c16` - feat(api): Complete marketplace fields integration
