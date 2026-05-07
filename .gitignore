@@ -14,7 +14,8 @@ Desktop.ini
 .DS_Store
 
 # Obsidian
-.obsidian
+.obsidian/
+.obsidian/workspace.json
 
 # Logs
 *.log
