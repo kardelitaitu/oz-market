@@ -720,3 +720,46 @@ Add marketplace fields to API contract, database, and server implementation.
 - `06b379d` - feat(api): Update OpenAPI spec with marketplace fields
 - `1a203e4` - feat(api): Add marketplace fields to ListingPayload and ListingSummary
 - `6422c16` - feat(api): Complete marketplace fields integration
+
+## 2026-05-08: Database Migration & Seller Info Integration
+
+### Goal
+1. Apply migration 0004_add_marketplace_fields.sql to add marketplace fields
+2. Update `get_listing()` to fetch seller info from `seller_accounts` table
+
+### Changes Made
+1. **Applied Migration 0004**:
+   - Added columns: `sku`, `quantity`, `shipping_info`, `condition_details`, `seller_notes`
+   - Created one-time migration runner (`apply_migration_0004.rs`) to execute ALTER TABLE statements
+   - Migration applied successfully ✅
+
+2. **Updated `get_listing()` in `PostgresListingRepository`**:
+   - Added LEFT JOIN with `seller_accounts` table
+   - SELECT now includes `trust_level` and `verified_at` from seller_accounts
+   - Updated `row_to_summary()` to optionally extract seller fields
+
+3. **Updated `row_to_summary()`**:
+   - Extract `trust_level` and `verified_at` using `.ok()` for optional columns
+   - Map `seller_verified` based on `verified_at.is_some()`
+   - Set `seller_name` using trust_level (TODO: use display_name)
+   - `seller_rating` left as None (TODO: calculate from reviews)
+
+### Technical Details
+- **Optional column extraction**: Used `row.try_get("column").ok()` to handle cases where JOIN might not be present
+- **Backward compatibility**: `row_to_summary()` handles both JOIN and non-JOIN cases
+- **Compilation**: All tests pass ✅, `cargo check --workspace` passes ✅
+
+### Results
+- ✅ Migration applied successfully
+- ✅ `get_listing()` now returns seller info (verified status, trust level)
+- ✅ All tests pass (37 tests)
+- ✅ Code pushed to `main` (commit `d1dd807`)
+
+### TODOs (Future)
+1. Use `display_name` from `seller_accounts` for `seller_name`
+2. Calculate `seller_rating` from reviews or add rating field to seller_accounts
+3. Optionally update `fetch_rows()` to JOIN with `seller_accounts` for search results
+4. Apply migration to production database when ready
+
+### Commits
+- `d1dd807` - feat(api): Update get_listing() to fetch seller info
