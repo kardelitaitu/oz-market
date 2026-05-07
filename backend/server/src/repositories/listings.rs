@@ -486,11 +486,11 @@ impl ListingRepository for PostgresListingRepository {
                 listing_id, owner_id, schema_version, category, product_name, \"condition\",
                 price_currency, price_amount, country_code, country_name, city,
                 picture_urls, description, attributes, status, version, create_idempotency_key,
-                search_text, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now())
+                search_text, created_at, updated_at, sku, quantity, shipping_info, condition_details, seller_notes
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now(),$17,$18,$19,$20,$21)
             RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\",
                 price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls,
-                description, attributes, status, version",
+                description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes",
         )
         .bind(&listing_id)
         .bind(&request.listing.owner_id)
@@ -508,6 +508,11 @@ impl ListingRepository for PostgresListingRepository {
         .bind(Json(&request.listing.attributes))
         .bind(&request.idempotency_key)
         .bind(crate::services::search::listing_index_text(&request.listing).to_ascii_lowercase())
+        .bind(&request.listing.sku)
+        .bind(request.listing.quantity.unwrap_or(1) as i32)
+        .bind(request.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)))
+        .bind(&request.listing.condition_details)
+        .bind(&request.listing.seller_notes)
         .fetch_one(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;

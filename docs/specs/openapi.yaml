@@ -480,6 +480,42 @@ components:
         country_code: JP
         country_name: Japan
         city: Osaka
+    ShippingInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        weight_kg:
+          type: number
+          description: Package weight in kilograms
+          example: 1.2
+        dimensions_cm:
+          type: object
+          properties:
+            length:
+              type: number
+              example: 30
+            width:
+              type: number
+              example: 20
+            height:
+              type: number
+              example: 5
+        shipping_class:
+          type: string
+          enum: [standard, express, pickup_only]
+          example: standard
+        origin_zip:
+          type: string
+          description: Seller's postal code
+          example: "123-4567"
+      example:
+        weight_kg: 1.2
+        dimensions_cm:
+          length: 30
+          width: 20
+          height: 5
+        shipping_class: standard
+        origin_zip: "123-4567"
     ListingPayload:
       type: object
       additionalProperties: false

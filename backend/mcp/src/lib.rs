@@ -260,6 +260,7 @@ fn build_create_request() -> CreateListingRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use marketplace_api_contract::SearchSort;
     use marketplace_server::repositories::audit_events::InMemoryAuditEventRepository;
     use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository;
     use marketplace_server::repositories::listings::InMemoryListingRepository;

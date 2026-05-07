@@ -845,6 +845,10 @@ mod tests {
                 status: ListingStatus::Sold,
                 version: 9,
                 listing: request.listing,
+                // Seller fields (read-only, None for tests)
+                seller_name: None,
+                seller_rating: None,
+                seller_verified: None,
             }))
         }
 
