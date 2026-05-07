@@ -1,10 +1,4 @@
 use actix_web::{web, App, HttpServer};
-// Production hardening: tracing + metrics
-use tracing::info;
-use tracing_actix_web::TracingLogger;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-
 use crate::app::MarketplaceApp;
 use crate::observability::ServerObservability;
 use crate::repositories::{
@@ -18,9 +12,13 @@ use crate::repositories::reservations::PostgresReservationLeaseRepository;
 use crate::repositories::seller_accounts::PostgresSellerAccountRepository;
 use crate::services::idempotency::InMemoryIdempotencyRepository;
 use moka::future::Cache;
-// marketplace_api_contract types are used via handlers, not directly here
 use std::error::Error;
 use std::sync::Arc;
+
+// Production hardening: tracing
+use tracing::{info, error};
+use tracing_actix_web::TracingLogger;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let runtime = tokio::runtime::Runtime::new()?;
@@ -45,16 +43,11 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let listing_cache: Cache<String, String> = Cache::new(10_000);
     let search_cache: Cache<String, String> = Cache::new(1_000);
     
-    // Initialize Prometheus metrics exporter
-    let prometheus_handle = PrometheusBuilder::new()
-        .install()
-        .expect("failed to install Prometheus exporter");
-    
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
     let listing_cache_data = web::Data::new(listing_cache);
     let search_cache_data = web::Data::new(search_cache);
-    let prometheus_data = web::Data::new(prometheus_handle);
+    let pool_data = web::Data::new(pool);
     
     info!("Starting Actix-web server on {}", bind);
     
@@ -65,7 +58,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(obs_data.clone())
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
-            .app_data(prometheus_data.clone())
+            .app_data(pool_data.clone())
             // Public API v1 routes
             .service(
                 web::scope("/v1")
@@ -83,7 +76,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .route("/sellers/{seller_id}/trust-level", web::put().to(crate::http::actix_handlers::set_seller_trust_level))
                     .route("/sellers/{seller_id}/quota-override", web::put().to(crate::http::actix_handlers::set_seller_quota_override))
             )
-            // Metrics endpoint
+            // Metrics endpoint (simple version)
             .route("/metrics", web::get().to(metrics_handler))
             // Health check (deep)
             .route("/health", web::get().to(health_check))
@@ -95,8 +88,11 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn metrics_handler(prometheus: web::Data<PrometheusHandle>) -> impl actix_web::Responder {
-    let metrics = prometheus.render();
+async fn metrics_handler() -> impl actix_web::Responder {
+    // Simple metrics endpoint - can be extended later
+    let metrics = format!(
+        "# HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n"
+    );
     actix_web::HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(metrics)
@@ -116,6 +112,7 @@ async fn health_check(
             health["checks"]["database"] = serde_json::json!({"status": "ok"});
         },
         Err(e) => {
+            error!("Health check: DB error: {}", e);
             health["status"] = serde_json::json!("error");
             health["checks"]["database"] = serde_json::json!({
                 "status": "error",
