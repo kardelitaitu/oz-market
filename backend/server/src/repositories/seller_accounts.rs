@@ -129,7 +129,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "SELECT seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at FROM seller_accounts WHERE owner_id = $1",
+            "SELECT seller_account_id, owner_id, display_name, trust_level, seller_rating, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at FROM seller_accounts WHERE owner_id = $1",
         )
         .bind(owner_id)
         .fetch_optional(&mut *conn)
@@ -138,7 +138,9 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
         Ok(row.map(|r| SellerAccountRow {
             seller_account_id: r.get("seller_account_id"),
             owner_id: r.get("owner_id"),
+            display_name: r.get("display_name"),
             trust_level: r.get("trust_level"),
+            seller_rating: r.get("seller_rating"),
             quota_override: r.get("quota_override"),
             listings_created: r.get("listings_created"),
             status: r.get("status"),
@@ -160,7 +162,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "UPDATE seller_accounts SET trust_level = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
+            "UPDATE seller_accounts SET trust_level = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, display_name, trust_level, seller_rating, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
         )
         .bind(trust_level)
         .bind(seller_account_id)
@@ -170,7 +172,9 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
         Ok(row.map(|r| SellerAccountRow {
             seller_account_id: r.get("seller_account_id"),
             owner_id: r.get("owner_id"),
+            display_name: r.get("display_name"),
             trust_level: r.get("trust_level"),
+            seller_rating: r.get("seller_rating"),
             quota_override: r.get("quota_override"),
             listings_created: r.get("listings_created"),
             status: r.get("status"),
@@ -192,7 +196,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "UPDATE seller_accounts SET quota_override = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
+            "UPDATE seller_accounts SET quota_override = $1, updated_at = now() WHERE seller_account_id = $2 RETURNING seller_account_id, owner_id, display_name, trust_level, seller_rating, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
         )
         .bind(quota_override)
         .bind(seller_account_id)
@@ -202,7 +206,9 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
         Ok(row.map(|r| SellerAccountRow {
             seller_account_id: r.get("seller_account_id"),
             owner_id: r.get("owner_id"),
+            display_name: r.get("display_name"),
             trust_level: r.get("trust_level"),
+            seller_rating: r.get("seller_rating"),
             quota_override: r.get("quota_override"),
             listings_created: r.get("listings_created"),
             status: r.get("status"),
@@ -223,7 +229,7 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         let row = sqlx::query(
-            "UPDATE seller_accounts SET listings_created = listings_created + 1, updated_at = now() WHERE seller_account_id = $1 RETURNING seller_account_id, owner_id, trust_level, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
+            "UPDATE seller_accounts SET listings_created = listings_created + 1, updated_at = now() WHERE seller_account_id = $1 RETURNING seller_account_id, owner_id, display_name, trust_level, seller_rating, quota_override, listings_created, status, hardware_fingerprint, verified_at, created_at, updated_at",
         )
         .bind(seller_account_id)
         .fetch_optional(&mut *conn)
@@ -232,7 +238,9 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
         Ok(row.map(|r| SellerAccountRow {
             seller_account_id: r.get("seller_account_id"),
             owner_id: r.get("owner_id"),
+            display_name: r.get("display_name"),
             trust_level: r.get("trust_level"),
+            seller_rating: r.get("seller_rating"),
             quota_override: r.get("quota_override"),
             listings_created: r.get("listings_created"),
             status: r.get("status"),

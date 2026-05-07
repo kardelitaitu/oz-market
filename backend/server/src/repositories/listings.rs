@@ -266,7 +266,7 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let version = row
         .try_get::<i64, _>("version")
         .map_err(|error| storage(error.to_string()))? as u64;
-    
+
     // NEW: Extract marketplace fields from row
     let sku = row
         .try_get::<Option<String>, _>("sku")
@@ -283,16 +283,16 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let seller_notes = row
         .try_get::<Option<String>, _>("seller_notes")
         .map_err(|error| storage(error.to_string()))?;
-    
+
     // Seller fields (optional, from JOIN with seller_accounts)
     // Use ok() to handle missing columns gracefully
-    let trust_level: Option<String> = row.try_get("trust_level").ok();
+    let display_name: Option<String> = row.try_get("display_name").ok();
+    let seller_rating: Option<f64> = row.try_get("seller_rating").ok();
     let verified_at: Option<String> = row.try_get("verified_at").ok();
     
     let seller_verified = verified_at.is_some();
-    let seller_rating = None; // TODO: Calculate from reviews
-    let seller_name = trust_level.as_ref().map(|tl| format!("Seller ({})", tl)); // TODO: Use display_name
-
+    let seller_name = display_name;
+    
     Ok(ListingSummary {
         listing_id,
         status,
@@ -348,10 +348,10 @@ impl PostgresListingRepository {
         request: &SearchRequest,
     ) -> Result<Vec<ListingSummary>, RepositoryError> {
         let mut builder = QueryBuilder::<Postgres>::new(
-            "SELECT listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes FROM listings",
+            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, s.display_name, s.seller_rating, s.verified_at FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id",
         );
         let mut where_added = false;
-        
+
         if let Some(category) = request.category {
             if where_added {
                 builder.push(" AND ");
@@ -538,11 +538,13 @@ impl ListingRepository for PostgresListingRepository {
             .await
             .map_err(|error| storage(error.to_string()))?;
         let row = sqlx::query(
-            "SELECT listing_id, owner_id, schema_version, category, product_name, \"condition\",
-                price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls,
-                description, attributes, status, version
-             FROM listings
-             WHERE listing_id = $1",
+            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\",
+                l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls,
+                l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes,
+                s.display_name, s.seller_rating, s.verified_at
+             FROM listings l
+             LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id
+             WHERE l.listing_id = $1",
         )
         .bind(listing_id)
         .fetch_optional(&mut *conn)
@@ -582,7 +584,7 @@ impl ListingRepository for PostgresListingRepository {
             .await
             .map_err(|error| storage(error.to_string()))?;
         let rows = sqlx::query(
-            "UPDATE listings SET status = $1, version = version + 1, updated_at = now() WHERE listing_id = $2 RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version",
+            "UPDATE listings SET status = $1, version = version + 1, updated_at = now() WHERE listing_id = $2 RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes",
         )
         .bind(db_enum_value(&status))
         .bind(listing_id)

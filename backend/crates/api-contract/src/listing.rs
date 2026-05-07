@@ -121,7 +121,7 @@ pub struct ListingSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seller_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seller_rating: Option<f32>,
+    pub seller_rating: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seller_verified: Option<bool>,
 }

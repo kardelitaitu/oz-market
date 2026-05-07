@@ -139,7 +139,9 @@ pub struct OutboxEventRow {
 pub struct SellerAccountRow {
     pub seller_account_id: ResourceId,
     pub owner_id: String,
+    pub display_name: Option<String>,
     pub trust_level: String,
+    pub seller_rating: Option<f64>,
     pub quota_override: Option<i32>,
     pub listings_created: i32,
     pub status: String,
