@@ -1,6 +1,6 @@
-use reqwest::header::{HeaderValue, CONTENT_TYPE};
+use reqwest::header::HeaderValue;
 use reqwest::Client;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::env;
 
 #[tokio::main]

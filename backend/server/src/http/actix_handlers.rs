@@ -7,13 +7,17 @@ use crate::repositories::{
 };
 use crate::services::idempotency::InMemoryIdempotencyRepository;
 use marketplace_api_contract::{
-    ListingSummary, SearchRequest, SearchResponse, CreateListingRequest,
+    SearchRequest, CreateListingRequest,
     OpenNegotiationRequest, RequestContactRevealRequest,
 };
 use marketplace_auth_core::Claims;
 use serde_json::json;
 use moka::future::Cache;
 use std::sync::Arc;
+
+// Production hardening: tracing + metrics
+use tracing::{info, error};
+use metrics::{counter, histogram};
 
 // Type alias for the concrete app type used in Actix handlers
 type ActixApp = Arc<MarketplaceApp<
@@ -57,12 +61,13 @@ fn extract_claims(req: &HttpRequest) -> Result<Claims, HttpResponse> {
             match serde_json::from_str::<Claims>(s) {
                 Ok(claims) => return Ok(claims),
                 Err(e) => {
-                    eprintln!("Claims parse error: {}", e);
+                    error!("Claims parse error: {}", e);
                     return Err(HttpResponse::Unauthorized().json(serde_json::json!({"error": format!("invalid claims: {}", e)})));
                 }
             }
         }
     }
+    error!("Missing claims header");
     Err(HttpResponse::Unauthorized().json(serde_json::json!({"error": "missing claims header"})))
 }
 
@@ -74,6 +79,7 @@ pub async fn get_listing(
     listing_id: web::Path<String>,
     req: HttpRequest,
 ) -> impl Responder {
+    let start = std::time::Instant::now();
     let claims = match extract_claims(&req) {
         Ok(c) => c,
         Err(resp) => return resp,
@@ -81,13 +87,21 @@ pub async fn get_listing(
     let cache_key = listing_id.to_string();
     // Try cache first (stores pre-serialized JSON)
     if let Some(cached_json) = listing_cache.get(&cache_key).await {
+        info!("Cache hit for listing {}", cache_key);
+        counter!("cache_hits_total", "type" => "listing").increment(1);
+        histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
+            .record(start.elapsed().as_secs_f64());
         return HttpResponse::Ok().content_type("application/json").body(cached_json);
     }
+    info!("Cache miss for listing {}", cache_key);
+    counter!("cache_misses_total", "type" => "listing").increment(1);
     // Fallback to app
     match app.get_listing(&claims, &listing_id).await {
         Ok(Some(listing)) => {
             let json_string = serde_json::to_string(&listing).unwrap_or_default();
             listing_cache.insert(cache_key, json_string.clone()).await;
+            histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
+                .record(start.elapsed().as_secs_f64());
             HttpResponse::Ok().json(listing)
         },
         Ok(None) => HttpResponse::NotFound().json(json!({
@@ -104,6 +118,7 @@ pub async fn search_listings(
     query: web::Query<SearchRequest>,
     req: HttpRequest,
 ) -> impl Responder {
+    let start = std::time::Instant::now();
     let claims = match extract_claims(&req) {
         Ok(c) => c,
         Err(resp) => return resp,
@@ -111,13 +126,21 @@ pub async fn search_listings(
     let cache_key = format!("{:?}", query.0);
     // Try cache first (stores pre-serialized JSON)
     if let Some(cached_json) = search_cache.get(&cache_key).await {
+        info!("Cache hit for search");
+        counter!("cache_hits_total", "type" => "search").increment(1);
+        histogram!("request_duration_seconds", "endpoint" => "/listings/search")
+            .record(start.elapsed().as_secs_f64());
         return HttpResponse::Ok().content_type("application/json").body(cached_json);
     }
+    info!("Cache miss for search");
+    counter!("cache_misses_total", "type" => "search").increment(1);
     // Fallback to app
     match app.search_listings(&claims, &query.0).await {
         Ok(response) => {
             let json_string = serde_json::to_string(&response).unwrap_or_default();
             search_cache.insert(cache_key, json_string.clone()).await;
+            histogram!("request_duration_seconds", "endpoint" => "/listings/search")
+                .record(start.elapsed().as_secs_f64());
             HttpResponse::Ok().json(response)
         },
         Err(e) => map_handler_error(&e),
@@ -126,7 +149,7 @@ pub async fn search_listings(
 
 pub async fn create_listing(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
     body: web::Json<CreateListingRequest>,
 ) -> impl Responder {
@@ -148,7 +171,7 @@ pub async fn create_listing(
 
 pub async fn open_negotiation(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
     body: web::Json<OpenNegotiationRequest>,
 ) -> impl Responder {
@@ -169,7 +192,7 @@ pub async fn open_negotiation(
 
 pub async fn request_contact_reveal(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
     body: web::Json<RequestContactRevealRequest>,
 ) -> impl Responder {
@@ -190,7 +213,7 @@ pub async fn request_contact_reveal(
 
 pub async fn archive_listing(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     listing_id: web::Path<String>,
     req: HttpRequest,
 ) -> impl Responder {
@@ -212,7 +235,7 @@ pub async fn archive_listing(
 
 pub async fn release_reservation(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     lease_id: web::Path<String>,
     claims: web::ReqData<Claims>,
 ) -> impl Responder {
@@ -232,7 +255,7 @@ pub async fn release_reservation(
 
 pub async fn set_seller_trust_level(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     seller_id: web::Path<String>,
     trust_level: web::Json<String>,
     req: HttpRequest,
@@ -256,7 +279,7 @@ pub async fn set_seller_trust_level(
 
 pub async fn set_seller_quota_override(
     app: web::Data<ActixApp>,
-    search_cache: web::Data<Cache<String, SearchResponse>>,
+    search_cache: web::Data<Cache<String, String>>,
     seller_id: web::Path<String>,
     quota: web::Json<Option<i32>>,
     req: HttpRequest,

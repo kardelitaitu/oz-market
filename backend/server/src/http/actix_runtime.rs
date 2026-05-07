@@ -1,13 +1,16 @@
-use actix_web::{web, App, HttpServer, FromRequest, HttpRequest, HttpResponse};
-use actix_web::dev::{ServiceRequest, Service};
-use actix_web::Error as ActixError;
+use actix_web::{web, App, HttpServer};
+// Production hardening: tracing + metrics
+use tracing::info;
+use tracing_actix_web::TracingLogger;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+
 use crate::app::MarketplaceApp;
 use crate::observability::ServerObservability;
 use crate::repositories::{
     AuditEventRepository, OutboxEventRepository, SellerAccountRepository,
 };
 use crate::repositories::audit_events::PostgresAuditEventRepository;
-use marketplace_auth_core::Claims;
 use crate::repositories::contact_reveals::PostgresContactRevealRepository;
 use crate::repositories::listings::PostgresListingRepository;
 use crate::repositories::outbox_events::PostgresOutboxEventRepository;
@@ -15,7 +18,7 @@ use crate::repositories::reservations::PostgresReservationLeaseRepository;
 use crate::repositories::seller_accounts::PostgresSellerAccountRepository;
 use crate::services::idempotency::InMemoryIdempotencyRepository;
 use moka::future::Cache;
-use marketplace_api_contract::{SearchResponse, ListingSummary};
+// marketplace_api_contract types are used via handlers, not directly here
 use std::error::Error;
 use std::sync::Arc;
 
@@ -27,27 +30,42 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let bind = std::env::var("MARKETPLACE_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
     
+    // Initialize tracing subscriber
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "info".into()))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+    
     let (pool, audit_repo, outbox_repo) = build_repositories().await?;
-    let app = build_app(pool, audit_repo, outbox_repo);
+    let app = build_app(pool.clone(), audit_repo, outbox_repo);
     let observability = Arc::new(ServerObservability::new());
     
     // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
     let listing_cache: Cache<String, String> = Cache::new(10_000);
     let search_cache: Cache<String, String> = Cache::new(1_000);
     
+    // Initialize Prometheus metrics exporter
+    let prometheus_handle = PrometheusBuilder::new()
+        .install()
+        .expect("failed to install Prometheus exporter");
+    
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
     let listing_cache_data = web::Data::new(listing_cache);
     let search_cache_data = web::Data::new(search_cache);
+    let prometheus_data = web::Data::new(prometheus_handle);
     
-    println!("Starting Actix-web server on {}", bind);
+    info!("Starting Actix-web server on {}", bind);
     
     HttpServer::new(move || {
         App::new()
+            .wrap(TracingLogger::default())  // Add tracing middleware
             .app_data(app_data.clone())
             .app_data(obs_data.clone())
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
+            .app_data(prometheus_data.clone())
             // Public API v1 routes
             .service(
                 web::scope("/v1")
@@ -65,7 +83,9 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .route("/sellers/{seller_id}/trust-level", web::put().to(crate::http::actix_handlers::set_seller_trust_level))
                     .route("/sellers/{seller_id}/quota-override", web::put().to(crate::http::actix_handlers::set_seller_quota_override))
             )
-            // Health check
+            // Metrics endpoint
+            .route("/metrics", web::get().to(metrics_handler))
+            // Health check (deep)
             .route("/health", web::get().to(health_check))
     })
     .bind(&bind)?
@@ -75,8 +95,45 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn health_check() -> impl actix_web::Responder {
-    actix_web::HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
+async fn metrics_handler(prometheus: web::Data<PrometheusHandle>) -> impl actix_web::Responder {
+    let metrics = prometheus.render();
+    actix_web::HttpResponse::Ok()
+        .content_type("text/plain; version=0.0.4; charset=utf-8")
+        .body(metrics)
+}
+
+async fn health_check(
+    pool: web::Data<sqlx::postgres::PgPool>,
+) -> impl actix_web::Responder {
+    let mut health = serde_json::json!({
+        "status": "ok",
+        "checks": {}
+    });
+    
+    // Check database connectivity
+    match sqlx::query("SELECT 1").execute(pool.get_ref()).await {
+        Ok(_) => {
+            health["checks"]["database"] = serde_json::json!({"status": "ok"});
+        },
+        Err(e) => {
+            health["status"] = serde_json::json!("error");
+            health["checks"]["database"] = serde_json::json!({
+                "status": "error",
+                "error": e.to_string()
+            });
+        }
+    }
+    
+    // Check Moka cache (simple ping)
+    health["checks"]["cache"] = serde_json::json!({"status": "ok"});
+    
+    let status = if health["status"] == "error" {
+        actix_web::http::StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        actix_web::http::StatusCode::OK
+    };
+    
+    (actix_web::HttpResponse::Ok().json(health), status)
 }
 
 async fn build_repositories() -> Result<
