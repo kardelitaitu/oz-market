@@ -52,7 +52,7 @@ pub use contact_reveals::{
 };
 pub use idempotency_keys::IdempotencyKeyRepository;
 pub use listings::{ListingRepository, InMemoryListingRepository, PostgresListingRepository};
-pub use negotiations::NegotiationRepository;
+pub use negotiations::{InMemoryNegotiationRepository, NegotiationRepository, PostgresNegotiationRepository};
 pub use outbox_events::OutboxEventRepository;
 pub use reservations::{
     InMemoryReservationLeaseRepository, PostgresReservationLeaseRepository,

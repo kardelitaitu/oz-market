@@ -245,7 +245,7 @@ impl ContactRevealRepository for PostgresContactRevealRepository {
             .map_err(|error| storage(error.to_string()))?;
 
         let negotiation_row =
-            sqlx::query("SELECT listing_id FROM negotiations WHERE negotiation_id = $1 FOR UPDATE")
+            sqlx::query("SELECT listing_id FROM reservation_leases WHERE negotiation_id = $1 FOR UPDATE")
                 .bind(negotiation_id)
                 .fetch_optional(&mut *tx)
                 .await

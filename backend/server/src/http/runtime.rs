@@ -1,5 +1,9 @@
 use crate::app::MarketplaceApp;
 use crate::observability::ServerObservability;
+use crate::repositories::{
+    ContactRevealRepository, IdempotencyKeyRepository, ListingRepository,
+    ReservationLeaseRepository,
+};
 #[cfg(not(test))]
 use crate::repositories::audit_events::PostgresAuditEventRepository;
 #[cfg(not(test))]
@@ -12,10 +16,6 @@ use crate::repositories::outbox_events::PostgresOutboxEventRepository;
 use crate::repositories::reservations::PostgresReservationLeaseRepository;
 #[cfg(not(test))]
 use crate::repositories::seller_accounts::PostgresSellerAccountRepository;
-use crate::repositories::{
-    ContactRevealRepository, IdempotencyKeyRepository, ListingRepository,
-    ReservationLeaseRepository,
-};
 use crate::services::idempotency::InMemoryIdempotencyRepository;
 use marketplace_api_contract::{
     ApiErrorCode, Category, Condition, CreateListingRequest, ListingStatus, OpenNegotiationRequest,
@@ -183,7 +183,7 @@ async fn read_request(
 
     let content_length = headers
         .get("content-length")
-        .and_then(|value| value.parse::<usize>().ok())
+        .and_then(|value: &String| value.parse::<usize>().ok())
         .unwrap_or(0);
     let mut body = vec![0; content_length];
     if content_length > 0 {
@@ -645,10 +645,10 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
             currency: query.get("currency").cloned(),
             min_amount: query
                 .get("min_amount")
-                .and_then(|value| value.parse::<f64>().ok()),
+                .and_then(|value: &String| value.parse::<f64>().ok()),
             max_amount: query
                 .get("max_amount")
-                .and_then(|value| value.parse::<f64>().ok()),
+                .and_then(|value: &String| value.parse::<f64>().ok()),
         })
     } else {
         None
@@ -682,7 +682,7 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
             .unwrap_or(SearchSort::Relevance),
         limit: query
             .get("limit")
-            .and_then(|value| value.parse::<u32>().ok()),
+            .and_then(|value: &String| value.parse::<u32>().ok()),
         cursor: query.get("cursor").cloned(),
     }
 }
@@ -895,10 +895,9 @@ fn map_handler_error(error: &crate::http::handlers::HandlerError) -> HttpRespons
 }
 
 fn current_time_marker() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("{}s", now.as_secs())
+    // Use chrono::Utc::now() to get current time in RFC3339 format
+    let now = chrono::Utc::now();
+    now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 #[cfg(test)]

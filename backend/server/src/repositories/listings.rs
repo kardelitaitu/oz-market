@@ -296,6 +296,7 @@ impl PostgresListingRepository {
         }
     }
 
+    #[allow(unused_assignments)]
     async fn fetch_rows(
         &self,
         request: &SearchRequest,

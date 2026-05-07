@@ -530,3 +530,17 @@ echo "Done"
   - fixed `seller_claims()` test helper to include `Role::SellerContactRevealApprover` for contact reveal approval tests
 - all 37 tests now pass (35 unit + 2 postgres integration)
 - cleaned up temporary files (`app.jsr`, `runtime.rs.bak`)
+
+07-05-26--15-35
+- fixed Postgres benchmark execution after multiple issues:
+  - removed unused `negotiations` field from `MarketplaceApp` struct (was stored but never used)
+  - fixed `contact_reveals.rs` to query `reservation_leases` instead of non-existent `negotiations` table lookup
+  - fixed `reservations.rs` `reserve()` function - removed premature `negotiation_id` lookup before insert
+  - removed foreign key constraints from `0001_init.sql` (negotiation_id no longer references negotiations table)
+  - fixed timestamp format in `now_marker()` and `current_time_marker()` to return proper RFC3339 via chrono::Utc::now()
+  - added chrono 0.4 dependency to server/Cargo.toml
+- Phase 5 Postgres benchmark now runs successfully:
+  - listing-read: 321.34 ops/sec (500 ops in 1556ms)
+  - search-heavy: 77.12 ops/sec (500 ops in 6483ms)  
+  - negotiation-burst: 85.03 ops/sec (300 ops in 3528ms)
+- all 37 tests pass (35 unit + 2 Postgres integration)

@@ -185,6 +185,7 @@ impl MarketplaceMcp {
     }
 }
 
+#[allow(dead_code)]
 fn build_claims() -> Claims {
     Claims {
         sub: "sub-1".to_string(),
@@ -207,6 +208,7 @@ fn build_claims() -> Claims {
     }
 }
 
+#[allow(dead_code)]
 fn build_admin_claims() -> Claims {
     Claims {
         sub: "admin-1".to_string(),
@@ -223,6 +225,7 @@ fn build_admin_claims() -> Claims {
     }
 }
 
+#[allow(dead_code)]
 fn build_create_request() -> CreateListingRequest {
     CreateListingRequest {
         idempotency_key: "idem-create-1".to_string(),

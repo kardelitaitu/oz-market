@@ -244,22 +244,6 @@ impl ReservationLeaseRepository for PostgresReservationLeaseRepository {
             .await
             .map_err(|error| storage(error.to_string()))?;
 
-        let negotiation_row =
-            sqlx::query("SELECT listing_id FROM negotiations WHERE negotiation_id = $1 FOR UPDATE")
-                .bind(negotiation_id)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(|error| storage(error.to_string()))?;
-        let Some(negotiation_row) = negotiation_row else {
-            return Err(not_found("negotiation not found"));
-        };
-        let negotiated_listing_id: String = negotiation_row
-            .try_get("listing_id")
-            .map_err(|error| storage(error.to_string()))?;
-        if negotiated_listing_id != listing_id {
-            return Err(validation("listing_id does not match negotiation listing"));
-        }
-
         let listing_row =
             sqlx::query("SELECT listing_id FROM listings WHERE listing_id = $1 FOR UPDATE")
                 .bind(listing_id)

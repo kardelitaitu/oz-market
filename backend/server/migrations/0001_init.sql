@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS seller_accounts (
     status TEXT NOT NULL CHECK (status IN ('active', 'review', 'suspended')),
     hardware_fingerprint TEXT,
     verified_at TIMESTAMPTZ,
+    listings_created INTEGER NOT NULL DEFAULT 0,
+    quota_override INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -80,7 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_negotiations_status ON negotiations (status);
 
 CREATE TABLE IF NOT EXISTS reservation_leases (
     lease_id TEXT PRIMARY KEY,
-    negotiation_id TEXT NOT NULL UNIQUE REFERENCES negotiations (negotiation_id) ON DELETE CASCADE,
+    negotiation_id TEXT UNIQUE,
     listing_id TEXT NOT NULL REFERENCES listings (listing_id) ON DELETE CASCADE,
     reserved_by TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('active', 'expired', 'cancelled')),
@@ -94,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_reservation_leases_expires_at ON reservation_leas
 
 CREATE TABLE IF NOT EXISTS contact_reveals (
     reveal_id TEXT PRIMARY KEY,
-    negotiation_id TEXT NOT NULL UNIQUE REFERENCES negotiations (negotiation_id) ON DELETE CASCADE,
+    negotiation_id TEXT UNIQUE,
     listing_id TEXT NOT NULL REFERENCES listings (listing_id) ON DELETE CASCADE,
     buyer_agent_id TEXT NOT NULL,
     request_idempotency_key TEXT NOT NULL UNIQUE,
