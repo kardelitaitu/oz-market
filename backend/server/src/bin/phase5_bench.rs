@@ -504,6 +504,12 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
                 "brand": "Lenovo",
                 "seed": seed,
             })),
+            // NEW: Marketplace fields
+            sku: None,
+            quantity: None,
+            shipping_info: None,
+            condition_details: None,
+            seller_notes: None,
         },
     }
 }

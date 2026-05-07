@@ -84,6 +84,12 @@ impl InMemoryListingRepository {
             picture_urls: summary.listing.picture_urls.clone(),
             description: summary.listing.description.clone(),
             attributes: summary.listing.attributes.clone(),
+            // NEW: Marketplace fields
+            sku: summary.listing.sku.clone(),
+            quantity: summary.listing.quantity.map(|q| q as i32).unwrap_or(1),
+            shipping_info: summary.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)),
+            condition_details: summary.listing.condition_details.clone(),
+            seller_notes: summary.listing.seller_notes.clone(),
             status: summary.status,
             version: summary.version as i64,
             create_idempotency_key: String::new(),
@@ -119,6 +125,10 @@ impl ListingRepository for InMemoryListingRepository {
             status: ListingStatus::Active,
             version: 1,
             listing: request.listing.clone(),
+            // Seller fields (read-only, None for in-memory)
+            seller_name: None,
+            seller_rating: None,
+            seller_verified: None,
         };
         let _ = Self::summary_to_row(&summary);
         guard.insert(summary.listing_id.clone(), summary.clone());
@@ -256,6 +266,23 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let version = row
         .try_get::<i64, _>("version")
         .map_err(|error| storage(error.to_string()))? as u64;
+    
+    // NEW: Extract marketplace fields from row
+    let sku = row
+        .try_get::<Option<String>, _>("sku")
+        .map_err(|error| storage(error.to_string()))?;
+    let quantity = row
+        .try_get::<i32, _>("quantity")
+        .map_err(|error| storage(error.to_string()))?;
+    let shipping_info = row
+        .try_get::<Option<serde_json::Value>, _>("shipping_info")
+        .map_err(|error| storage(error.to_string()))?;
+    let condition_details = row
+        .try_get::<Option<String>, _>("condition_details")
+        .map_err(|error| storage(error.to_string()))?;
+    let seller_notes = row
+        .try_get::<Option<String>, _>("seller_notes")
+        .map_err(|error| storage(error.to_string()))?;
 
     Ok(ListingSummary {
         listing_id,
@@ -281,7 +308,17 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             picture_urls,
             description,
             attributes,
+            // NEW: Marketplace fields
+            sku,
+            quantity: if quantity == 1 { None } else { Some(quantity as u32) },
+            shipping_info: shipping_info.and_then(|v| serde_json::from_value(v).ok()),
+            condition_details,
+            seller_notes,
         },
+        // Seller fields (read-only, None for now)
+        seller_name: None,
+        seller_rating: None,
+        seller_verified: None,
     })
 }
 
@@ -302,7 +339,7 @@ impl PostgresListingRepository {
         request: &SearchRequest,
     ) -> Result<Vec<ListingSummary>, RepositoryError> {
         let mut builder = QueryBuilder::<Postgres>::new(
-            "SELECT listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version FROM listings",
+            "SELECT listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes FROM listings",
         );
         let mut where_added = false;
         
@@ -642,6 +679,12 @@ mod tests {
                         .into_iter()
                         .collect(),
                 ),
+                // NEW: Marketplace fields
+                sku: None,
+                quantity: None,
+                shipping_info: None,
+                condition_details: None,
+                seller_notes: None,
             },
         }
     }

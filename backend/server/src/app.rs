@@ -901,6 +901,12 @@ mod tests {
                         .into_iter()
                         .collect(),
                 ),
+                // NEW: Marketplace fields
+                sku: None,
+                quantity: None,
+                shipping_info: None,
+                condition_details: None,
+                seller_notes: None,
             },
         }
     }

@@ -982,6 +982,12 @@ mod tests {
                 picture_urls: vec!["https://example.com/item.jpg".to_string()],
                 description: "Good battery health".to_string(),
                 attributes: None,
+                // NEW: Marketplace fields
+                sku: None,
+                quantity: None,
+                shipping_info: None,
+                condition_details: None,
+                seller_notes: None,
             },
         })
         .unwrap()
