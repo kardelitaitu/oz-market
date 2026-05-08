@@ -420,3 +420,24 @@ LIMIT 20;
 4. Test the complete flow
 
 **Committed**: Partial progress (to be continued)
+
+---
+
+## Progress Update (2026-05-09 03:32)
+
+### ✅ Phase 4: Business Logic & Search - MOSTLY COMPLETE
+- **insert_listing()**: ✅ Inserts into `service_listings` or `property_listings` based on `listing_type`
+- **fetch_rows()**: ✅ Updated SELECT with LEFT JOINs to separate tables
+- **fetch_rows()**: ✅ Added filters for `listing_type`, `service_type`, `property_transaction_type`, etc.
+- **row_to_summary()**: ✅ Extracts fields from LEFT JOINed tables
+- **row_to_summary()**: ✅ Populates ListingPayload with service/property fields
+- **price_per_sqm sorting**: ✅ Implemented in search.rs
+- **Build**: ✅ Passes
+- **Formatting**: ✅ Fixed
+
+### ⏳ Remaining Tasks for Phase 4:
+1. **Test the complete flow** - Verify INSERT/SELECT/GET work with separate tables
+2. **Add new API endpoints** (if needed) for service/property-specific operations
+3. **Verify data merging** - Ensure service/property fields are properly returned in API responses
+
+**Committed**: `e683d8d` (Phase 4 partial completion)

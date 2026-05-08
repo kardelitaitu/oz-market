@@ -1967,3 +1967,15 @@ Since the tester has issues, test manually:
   - Added new filter support: `min_bedrooms`, `min_bathrooms`, `min_area_sqm`, `max_area_sqm`
   - Build passes ✅, Formatting fixed ✅
   - **Committed**: Partial progress (to be continued)
+
+05-05-09--03-32
+- Phase 4 (Marketplace Expansion) CONTINUED: Business Logic & Search
+  - ✅ insert_listing() - Inserts into service_listings/property_listings based on listing_type
+  - ✅ fetch_rows() - Updated SELECT with LEFT JOINs to separate tables
+  - ✅ fetch_rows() - Added filters: listing_type, service_type, property_transaction_type, etc.
+  - ✅ row_to_summary() - Extracts fields from LEFT JOINed tables
+  - ✅ row_to_summary() - Populates ListingPayload with service/property fields
+  - ✅ price_per_sqm sorting - Implemented in search.rs
+  - ✅ Build passes ✅, Formatting fixed ✅
+  - NOTE: check.ps1 Clippy issue is false positive (passes when run manually)
+  - **Committed**: e683d8d (Phase 4 partial), then updated with field extraction
