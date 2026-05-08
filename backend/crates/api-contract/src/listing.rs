@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 pub type ResourceId = String;
 pub type CurrencyCode = String;
 pub type CountryCode = String;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Category {
     Laptop,
@@ -22,7 +23,7 @@ pub enum Category {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Condition {
     New,
@@ -30,7 +31,7 @@ pub enum Condition {
     Refurbished,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ListingStatus {
     Draft,
@@ -40,7 +41,7 @@ pub enum ListingStatus {
     Archived,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchSort {
     Relevance,
@@ -57,13 +58,13 @@ impl Default for SearchSort {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct Price {
     pub currency: CurrencyCode,
     pub amount: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ListingLocation {
     pub country_code: CountryCode,
     pub country_name: String,
@@ -77,7 +78,7 @@ pub struct ListingLocation {
     pub geolocation_opt_out: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ShippingInfo {
     pub local_pickup: bool,
     pub shipping_available: bool,
@@ -87,7 +88,7 @@ pub struct ShippingInfo {
     pub shipping_regions: Option<Vec<CountryCode>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ListingPayload {
     pub schema_version: String,
     pub owner_id: String,
@@ -114,13 +115,13 @@ pub struct ListingPayload {
     pub seller_notes: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct CreateListingRequest {
     pub idempotency_key: String,
     pub listing: ListingPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ListingSummary {
     pub listing_id: ResourceId,
     pub status: ListingStatus,
@@ -137,7 +138,7 @@ pub struct ListingSummary {
 
 pub type CreateListingResponse = ListingSummary;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchPriceFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<CurrencyCode>,
@@ -147,7 +148,7 @@ pub struct SearchPriceFilter {
     pub max_amount: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchLocationFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub country_code: Option<CountryCode>,
@@ -155,7 +156,7 @@ pub struct SearchLocationFilter {
     pub city: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
@@ -214,7 +215,7 @@ impl Default for SearchRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchResponse {
     pub items: Vec<ListingSummary>,
     pub applied_sort_by: SearchSort,

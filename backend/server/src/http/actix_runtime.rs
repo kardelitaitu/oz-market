@@ -64,8 +64,6 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
             .app_data(pool_data.clone())
-            // Swagger UI for interactive API docs
-            .service(SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()))
             // Public API v1 routes
             .service(
                 web::scope("/v1")
