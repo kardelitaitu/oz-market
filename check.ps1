@@ -74,7 +74,8 @@ Set-Location "backend"
 
 # ---- BUILD -----------------------------------------------------------
 if (-not $SkipBuild) {
-    Write-StepHeader $stepNum "Build check (cargo check)"
+    $cmd = "cargo check"
+    Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         cargo check 2>&1 | Out-Null
@@ -94,7 +95,8 @@ if (-not $SkipBuild) {
 
 # ---- FORMAT -----------------------------------------------------------
 if (-not $SkipFormat -and -not $failed) {
-    Write-StepHeader $stepNum "Format check (cargo fmt --check)"
+    $cmd = "cargo fmt --all -- --check"
+    Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         cargo fmt --all -- --check 2>&1 | Out-Null
@@ -117,7 +119,8 @@ if (-not $SkipFormat -and -not $failed) {
 
 # ---- CLIPPY ----------------------------------------------------------
 if (-not $SkipClippy -and -not $failed) {
-    Write-StepHeader $stepNum "Clippy check (cargo clippy with suppressions)"
+    $cmd = "cargo clippy -- -A clippy::too_many_arguments -A clippy::manual_find -A clippy::useless_format -A clippy::range_plus_one -A clippy::borrow_deref_ref -A clippy::get_first"
+    Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         # Match CI settings: suppress some strict lints
@@ -138,7 +141,8 @@ if (-not $SkipClippy -and -not $failed) {
 
 # ---- TESTS ----------------------------------------------------------
 if (-not $SkipTests -and -not $failed) {
-    Write-StepHeader $stepNum "Test check (cargo test)"
+    $cmd = "cargo test --lib"
+    Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         cargo test --lib 2>&1 | Out-Null
