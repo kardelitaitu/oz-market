@@ -1095,7 +1095,7 @@ mod tests {
                     geolocation_opt_out: None,
                 },
                 picture_urls: vec!["https://example.com/item.jpg".to_string()],
-                description: format!("{title} in {city}"),
+                description: format!("{product_name} in {city}"),
                 attributes: Some(
                     [("brand".to_string(), json!("Lenovo"))]
                         .into_iter()

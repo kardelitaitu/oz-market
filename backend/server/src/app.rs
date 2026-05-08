@@ -892,7 +892,6 @@ mod tests {
                 title: "ThinkPad T480".to_string(),
                 condition: Some(Condition::Used),
                 // NEW: Phase 2 fields
-                listing_type: marketplace_api_contract::ListingType::Product,
                 service_type: None,
                 hourly_rate: None,
                 project_rate: None,
@@ -1263,18 +1262,9 @@ mod tests {
                     // NEW: Phase 2 fields
                     listing_type: marketplace_api_contract::ListingType::Product,
                     service_type: None,
-                    hourly_rate: None,
-                    project_rate: None,
-                    qualifications: None,
-                    service_radius_km: None,
                     property_transaction_type: None,
                     property_sub_type: None,
                     area_sqm: None,
-                    bedrooms: None,
-                    bathrooms: None,
-                    year_built: None,
-                    lot_size_sqm: None,
-                    zoning: None,
                     sort_by: SearchSort::Relevance,
                     limit: Some(10),
                     ..SearchRequest::default()
@@ -1309,7 +1299,7 @@ mod tests {
             .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:00Z")
             .await
             .unwrap();
-        assert_eq!(first.listing.product_name, "ThinkPad T480");
+        assert_eq!(first.listing.title, "ThinkPad T480");
 
         let replay = app
             .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:01Z")
