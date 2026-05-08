@@ -80,3 +80,10 @@ For MCP behavior, check:
 - after making code changes, summarize the changes briefly in the response
 - after making code changes, append a short journal entry to `JOURNAL.md`
 - journal entries should record what changed and why, not just file names
+
+## Workflow Rules
+
+- **NEVER** `git push` without being specifically asked to do it
+- always run `check.ps1` before any `git push` (script to be developed)
+- when in doubt, commit locally but do not push
+- if user asks to "commit" without specifying "push", only commit locally
