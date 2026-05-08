@@ -1167,3 +1167,125 @@ even with **100× more data** (100k vs 1k listings)!
 - Can proceed to: mobile client, Phase 3 (Redis), or more features
 - Benchmark proves the architecture scales well
 
+
+## 2026-05-08 - Phase A: Faceted Search Implemented
+
+### Changes
+- Added `min_seller_rating` and `verified_sellers_only` fields to `SearchRequest` in API contract
+- Updated `fetch_rows()` in `listings.rs` to filter by seller rating and verification status
+- Updated OpenAPI spec with new query parameters (`min_seller_rating`, `verified_sellers_only`)
+- Updated `runtime.rs` to parse new query parameters from HTTP requests
+- All workspace tests pass (37 tests)
+- `cargo check --workspace` passes
+
+### Files Modified
+- `backend/crates/api-contract/src/listing.rs`
+- `backend/server/src/repositories/listings.rs`
+- `backend/server/src/http/runtime.rs`
+- `docs/specs/openapi.yaml`
+
+### Commit
+- `7c7eb1e` feat(search): Phase A - Add facetted search filters
+
+### Next Steps
+- Phase A complete: Faceted search by seller rating and verification status
+- Ready for Phase B (Advanced Sorting) when needed
+- Search enhancements plan fully on track
+
+
+## 2026-05-08 - Phase B: Advanced Sorting Implemented
+
+### Changes
+- Added `RatingHighest` and `RatingLowest` to `SearchSort` enum in API contract
+- Updated `compare_search_items()` in `search.rs` to handle new sort options
+- Updated `parse_sort()` in `runtime.rs` to parse new sort values (`rating_highest`, `rating_lowest`)
+- Updated OpenAPI spec `SearchSort` enum with new values
+- All workspace tests pass (37 tests)
+- `cargo check --workspace` passes
+
+### Files Modified
+- `backend/crates/api-contract/src/listing.rs`
+- `backend/server/src/services/search.rs`
+- `backend/server/src/http/runtime.rs`
+- `docs/specs/openapi.yaml`
+
+### Commit
+- `727d51c` feat(search): Phase B - Add RatingHighest/RatingLowest sorting
+
+### Next Steps
+- Phase A ✅ Complete (Faceted Search)
+- Phase B ✅ Complete (Advanced Sorting)
+- Ready for Phase C (Seller Name Search) or Phase D (Geolocation)
+
+
+## 2026-05-08 - Phase C: Seller Name Search Implemented
+
+### Changes
+- Added "seller:" prefix check in `fetch_rows()` in `listings.rs`
+- If query starts with "seller:" (case-insensitive), search in `s.display_name ILIKE`
+- Otherwise, use normal `search_text LIKE` approach
+- No migration needed (uses existing LEFT JOIN with seller_accounts)
+- No changes to `listing_index_text()` needed
+- All workspace tests pass (37 tests)
+- `cargo check --workspace` passes
+
+### Files Modified
+- `backend/server/src/repositories/listings.rs`
+
+### Commit
+- `fcbb910` feat(search): Phase C - Add seller: prefix search
+
+### Usage Examples
+- Search by seller name: `GET /v1/listings/search?query=seller:John`
+- Combined: `GET /v1/listings/search?query=seller:Shop&min_seller_rating=4.0`
+
+### Next Steps
+- Phase A ✅ Complete (Faceted Search)
+- Phase B ✅ Complete (Advanced Sorting)
+- Phase C ✅ Complete (Seller Name Search)
+- Ready for Phase D (Geolocation Search) when needed
+
+
+## 2026-05-08 - Phase D: Geolocation Search Implemented
+
+### Changes
+- Added `latitude`, `longitude`, `geolocation_opt_out` to `ListingLocation` in API contract
+- Added `near_me`, `user_latitude`, `user_longitude`, `radius_km` to `SearchRequest`
+- Implemented Haversine formula inline in `fetch_rows()` (WHERE and ORDER BY)
+- **Simplified approach**: No SELECT change needed, compute distance inline
+- Updated `row_to_summary()` to extract new columns from DB
+- Updated `ListingRow` in `db.rs` with new fields
+- Updated all `ListingLocation` initializations across codebase (app.rs, runtime.rs, listlings.rs, mcp/lib.rs, phase5_bench.rs)
+- Updated `get_listing()` and `update_listing_status()` to include new columns
+- Created migration `0007_add_coordinates.sql` for DB schema
+- Updated OpenAPI spec with new query parameters
+- All workspace tests pass (37 tests)
+- `cargo check --workspace` passes
+
+### Files Modified
+- `backend/crates/api-contract/src/listing.rs`
+- `backend/server/src/models/db.rs`
+- `backend/server/src/repositories/listings.rs`
+- `backend/server/src/http/runtime.rs`
+- `backend/server/src/app.rs`
+- `backend/server/src/bin/phase5_bench.rs`
+- `backend/mcp/src/lib.rs`
+- `backend/server/migrations/0007_add_coordinates.sql`
+- `docs/specs/openapi.yaml`
+
+### Commit
+- `ae7152f` feat(search): Phase D - Add geolocation (near me) search
+
+### Usage Examples
+- Near me search: `GET /v1/listings/search?near_me=true&user_latitude=40.7128&user_longitude=-74.0060&radius_km=25`
+- Combined: `GET /v1/listings/search?near_me=true&user_latitude=40.7128&user_longitude=-74.0060&min_seller_rating=4.0&sort_by=rating_highest`
+
+### Next Steps
+- Phase A ✅ Complete (Faceted Search)
+- Phase B ✅ Complete (Advanced Sorting)
+- Phase C ✅ Complete (Seller Name Search)
+- Phase D ✅ Complete (Geolocation Search)
+- **All Phases Complete!** 🎉
+- Ready for testing/benchmarking with all new search features
+- Apply migration `0007_add_coordinates.sql` to DB when ready
+
