@@ -195,6 +195,18 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/ListingStatus'
+        - name: min_seller_rating
+          in: query
+          schema:
+            type: number
+            minimum: 1.0
+            maximum: 5.0
+          description: Filter by minimum seller rating (1.0-5.0)
+        - name: verified_sellers_only
+          in: query
+          schema:
+            type: boolean
+          description: Only show verified sellers
         - name: sort_by
           in: query
           schema:

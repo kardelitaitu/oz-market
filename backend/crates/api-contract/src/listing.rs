@@ -160,6 +160,11 @@ pub struct SearchRequest {
     pub location: Option<SearchLocationFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<ListingStatus>,
+    // Phase A: Faceted search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_seller_rating: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verified_sellers_only: Option<bool>,
     #[serde(default)]
     pub sort_by: SearchSort,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -177,6 +182,8 @@ impl Default for SearchRequest {
             price: None,
             location: None,
             status: None,
+            min_seller_rating: None,
+            verified_sellers_only: None,
             sort_by: SearchSort::Relevance,
             limit: None,
             cursor: None,

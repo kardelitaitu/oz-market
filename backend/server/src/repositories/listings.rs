@@ -438,6 +438,26 @@ impl PostgresListingRepository {
             builder.push("search_text LIKE ").push_bind(format!("%{}%", query.to_ascii_lowercase()));
         }
 
+        // Phase A: Faceted search filters
+        if let Some(min_rating) = request.min_seller_rating {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("s.seller_rating >= ").push_bind(min_rating);
+        }
+        if let Some(true) = request.verified_sellers_only {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("s.verified_at IS NOT NULL");
+        }
+
         let mut conn = self
             .pool
             .acquire()

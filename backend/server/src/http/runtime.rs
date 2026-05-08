@@ -676,6 +676,8 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
         status: query
             .get("status")
             .and_then(|value| parse_listing_status(value)),
+        min_seller_rating: query.get("min_seller_rating").and_then(|v| v.parse().ok()),
+        verified_sellers_only: query.get("verified_sellers_only").and_then(|v| v.parse().ok()),
         sort_by: query
             .get("sort_by")
             .and_then(|value| parse_sort(value))
