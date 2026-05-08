@@ -1393,3 +1393,57 @@ Completed all three tasks for OpenAPI documentation automation:
 - ✅ **Type safety**: Rust types automatically become OpenAPI schemas
 - ✅ **Interactive docs ready**: Just need to fix SwaggerUI mounting
 
+
+## 2026-05-08 - OpenAPI Documentation: Manual Spec Approach
+
+### What We Tried
+1. **Fix SwaggerUI integration** - Struggled with utoipa v4 macro issues:
+   - Error: `no function or associated item named openapi found for struct ApiDoc`
+   - Error: `use of unresolved module or unlinked crate __path_*`
+   - Tried downgrading to utoipa v3 - still had issues
+
+2. **Annotate handlers with #[utoipa::path(...)]** - Caused compilation errors:
+   - The procedural macro expansion generated invalid code
+   - Multiple "path is ambiguous" errors
+   - Removed all path attributes to get clean compilation
+
+### What We Built Instead: Manual OpenAPI Spec
+- **Commit**: `3e99300` - "feat: Implement manual OpenAPI spec generation"
+- Created `openapi.rs` with manual spec using `serde_json`
+- Documents 3 core endpoints:
+  - `GET /v1/listings/search` (with query params)
+  - `GET /v1/listings/{listing_id}`
+  - `POST /v1/listings`
+- Created `/api-docs/openapi.json` endpoint to serve the spec
+- Includes basic schemas (SearchResponse, ListingSummary, etc.)
+
+### Technical Details
+- **Approach**: Manual JSON construction (avoids utoipa macro issues)
+- **Benefits**: 
+  - No procedural macro compilation errors
+  - Full control over spec structure
+  - Easy to debug and modify
+- **Dependencies**: 
+  - `utoipa = "3"` and `utoipa-swagger-ui = "3"` in Cargo.toml (unused for now)
+  - Kept for potential future use
+
+### What's Left
+1. Add remaining endpoints to manual spec:
+   - Review endpoints (`/listings/{id}/reviews`)
+   - Admin endpoints (`/internal/v1/...`)
+   - Negotiation endpoints (`/v1/negotiations`)
+   - Contact reveal endpoints (`/v1/contact-reveals`)
+
+2. Optional: Fix SwaggerUI integration
+   - Try serving spec from `/api-docs/openapi.json`
+   - Mount SwaggerUI pointing to this endpoint
+
+3. Test the spec:
+   - Start server: `./target/release/marketplace-server`
+   - View spec: `curl http://localhost:3003/api-docs/openapi.json`
+
+### Next Steps
+- Add remaining endpoints to manual spec (reviews, admin, negotiations)
+- Or move on to other tasks (server is production-ready!)
+- Consider using tools like `openapi-generator` for client SDK generation
+
