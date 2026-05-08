@@ -332,6 +332,25 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let longitude: Option<f64> = row.try_get("longitude").ok();
     let geolocation_opt_out: Option<bool> = row.try_get("geolocation_opt_out").ok();
 
+    // NEW: Phase 4 - Extract fields from LEFT JOINed tables
+    // Service fields (from service_listings sl)
+    let sl_service_type: Option<String> = row.try_get("service_type").ok();
+    let sl_hourly_rate: Option<f64> = row.try_get("hourly_rate").ok();
+    let sl_project_rate: Option<f64> = row.try_get("project_rate").ok();
+    let sl_qualifications: Option<serde_json::Value> = row.try_get("qualifications").ok();
+    let sl_service_radius_km: Option<i32> = row.try_get("service_radius_km").ok();
+
+    // Property fields (from property_listings pl)
+    let pl_property_transaction_type: Option<String> =
+        row.try_get("property_transaction_type").ok();
+    let pl_property_sub_type: Option<String> = row.try_get("property_sub_type").ok();
+    let pl_area_sqm: Option<f64> = row.try_get("area_sqm").ok();
+    let pl_bedrooms: Option<i32> = row.try_get("bedrooms").ok();
+    let pl_bathrooms: Option<i32> = row.try_get("bathrooms").ok();
+    let pl_year_built: Option<i32> = row.try_get("year_built").ok();
+    let pl_lot_size_sqm: Option<f64> = row.try_get("lot_size_sqm").ok();
+    let pl_zoning: Option<String> = row.try_get("zoning").ok();
+
     Ok(ListingSummary {
         listing_id,
         status,
@@ -379,20 +398,49 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             shipping_info: shipping_info.and_then(|v| serde_json::from_value(v).ok()),
             condition_details,
             seller_notes,
-            // NEW: Phase 2 fields
-            service_type: None,
-            hourly_rate: None,
-            project_rate: None,
-            qualifications: None,
-            service_radius_km: None,
-            property_transaction_type: None,
-            property_sub_type: None,
-            area_sqm: None,
-            bedrooms: None,
-            bathrooms: None,
-            year_built: None,
-            lot_size_sqm: None,
-            zoning: None,
+            // NEW: Phase 4 - Service fields (populated from LEFT JOIN)
+            service_type: sl_service_type.and_then(|s| {
+                if s == "local" {
+                    Some(marketplace_api_contract::ServiceType::Local)
+                } else if s == "online" {
+                    Some(marketplace_api_contract::ServiceType::Online)
+                } else {
+                    None
+                }
+            }),
+            hourly_rate: sl_hourly_rate,
+            project_rate: sl_project_rate,
+            qualifications: sl_qualifications.and_then(|v| serde_json::from_value(v).ok()),
+            service_radius_km: sl_service_radius_km,
+            // NEW: Phase 4 - Property fields (populated from LEFT JOIN)
+            property_transaction_type: pl_property_transaction_type.and_then(|s| {
+                if s == "rent" {
+                    Some(marketplace_api_contract::PropertyTransactionType::Rent)
+                } else if s == "sale" {
+                    Some(marketplace_api_contract::PropertyTransactionType::Sale)
+                } else {
+                    None
+                }
+            }),
+            property_sub_type: pl_property_sub_type.and_then(|s| {
+                if s == "building" {
+                    Some(marketplace_api_contract::PropertySubType::Building)
+                } else if s == "house" {
+                    Some(marketplace_api_contract::PropertySubType::House)
+                } else if s == "apartment" {
+                    Some(marketplace_api_contract::PropertySubType::Apartment)
+                } else if s == "land" {
+                    Some(marketplace_api_contract::PropertySubType::Land)
+                } else {
+                    None
+                }
+            }),
+            area_sqm: pl_area_sqm,
+            bedrooms: pl_bedrooms,
+            bathrooms: pl_bathrooms,
+            year_built: pl_year_built,
+            lot_size_sqm: pl_lot_size_sqm,
+            zoning: pl_zoning,
         },
         // Seller fields (read-only)
         seller_name,
@@ -418,7 +466,14 @@ impl PostgresListingRepository {
         request: &SearchRequest,
     ) -> Result<Vec<ListingSummary>, RepositoryError> {
         let mut builder = QueryBuilder::<Postgres>::new(
-            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, l.listing_type, l.latitude, l.longitude, l.geolocation_opt_out, s.display_name, s.seller_rating, s.verified_at FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id",
+            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, l.listing_type, l.latitude, l.longitude, l.geolocation_opt_out,
+                s.display_name, s.seller_rating, s.verified_at,
+                sl.service_type, sl.hourly_rate, sl.project_rate, sl.qualifications, sl.service_radius_km,
+                pl.property_transaction_type, pl.property_sub_type, pl.area_sqm, pl.bedrooms, pl.bathrooms, pl.year_built, pl.lot_size_sqm, pl.zoning
+             FROM listings l
+             LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id
+             LEFT JOIN service_listings sl ON l.listing_id = sl.listing_id
+             LEFT JOIN property_listings pl ON l.listing_id = pl.listing_id",
         );
         let mut where_added = false;
 

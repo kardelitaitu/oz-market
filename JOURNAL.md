@@ -1955,3 +1955,15 @@ Since the tester has issues, test manually:
   - Fixed MCP crate compilation errors
   - **Result**: `cargo check` passes, formatting fixed
   - **Committed**: 8b14500
+
+05-05-09--03-21
+- Phase 4 (Marketplace Expansion) IN PROGRESS: Business Logic & Search
+  - ✅ insert_listing() - Inserts into `service_listings` or `property_listings` based on `listing_type`
+  - 🔄 get_listing() - Fetches from separate tables (data not merged yet)
+  - 🔄 fetch_rows() - Added filters for `listing_type`, `service_type`, `property_transaction_type`, etc.
+  - ❌ row_to_summary() - Needs to populate service/property fields from LEFT JOINs
+  - ❌ price_per_sqm sorting - Not implemented yet
+  - Updated `fetch_rows()` to JOIN with separate tables when filtering by `listing_type`
+  - Added new filter support: `min_bedrooms`, `min_bathrooms`, `min_area_sqm`, `max_area_sqm`
+  - Build passes ✅, Formatting fixed ✅
+  - **Committed**: Partial progress (to be continued)

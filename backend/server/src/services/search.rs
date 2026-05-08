@@ -192,8 +192,28 @@ pub fn compare_search_items(
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.listing_id.cmp(&b.listing_id))
         }
-        // NEW: Phase 2 - Price per sqm sorts (TODO: Phase 4 - implement properly)
-        SearchSort::PricePerSqmAsc => Ordering::Equal, // TODO: sort by price_per_sqm asc
-        SearchSort::PricePerSqmDesc => Ordering::Equal, // TODO: sort by price_per_sqm desc
+        // NEW: Phase 2 - Price per sqm sorts
+        SearchSort::PricePerSqmAsc => {
+            // Calculate price per sqm for both items
+            let price_per_sqm_a =
+                a.listing.price.amount / a.listing.area_sqm.unwrap_or(0.0).max(0.01); // Avoid division by zero
+            let price_per_sqm_b =
+                b.listing.price.amount / b.listing.area_sqm.unwrap_or(0.0).max(0.01);
+            price_per_sqm_a
+                .partial_cmp(&price_per_sqm_b)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.listing_id.cmp(&b.listing_id))
+        }
+        SearchSort::PricePerSqmDesc => {
+            // Calculate price per sqm for both items
+            let price_per_sqm_a =
+                a.listing.price.amount / a.listing.area_sqm.unwrap_or(0.0).max(0.01); // Avoid division by zero
+            let price_per_sqm_b =
+                b.listing.price.amount / b.listing.area_sqm.unwrap_or(0.0).max(0.01);
+            price_per_sqm_b
+                .partial_cmp(&price_per_sqm_a)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.listing_id.cmp(&b.listing_id))
+        }
     }
 }

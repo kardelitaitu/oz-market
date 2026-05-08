@@ -401,3 +401,22 @@ LIMIT 20;
 - Update search to handle new listing types
 - Add new API endpoints for service/property-specific operations
 - Implement price_per_sqm sorting for properties
+
+---
+
+## Progress Update (2026-05-09 03:21)
+
+### ✅ Phase 4: Business Logic & Search - IN PROGRESS
+- **insert_listing()**: ✅ Updated - Inserts into `service_listings` or `property_listings` based on `listing_type`
+- **get_listing()**: 🔄 Updated - Fetches from separate tables (data not merged yet)
+- **fetch_rows()**: 🔄 Added filters for `listing_type`, `service_type`, `property_transaction_type`, etc.
+- **row_to_summary()**: ❌ Needs update to populate service/property fields from LEFT JOINs
+- **price_per_sqm sorting**: ❌ Not implemented yet
+
+**Next Steps for Phase 4**:
+1. Update SELECT query in `fetch_rows()` to LEFT JOIN with separate tables
+2. Update `row_to_summary()` to extract and populate service/property fields
+3. Implement `price_per_sqm` sorting in `search.rs`
+4. Test the complete flow
+
+**Committed**: Partial progress (to be continued)
