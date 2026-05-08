@@ -78,7 +78,7 @@ if (-not $SkipBuild) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        cargo check 2>&1 | Out-Null
+        cargo check
         $elapsed = $sw.Elapsed.TotalSeconds
         $passed = $LASTEXITCODE -eq 0
         $results.Build = @{ Passed = $passed; Duration = $elapsed }
@@ -99,7 +99,7 @@ if (-not $SkipFormat -and -not $failed) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        cargo fmt --all -- --check 2>&1 | Out-Null
+        cargo fmt --all -- --check
         $elapsed = $sw.Elapsed.TotalSeconds
         $passed = $LASTEXITCODE -eq 0
         $results.Format = @{ Passed = $passed; Duration = $elapsed }
@@ -123,7 +123,7 @@ if (-not $SkipClippy -and -not $failed) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        cargo clippy 2>&1 | Out-Null
+        cargo clippy
         $elapsed = $sw.Elapsed.TotalSeconds
         $passed = $LASTEXITCODE -eq 0
         $results.Clippy = @{ Passed = $passed; Duration = $elapsed }
@@ -144,7 +144,7 @@ if (-not $SkipTests -and -not $failed) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        cargo test --lib 2>&1 | Out-Null
+        cargo test --lib
         $elapsed = $sw.Elapsed.TotalSeconds
         $passed = $LASTEXITCODE -eq 0
         $results.Tests = @{ Passed = $passed; Duration = $elapsed }
