@@ -437,6 +437,148 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+
+  # Internal Admin Endpoints
+  /internal/v1/listings/{listing_id}/archive:
+    post:
+      tags: [admin]
+      summary: Archive a listing (admin)
+      parameters:
+        - name: listing_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Listing archived
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /internal/v1/reservations/{lease_id}/release:
+    post:
+      tags: [admin]
+      summary: Release a reservation (admin)
+      parameters:
+        - name: lease_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reservation released
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /internal/v1/sellers/{seller_id}/trust-level:
+    put:
+      tags: [admin]
+      summary: Set seller trust level (admin)
+      parameters:
+        - name: seller_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSellerTrustLevelRequest'
+      responses:
+        '200':
+          description: Trust level updated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /internal/v1/sellers/{seller_id}/quota-override:
+    put:
+      tags: [admin]
+      summary: Set seller quota override (admin)
+      parameters:
+        - name: seller_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSellerQuotaOverrideRequest'
+      responses:
+        '200':
+          description: Quota override set
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /internal/v1/sellers/{seller_id}/recalculate-rating:
+    post:
+      tags: [admin]
+      summary: Recalculate seller rating (admin)
+      parameters:
+        - name: seller_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rating recalculated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /internal/v1/reviews/{review_id}/approve:
+    post:
+      tags: [admin]
+      summary: Approve a review (admin)
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Review approved
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /internal/v1/reviews/{review_id}/reject:
+    post:
+      tags: [admin]
+      summary: Reject a review (admin)
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Review rejected
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
