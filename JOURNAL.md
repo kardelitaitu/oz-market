@@ -1595,3 +1595,82 @@ Completed all three tasks for OpenAPI documentation automation:
 
 **The API is now FULLY DOCUMENTED and EXPLORABLE!** 🚀
 
+
+## 2026-05-08 - MCP Server Implementation Complete! 🎉
+
+### What We Built
+**Full MCP (Model Context Protocol) Server** using `rmcp` crate!
+
+### Technical Details
+- **Commit**: `8cbe6ff` - "feat: Implement MCP server with rmcp crate"
+- **Crate**: `rmcp = "0.2"` (Rust MCP framework)
+- **Transport**: stdio (for desktop agents like Claude Desktop)
+
+### MCP Tools Implemented (per tool-catalog.md)
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `create_listing` | Create seller listing | ✅ |
+| `search_listings` | Search indexed listings | ✅ |
+| `get_listing` | Fetch one listing | ✅ |
+| `open_negotiation` | Open buyer-side negotiation | ✅ |
+| `request_contact_reveal` | Request contact reveal | ✅ |
+| `approve_contact_reveal` | Seller-side approval | ✅ |
+| `get_negotiation_status` | Fetch negotiation state | ✅ |
+
+### Architecture
+```
+marketplace-mcp (crate)
+├── lib.rs - MCP server implementation
+│   ├── MarketplaceMcpServer (implements ServerHandler)
+│   ├── MarketplaceMcp (wraps MarketplaceApp)
+│   └── MCP tools (7 tools via #[rmcp::tool])
+└── main.rs - Binary that starts MCP server
+```
+
+### How It Works
+1. **Desktop Agent** (Claude Desktop, etc.) spawns `marketplace-mcp` binary
+2. **stdio transport** - MCP server communicates via stdin/stdout
+3. **Tools exposed** - AI can call `search_listings`, `create_listing`, etc.
+4. **Delegation** - Each tool delegates to `MarketplaceApp` methods (same as HTTP API!)
+
+### Key Features
+- ✅ **Same business logic** - MCP calls same `MarketplaceApp` as HTTP
+- ✅ **Claims handling** - Each tool builds appropriate claims (roles + scopes)
+- ✅ **Idempotency** - Supported via MCP tool calls
+- ✅ **InMemory backend** - Uses InMemory repositories for MCP
+
+### How to Test
+1. **Build MCP binary**:
+   ```bash
+   cd backend && cargo build --package marketplace-mcp
+   ```
+
+2. **Configure Claude Desktop** (example):
+   ```json
+   {
+     "mcpServers": {
+       "marketplace": {
+         "command": "path/to/marketplace-mcp.exe"
+       }
+     }
+   }
+   ```
+
+3. **AI can now use tools**:
+   - "Search for laptops under $500"
+   - "Create a new listing for my ThinkPad"
+   - "Check negotiation status for neg_123"
+
+### Files Modified
+- `backend/mcp/Cargo.toml` - Added `rmcp = "0.2"`, `chrono = "0.4"`
+- `backend/mcp/src/lib.rs` - Full MCP server implementation (rewritten)
+- `backend/mcp/src/main.rs` - Unchanged (already called `marketplace_mcp::run()`)
+
+### Next Steps
+- Test with actual Claude Desktop or MCP client
+- Add more tools (update_listing_status, submit_offer)
+- Consider HTTP transport for server-side MCP
+- Add MCP to OpenAPI spec (it's a separate protocol)
+
+**The MCP server is now COMPLETE!** 🎉
+
