@@ -479,3 +479,93 @@ pub async fn list_reviews_for_listing(
         }
     }
 }
+
+/// Approve a review (admin only)
+pub async fn approve_review(
+    pool: web::Data<sqlx::postgres::PgPool>,
+    review_id: web::Path<String>,
+    req: HttpRequest,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    
+    // Check admin role
+    if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
+        return HttpResponse::Forbidden().json(json!({
+            "error_code": "FORBIDDEN",
+            "message": "Admin access required"
+        }));
+    }
+    
+    let pool = pool.get_ref();
+    let result = sqlx::query(
+        "UPDATE reviews SET status = 'approved' WHERE review_id = $1"
+    )
+    .bind(review_id.as_str())
+    .execute(pool)
+    .await;
+    
+    match result {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                HttpResponse::NoContent().finish()
+            } else {
+                HttpResponse::NotFound().json(json!({
+                    "error_code": "NOT_FOUND",
+                    "message": "Review not found"
+                }))
+            }
+        }
+        Err(e) => {
+            error!("Approve review error: {}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+/// Reject a review (admin only)
+pub async fn reject_review(
+    pool: web::Data<sqlx::postgres::PgPool>,
+    review_id: web::Path<String>,
+    req: HttpRequest,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    
+    // Check admin role
+    if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
+        return HttpResponse::Forbidden().json(json!({
+            "error_code": "FORBIDDEN",
+            "message": "Admin access required"
+        }));
+    }
+    
+    let pool = pool.get_ref();
+    let result = sqlx::query(
+        "UPDATE reviews SET status = 'rejected' WHERE review_id = $1"
+    )
+    .bind(review_id.as_str())
+    .execute(pool)
+    .await;
+    
+    match result {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                HttpResponse::NoContent().finish()
+            } else {
+                HttpResponse::NotFound().json(json!({
+                    "error_code": "NOT_FOUND",
+                    "message": "Review not found"
+                }))
+            }
+        }
+        Err(e) => {
+            error!("Reject review error: {}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}

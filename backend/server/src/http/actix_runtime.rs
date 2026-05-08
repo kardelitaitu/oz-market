@@ -78,6 +78,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .route("/sellers/{seller_id}/trust-level", web::put().to(crate::http::actix_handlers::set_seller_trust_level))
                     .route("/sellers/{seller_id}/quota-override", web::put().to(crate::http::actix_handlers::set_seller_quota_override))
                     .route("/sellers/{seller_id}/recalculate-rating", web::post().to(crate::http::actix_handlers::recalculate_seller_rating))
+                    .route("/reviews/{review_id}/approve", web::post().to(crate::http::actix_handlers::approve_review))
+                    .route("/reviews/{review_id}/reject", web::post().to(crate::http::actix_handlers::reject_review))
             )
             // Metrics endpoint (simple version)
             .route("/metrics", web::get().to(metrics_handler))
