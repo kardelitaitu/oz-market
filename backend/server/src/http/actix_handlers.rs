@@ -21,7 +21,7 @@ use tracing::{info, error};
 use metrics::{counter, histogram};
 
 // OpenAPI annotations
-use utoipa::path;
+// use utoipa::path;  // Removed - causes ambiguity with actix_web::web::Path
 
 // Type alias for the concrete app type used in Actix handlers
 type ActixApp = Arc<MarketplaceApp<

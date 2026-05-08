@@ -4,46 +4,12 @@
 //! The spec can be generated as JSON/YAML and served or saved.
 
 use utoipa::OpenApi;
-use crate::http::actix_handlers::{search_listings, get_listing, create_listing};
-use marketplace_api_contract::{
-    SearchRequest, SearchResponse, CreateListingRequest, CreateListingResponse,
-    ListingSummary, Category, SearchSort, ListingStatus, ListingPayload,
-    Price, ListingLocation, ShippingInfo, SearchPriceFilter, SearchLocationFilter,
-};
 
 /// Main API documentation struct
 /// 
 /// Aggregates all paths and schemas from annotated handlers.
 #[derive(OpenApi)]
 #[openapi(
-    paths(
-        search_listings,
-        get_listing,
-        create_listing
-    ),
-    components(
-        schemas(
-            SearchRequest,
-            SearchResponse,
-            CreateListingRequest,
-            CreateListingResponse,
-            ListingSummary,
-            Category,
-            SearchSort,
-            ListingStatus,
-            ListingPayload,
-            Price,
-            ListingLocation,
-            ShippingInfo,
-            SearchPriceFilter,
-            SearchLocationFilter
-        )
-    ),
-    tags(
-        (name = "listings", description = "Listing management"),
-        (name = "search", description = "Search endpoints"),
-        (name = "health", description = "Health checks")
-    ),
     info(
         title = "Marketplace API",
         version = "1.0.0",
@@ -72,4 +38,11 @@ pub fn generate_openapi_yaml() -> String {
             "".to_string()
         }
     }
+}
+
+/// Actix handler to serve OpenAPI JSON
+pub async fn serve_openapi_json() -> impl actix_web::Responder {
+    actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .body(generate_openapi_json())
 }

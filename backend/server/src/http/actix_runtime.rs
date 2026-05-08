@@ -64,6 +64,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
             .app_data(pool_data.clone())
+            // Serve OpenAPI JSON
+            .route("/api-docs/openapi.json", web::get().to(crate::openapi::serve_openapi_json))
             // Public API v1 routes
             .service(
                 web::scope("/v1")
