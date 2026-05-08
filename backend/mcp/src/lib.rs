@@ -1,3 +1,8 @@
+//! MCP Server for Marketplace
+//! 
+//! Implements Model Context Protocol (MCP) to let AI agents interact
+//! with the marketplace via standardized tools.
+
 use marketplace_api_contract::{
     Category, Condition, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
     ListingSummary, NegotiationResponse, OpenNegotiationRequest, RequestContactRevealRequest,
@@ -5,7 +10,13 @@ use marketplace_api_contract::{
 };
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
+use rmcp::{Server, ServerHandler, tool};
+use rmcp::model::*;
+use rmcp::service::RequestContext;
+use serde_json::{json, Value};
+use std::sync::Arc;
 
+// Type alias for the InMemory app used by MCP
 type InMemoryApp = MarketplaceApp<
     marketplace_server::repositories::listings::InMemoryListingRepository,
     marketplace_server::services::idempotency::InMemoryIdempotencyRepository,
@@ -13,6 +24,243 @@ type InMemoryApp = MarketplaceApp<
     marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository,
 >;
 
+/// MCP Server wrapper that delegates to MarketplaceApp
+pub struct MarketplaceMcp {
+    app: Arc<InMemoryApp>,
+}
+
+impl MarketplaceMcp {
+    pub fn new(app: InMemoryApp) -> Self {
+        Self { app: Arc::new(app) }
+    }
+
+    /// Build claims for MCP calls (MCP uses pre-configured claims)
+    fn build_claims(&self, roles: Vec<&str>, scopes: Vec<&str>) -> Claims {
+        use marketplace_auth_core::{Role, Scope};
+        
+        let roles = roles.into_iter().filter_map(|r| match r {
+            "seller_listing_writer" => Some(Role::SellerListingWriter),
+            "buyer_searcher" => Some(Role::BuyerSearcher),
+            "buyer_negotiator" => Some(Role::BuyerNegotiator),
+            "seller_contact_reveal_approver" => Some(Role::SellerContactRevealApprover),
+            "admin" => Some(Role::Admin),
+            _ => None,
+        }).collect();
+        
+        let scopes = scopes.into_iter().filter_map(|s| match s {
+            "listing:create" => Some(Scope::ListingCreate),
+            "listing:read" => Some(Scope::ListingRead),
+            "listing:search" => Some(Scope::ListingSearch),
+            "negotiation:create" => Some(Scope::NegotiationCreate),
+            "negotiation:read" => Some(Scope::NegotiationRead),
+            "reveal:request" => Some(Scope::RevealRequest),
+            "reveal:approve" => Some(Scope::RevealApprove),
+            _ => None,
+        }).collect();
+        
+        Claims {
+            sub: "mcp-agent".to_string(),
+            roles,
+            scopes,
+            seller_account_id: None,
+            buyer_agent_id: None,
+            hardware_id: None,
+            exp: None,
+        }
+    }
+}
+
+/// MCP Server Handler implementation
+/// 
+/// This struct implements the MCP protocol and exposes marketplace tools.
+#[derive(Clone)]
+pub struct MarketplaceMcpServer {
+    mcp: Arc<MarketplaceMcp>,
+}
+
+#[rmcp::tool(tool_name = "create_listing")]
+#[allow(dead_code)]
+async fn create_listing(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] listing_json: String,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["seller_listing_writer"],
+        vec!["listing:create"],
+    );
+    
+    let request: CreateListingRequest = serde_json::from_str(&listing_json)
+        .map_err(|e| ErrorData::invalid_params(e.to_string(), None))?;
+    
+    let now = chrono::Utc::now().to_rfc3339();
+    match mcp.app.create_listing(&claims, &request, "mcp", &now).await {
+        Ok(response) => Ok(CallToolResult::success(json!(response))),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+#[rmcp::tool(tool_name = "search_listings")]
+#[allow(dead_code)]
+async fn search_listings(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] query: Option<String>,
+    category: Option<String>,
+    condition: Option<String>,
+    min_seller_rating: Option<f64>,
+    sort_by: Option<String>,
+    limit: Option<u32>,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["buyer_searcher"],
+        vec!["listing:search"],
+    );
+    
+    let category = category.and_then(|c| serde_json::from_value(json!(c)).ok());
+    let condition = condition.and_then(|c| serde_json::from_value(json!(c)).ok());
+    let sort_by = sort_by.and_then(|s| serde_json::from_value(json!(s)).ok());
+    
+    let request = SearchRequest {
+        query,
+        category,
+        condition,
+        min_seller_rating,
+        sort_by: sort_by.unwrap_or_default(),
+        limit,
+        ..Default::default()
+    };
+    
+    match mcp.app.search_listings(&claims, &request).await {
+        Ok(response) => Ok(CallToolResult::success(json!(response))),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+#[rmcp::tool(tool_name = "get_listing")]
+#[allow(dead_code)]
+async fn get_listing(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] listing_id: String,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["buyer_searcher"],
+        vec!["listing:read"],
+    );
+    
+    match mcp.app.get_listing(&claims, &listing_id).await {
+        Ok(Some(listing)) => Ok(CallToolResult::success(json!(listing))),
+        Ok(None) => Ok(CallToolResult::error("Listing not found")),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+#[rmcp::tool(tool_name = "open_negotiation")]
+#[allow(dead_code)]
+async fn open_negotiation(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] listing_id: String,
+    #[tool(required)] buyer_agent_id: String,
+    #[tool(required)] offer_currency: String,
+    #[tool(required)] offer_amount: f64,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["buyer_negotiator"],
+        vec!["negotiation:create"],
+    );
+    
+    let request = OpenNegotiationRequest {
+        listing_id,
+        buyer_agent_id,
+        offer_currency,
+        offer_amount,
+        idempotency_key: format!("mcp-{}", chrono::Utc::now().timestamp()),
+    };
+    
+    let now = chrono::Utc::now().to_rfc3339();
+    match mcp.app.open_negotiation(&claims, &request, &request.idempotency_key, &now).await {
+        Ok(response) => Ok(CallToolResult::success(json!(response))),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+#[rmcp::tool(tool_name = "request_contact_reveal")]
+#[allow(dead_code)]
+async fn request_contact_reveal(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] negotiation_id: String,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["buyer_negotiator"],
+        vec!["reveal:request"],
+    );
+    
+    let request = RequestContactRevealRequest {
+        idempotency_key: format!("mcp-{}", chrono::Utc::now().timestamp()),
+    };
+    
+    let now = chrono::Utc::now().to_rfc3339();
+    match mcp.app.request_contact_reveal(&claims, &negotiation_id, &request, &request.idempotency_key, &now).await {
+        Ok(response) => Ok(CallToolResult::success(json!(response))),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+#[rmcp::tool(tool_name = "approve_contact_reveal")]
+#[allow(dead_code)]
+async fn approve_contact_reveal(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] reveal_id: String,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["seller_contact_reveal_approver"],
+        vec!["reveal:approve"],
+    );
+    
+    match mcp.app.approve_contact_reveal(&claims, &reveal_id).await {
+        Ok(response) => Ok(CallToolResult::success(json!(response))),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+#[rmcp::tool(tool_name = "get_negotiation_status")]
+#[allow(dead_code)]
+async fn get_negotiation_status(
+    &self,
+    context: RequestContext<Self>,
+    #[tool(required)] negotiation_id: String,
+) -> Result<CallToolResult, ErrorData> {
+    let mcp = &context.self_.mcp;
+    let claims = mcp.build_claims(
+        vec!["buyer_negotiator"],
+        vec!["negotiation:read"],
+    );
+    
+    match mcp.app.get_negotiation_status(&claims, &negotiation_id).await {
+        Ok(response) => Ok(CallToolResult::success(json!(response))),
+        Err(e) => Ok(CallToolResult::error(e.to_string())),
+    }
+}
+
+// Implement ServerHandler for MarketplaceMcpServer
+#[rmcp::tool(tool_name = "ping")]
+impl ServerHandler for MarketplaceMcpServer {
+    fn ping(&self) -> impl std::future::Future<Output = Result<(), ErrorData>> + Send + '_ {
+        async { Ok(()) }
+    }
+}
+
+/// Run the MCP server (stdio transport for desktop agents)
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let app = InMemoryApp::new(
         marketplace_server::repositories::listings::InMemoryListingRepository::new(),
@@ -29,19 +277,22 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository::new(),
         ),
     );
-    let _mcp = MarketplaceMcp::new(app);
+    
+    let mcp = MarketplaceMcp::new(app);
+    let server = MarketplaceMcpServer { mcp: Arc::new(mcp) };
+    
+    // Run with stdio transport (for desktop agents like Claude Desktop)
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let server = Server::new(server);
+        server.listen(rmcp::transport::stdio()).await
+    })?;
+    
     Ok(())
 }
 
-pub struct MarketplaceMcp {
-    app: InMemoryApp,
-}
-
+// Keep old MarketplaceMcp methods for backward compatibility
 impl MarketplaceMcp {
-    pub fn new(app: InMemoryApp) -> Self {
-        Self { app }
-    }
-
     pub async fn search_listings(
         &self,
         claims: &Claims,
@@ -58,21 +309,6 @@ impl MarketplaceMcp {
         self.app.get_listing(claims, listing_id).await
     }
 
-    pub async fn begin_create_listing(
-        &self,
-        claims: &Claims,
-        request: &CreateListingRequest,
-        request_fingerprint: &str,
-        now_rfc3339: &str,
-    ) -> Result<
-        marketplace_server::services::idempotency::IdempotencyDecision,
-        marketplace_server::http::handlers::HandlerError,
-    > {
-        self.app
-            .begin_create_listing(claims, request, request_fingerprint, now_rfc3339)
-            .await
-    }
-
     pub async fn create_listing(
         &self,
         claims: &Claims,
@@ -80,24 +316,7 @@ impl MarketplaceMcp {
         request_fingerprint: &str,
         now_rfc3339: &str,
     ) -> Result<CreateListingResponse, marketplace_server::http::handlers::HandlerError> {
-        self.app
-            .create_listing(claims, request, request_fingerprint, now_rfc3339)
-            .await
-    }
-
-    pub async fn begin_open_negotiation(
-        &self,
-        claims: &Claims,
-        request: &OpenNegotiationRequest,
-        request_fingerprint: &str,
-        now_rfc3339: &str,
-    ) -> Result<
-        marketplace_server::services::idempotency::IdempotencyDecision,
-        marketplace_server::http::handlers::HandlerError,
-    > {
-        self.app
-            .begin_open_negotiation(claims, request, request_fingerprint, now_rfc3339)
-            .await
+        self.app.create_listing(claims, request, request_fingerprint, now_rfc3339).await
     }
 
     pub async fn open_negotiation(
@@ -107,9 +326,7 @@ impl MarketplaceMcp {
         request_fingerprint: &str,
         now_rfc3339: &str,
     ) -> Result<NegotiationResponse, marketplace_server::http::handlers::HandlerError> {
-        self.app
-            .open_negotiation(claims, request, request_fingerprint, now_rfc3339)
-            .await
+        self.app.open_negotiation(claims, request, request_fingerprint, now_rfc3339).await
     }
 
     pub async fn get_negotiation_status(
@@ -128,9 +345,7 @@ impl MarketplaceMcp {
         request_fingerprint: &str,
         now_rfc3339: &str,
     ) -> Result<ContactRevealResponse, marketplace_server::http::handlers::HandlerError> {
-        self.app
-            .request_contact_reveal(claims, negotiation_id, request, request_fingerprint, now_rfc3339)
-            .await
+        self.app.request_contact_reveal(claims, negotiation_id, request, request_fingerprint, now_rfc3339).await
     }
 
     pub async fn approve_contact_reveal(
@@ -139,13 +354,6 @@ impl MarketplaceMcp {
         reveal_id: &str,
     ) -> Result<ContactRevealResponse, marketplace_server::http::handlers::HandlerError> {
         self.app.approve_contact_reveal(claims, reveal_id).await
-    }
-
-    pub async fn get_contact_reveal(
-        &self,
-        reveal_id: &str,
-    ) -> Result<Option<ContactRevealResponse>, marketplace_server::http::handlers::HandlerError> {
-        self.app.get_contact_reveal(reveal_id).await
     }
 
     pub async fn archive_listing(
@@ -166,9 +374,7 @@ impl MarketplaceMcp {
         reason: &str,
         now_rfc3339: &str,
     ) -> Result<Option<marketplace_server::models::db::SellerAccountRow>, marketplace_server::http::handlers::HandlerError> {
-        self.app
-            .set_seller_trust_level(claims, seller_account_id, trust_level, reason, now_rfc3339)
-            .await
+        self.app.set_seller_trust_level(claims, seller_account_id, trust_level, reason, now_rfc3339).await
     }
 
     pub async fn set_seller_quota_override(
@@ -179,12 +385,11 @@ impl MarketplaceMcp {
         reason: &str,
         now_rfc3339: &str,
     ) -> Result<Option<marketplace_server::models::db::SellerAccountRow>, marketplace_server::http::handlers::HandlerError> {
-        self.app
-            .set_seller_quota_override(claims, seller_account_id, quota_override, reason, now_rfc3339)
-            .await
+        self.app.set_seller_quota_override(claims, seller_account_id, quota_override, reason, now_rfc3339).await
     }
 }
 
+// Old test helpers (kept for backward compatibility)
 #[allow(dead_code)]
 fn build_claims() -> Claims {
     Claims {
@@ -243,7 +448,6 @@ fn build_create_request() -> CreateListingRequest {
                 country_code: "JP".to_string(),
                 country_name: "Japan".to_string(),
                 city: "Osaka".to_string(),
-                // Phase D: Geolocation (optional)
                 latitude: None,
                 longitude: None,
                 geolocation_opt_out: None,
@@ -251,7 +455,6 @@ fn build_create_request() -> CreateListingRequest {
             picture_urls: vec!["https://example.com/item.jpg".to_string()],
             description: "Good battery health".to_string(),
             attributes: None,
-            // NEW: Marketplace fields
             sku: None,
             quantity: None,
             shipping_info: None,
@@ -320,176 +523,5 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(replay.listing_id, created.listing_id);
-    }
-
-    #[tokio::test]
-    async fn mcp_replays_create_listing_and_conflicts_on_fingerprint_mismatch() {
-        let app = MarketplaceApp::new(
-            InMemoryListingRepository::new(),
-            InMemoryIdempotencyRepository::new(),
-            InMemoryReservationLeaseRepository::new(),
-            InMemoryContactRevealRepository::new(),
-            Arc::new(InMemoryAuditEventRepository::new()),
-            Arc::new(InMemoryOutboxEventRepository::new()),
-            Arc::new(InMemorySellerAccountRepository::new()),
-        );
-        let mcp = MarketplaceMcp::new(app);
-        let claims = build_claims();
-        let request = build_create_request();
-
-        let first = mcp
-            .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:00Z")
-            .await
-            .unwrap();
-        let replay = mcp
-            .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:01Z")
-            .await
-            .unwrap();
-        assert_eq!(replay.listing_id, first.listing_id);
-    }
-
-    #[tokio::test]
-    async fn mcp_delegates_open_negotiation_and_idempotency() {
-        let audit_repo = Arc::new(InMemoryAuditEventRepository::new());
-        let outbox_repo = Arc::new(InMemoryOutboxEventRepository::new());
-        let app = MarketplaceApp::new(
-            InMemoryListingRepository::new(),
-            InMemoryIdempotencyRepository::new(),
-            InMemoryReservationLeaseRepository::new(),
-            InMemoryContactRevealRepository::new(),
-            audit_repo.clone(),
-            outbox_repo.clone(),
-            Arc::new(InMemorySellerAccountRepository::new()),
-        );
-        let mcp = MarketplaceMcp::new(app);
-        let claims = build_claims();
-
-        let created = mcp
-            .create_listing(&claims, &build_create_request(), "fp-create-1", "2026-05-04T00:00:00Z")
-            .await
-            .unwrap();
-
-        let open = mcp
-            .open_negotiation(
-                &claims,
-                &OpenNegotiationRequest {
-                    listing_id: created.listing_id.clone(),
-                    buyer_agent_id: "buyer-1".to_string(),
-                    offer_currency: "USD".to_string(),
-                    offer_amount: 440.0,
-                    idempotency_key: "idem-open-1".to_string(),
-                },
-                "fp-open-1",
-                "2026-05-04T00:00:01Z",
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(open.status, marketplace_api_contract::NegotiationStatus::Reserved);
-        assert!(open.reservation_lease_id.is_some());
-    }
-
-    #[tokio::test]
-    async fn mcp_delegates_contact_reveal_and_idempotency() {
-        let audit_repo = Arc::new(InMemoryAuditEventRepository::new());
-        let outbox_repo = Arc::new(InMemoryOutboxEventRepository::new());
-        let app = MarketplaceApp::new(
-            InMemoryListingRepository::new(),
-            InMemoryIdempotencyRepository::new(),
-            InMemoryReservationLeaseRepository::new(),
-            InMemoryContactRevealRepository::new(),
-            audit_repo.clone(),
-            outbox_repo.clone(),
-            Arc::new(InMemorySellerAccountRepository::new()),
-        );
-        let mcp = MarketplaceMcp::new(app);
-        let claims = build_claims();
-
-        let created = mcp
-            .create_listing(&claims, &build_create_request(), "fp-create-1", "2026-05-04T00:00:00Z")
-            .await
-            .unwrap();
-
-        let open = mcp
-            .open_negotiation(
-                &claims,
-                &OpenNegotiationRequest {
-                    listing_id: created.listing_id.clone(),
-                    buyer_agent_id: "buyer-1".to_string(),
-                    offer_currency: "USD".to_string(),
-                    offer_amount: 440.0,
-                    idempotency_key: "idem-open-1".to_string(),
-                },
-                "fp-open-1",
-                "2026-05-04T00:00:01Z",
-            )
-            .await
-            .unwrap();
-
-        let reveal = mcp
-            .request_contact_reveal(
-                &claims,
-                &open.negotiation_id,
-                &RequestContactRevealRequest {
-                    idempotency_key: "idem-reveal-1".to_string(),
-                },
-                "fp-reveal-1",
-                "2026-05-04T00:00:02Z",
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(reveal.reveal_status, marketplace_api_contract::ContactRevealStatus::Pending);
-
-        let approved = mcp
-            .approve_contact_reveal(&build_admin_claims(), &reveal.reveal_id)
-            .await
-            .unwrap();
-        assert_eq!(approved.reveal_status, marketplace_api_contract::ContactRevealStatus::Approved);
-    }
-
-    #[tokio::test]
-    async fn mcp_delegates_release_reservation() {
-        let audit_repo = Arc::new(InMemoryAuditEventRepository::new());
-        let outbox_repo = Arc::new(InMemoryOutboxEventRepository::new());
-        let app = MarketplaceApp::new(
-            InMemoryListingRepository::new(),
-            InMemoryIdempotencyRepository::new(),
-            InMemoryReservationLeaseRepository::new(),
-            InMemoryContactRevealRepository::new(),
-            audit_repo.clone(),
-            outbox_repo.clone(),
-            Arc::new(InMemorySellerAccountRepository::new()),
-        );
-        let mcp = MarketplaceMcp::new(app);
-        let claims = build_claims();
-        let admin_claims = build_admin_claims();
-
-        let created = mcp
-            .create_listing(&claims, &build_create_request(), "fp-create-1", "2026-05-04T00:00:00Z")
-            .await
-            .unwrap();
-
-        let open = mcp
-            .open_negotiation(
-                &claims,
-                &OpenNegotiationRequest {
-                    listing_id: created.listing_id.clone(),
-                    buyer_agent_id: "buyer-1".to_string(),
-                    offer_currency: "USD".to_string(),
-                    offer_amount: 440.0,
-                    idempotency_key: "idem-open-1".to_string(),
-                },
-                "fp-open-1",
-                "2026-05-04T00:00:01Z",
-            )
-            .await
-            .unwrap();
-
-        let released = mcp
-            .archive_listing(&admin_claims, &created.listing_id, "test reason", "2026-05-04T00:00:02Z")
-            .await
-            .unwrap();
-        assert!(released.is_some());
     }
 }

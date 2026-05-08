@@ -9,5 +9,9 @@ marketplace-api-contract = { path = "../crates/api-contract" }
 marketplace-auth-core = { path = "../crates/auth-core" }
 marketplace-server = { path = "../server" }
 
+# MCP framework
+rmcp = "0.2"
+chrono = "0.4"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
