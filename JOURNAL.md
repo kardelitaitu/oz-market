@@ -999,3 +999,40 @@ Add marketplace fields to API contract, database, and server implementation.
 ### Known Issues
 - `GET /v1/listings/{id}/reviews` causes server to return empty reply (panic)
 - Need to investigate Actix handler further
+
+## 2026-05-08 Session 4 (Review System - Testing Complete ✅)
+
+### Debugging & Fix
+- **Root cause**: `list_reviews_for_listing` handler was panicking due to complex `row.get::<T, _>()` syntax
+- **Fix**: Rewrote handler to use simple `row.get("column")` pattern with explicit type annotations
+- Also cast `created_at` to text in SQL to avoid chrono type issues
+- **Result**: List endpoint now works! ✅
+
+### Complete Review Flow Verified ✅
+1. **Create review**: `POST /v1/listings/lst_000001/reviews` → Returns `{"review_id": "...", "status": "pending"}`
+2. **List reviews**: `GET /v1/listings/lst_000001/reviews` → Returns array of reviews ✅
+3. **Approve review**: `UPDATE reviews SET status='approved'` 
+4. **Auto-update**: `seller_rating` automatically updated to `5.00` via database trigger ✅
+
+### Test Results
+- Seller account created for `bench-seller`
+- Review created with rating=5, title="Great product!"
+- After approval: `seller_rating` = 5.00 (verified in DB)
+- Trigger function `update_seller_rating()` works correctly
+
+### Commits
+- `f1f0ed8` - fix(api): Fix list_reviews_for_listing endpoint
+
+### Test Scripts Created
+- `check_seller.rs` - Check seller accounts exist
+- `create_seller_accounts.rs` - Populate missing seller accounts  
+- `test_reviews.rs` - Test SQL queries directly
+- `approve_review.rs` - Test approval flow and trigger
+
+### Next Steps
+1. Clean up test scripts (optional - they're useful for debugging)
+2. Run benchmark to verify performance still meets 5,000 ops/s target
+3. Update OpenAPI spec with review endpoints
+4. Add review management endpoints (approve/reject via API)
+5. Consider adding review helpfulness, seller responses, etc.
+
