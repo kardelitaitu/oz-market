@@ -290,36 +290,7 @@ pub struct SearchRequest {
 
 **File**: `backend/server/src/repositories/listings.rs` (in `fetch_rows()`)
 
-Add SQL with **Haversine formula** (free, accurate distance calculation):
-
-**⚠️ CRITICAL FIX**: The initial SELECT in `fetch_rows()` must include `distance_km` computed column when `near_me` is true!
-
-**⚠️ IMPORTANT**: Use `push_bind` for user coordinates, NOT string concatenation (SQL injection + type safety).
-
-Revised approach: Build SELECT dynamically with QueryBuilder:
-```rust
-let mut builder = QueryBuilder::<Postgres>::new(
-    "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, s.display_name, s.seller_rating, s.verified_at"
-);
-
-// If near_me and coordinates provided, add distance_km column
-if request.near_me.unwrap_or(false) {
-    if let (Some(user_lat), Some(user_lon)) = (request.user_latitude, request.user_longitude) {
-        builder.push(", 6371 * acos(");
-        builder.push("cos(radians(").push_bind(user_lat).push(")) * ");
-        builder.push("cos(radians(l.latitude)) * ");
-        builder.push("cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
-        builder.push("sin(radians(").push_bind(user_lat).push(")) * ");
-        builder.push("sin(radians(l.latitude))") ;
-        builder.push(") AS distance_km");
-    }
-}
-
-// Now add FROM and other clauses...
-builder.push(" FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id");
-```
-
-Then add the WHERE clause:
+**✅ SIMPLE APPROACH**: Compute distance inline in WHERE and ORDER BY — no need to add computed column to SELECT!
 
 ```rust
 if let Some(true) = request.near_me {
@@ -335,7 +306,7 @@ if let Some(true) = request.near_me {
         builder.push("l.latitude IS NOT NULL AND l.longitude IS NOT NULL ");
         builder.push("AND (l.geolocation_opt_out IS NULL OR l.geolocation_opt_out = false) ");
         
-        // Calculate distance using Haversine formula
+        // Calculate distance using Haversine formula (inline in WHERE)
         let radius_km = request.radius_km.unwrap_or(50.0);  // Default: 50km
         
         builder.push("AND (");
@@ -348,14 +319,27 @@ if let Some(true) = request.near_me {
         builder.push("  ) <= ").push_bind(radius_km);
         builder.push(")");
         
-        // Order by distance (nearest first)
-        builder.push(" ORDER BY distance_km ASC, l.listing_id");
+        // Order by distance (nearest first) - compute inline
+        builder.push(" ORDER BY ");
+        builder.push("  6371 * acos(");
+        builder.push("    cos(radians(").push_bind(user_lat).push(")) * ");
+        builder.push("    cos(radians(l.latitude)) * ");
+        builder.push("    cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
+        builder.push("    sin(radians(").push_bind(user_lat).push(")) * ");
+        builder.push("    sin(radians(l.latitude))");
+        builder.push("  ) ASC, l.listing_id");
     } else {
         // User location not provided - fall back to city/country match
         // (already implemented via existing location filter)
     }
 }
 ```
+
+**Why this approach?**
+- ✅ No need to refactor SELECT building (less code change)
+- ✅ Slightly slower (computes distance 2 times) but negligible for <1000 results
+- ✅ Easier to implement
+- ✅ Still uses parameterized queries (`push_bind`) for safety
 
 ---
 
@@ -508,8 +492,8 @@ let listing = ListingPayload {
 ### Phase D: Geolocation Search (Medium Effort, Medium Impact)
 1. ✅ Add `near_me`, `user_latitude`, `user_longitude`, `radius_km` to `SearchRequest`
 2. ✅ Add `latitude`, `longitude`, `geolocation_opt_out` to `ListingLocation`
-3. ✅ Implement Haversine distance calculation in `fetch_rows()` (no PostGIS!)
-4. ✅ Add computed `distance_km` column to SELECT when `near_me` is true
+3. ✅ Implement Haversine distance inline in WHERE and ORDER BY (no SELECT change!)
+4. ✅ No need to refactor SELECT building (simpler approach)
 5. ✅ Test with populated database (100k listings)
 
 ---
@@ -583,24 +567,23 @@ let listing = ListingPayload {
 
 ### 2. Repository (`backend/server/src/repositories/listings.rs`)
 - [ ] Update `fetch_rows()` to handle new `SearchRequest` fields
-- [ ] Add `ORDER BY s.seller_rating` for `RatingHighest/RatingLowest`
 - [ ] Add `WHERE s.seller_rating >= $1` for `min_seller_rating`
 - [ ] Add `WHERE s.verified_at IS NOT NULL` for `verified_sellers_only`
-- [ ] Add Haversine formula for `near_me` (with lat/long)
+- [ ] Add Haversine formula **inline** in WHERE and ORDER BY (no SELECT change!)
 - [ ] Ensure `where_added` logic handles all new fields
 - [ ] Test SQL generation (unit tests)
 
 ### 3. Search Service (`backend/server/src/services/search.rs`)
-- [ ] Update `listing_index_text()` to include `seller_name` (if available)
-- [ ] Ensure `normalize_search_terms()` handles "seller:" prefix (optional)
+- [ ] Update `compare_search_items()` to handle `RatingHighest/RatingLowest`
+- [ ] Add "seller:" prefix check in `fetch_rows()` (no `listing_index_text` change needed!)
 
 ### 4. Migration (`backend/server/migrations/0007_*.sql`)
 - [ ] `ALTER TABLE listings ADD COLUMN latitude DECIMAL(10,8)`
 - [ ] `ALTER TABLE listings ADD COLUMN longitude DECIMAL(11,8)`
 - [ ] `ALTER TABLE listings ADD COLUMN geolocation_opt_out BOOLEAN DEFAULT FALSE`
-- [ ] Update `search_text` to include `s.display_name`
-- [ ] Rebuild trigram index: `DROP INDEX IF EXISTS idx_listings_search_text; CREATE INDEX...`
+- [ ] Create index: `CREATE INDEX idx_listings_coordinates ON listings (latitude, longitude) WHERE latitude IS NOT NULL`
 - [ ] **Test on copy** of production database first!
+- [ ] **No need to rebuild `search_text`** (seller search uses "seller:" prefix instead)
 
 ### 5. OpenAPI Spec (`docs/specs/openapi.yaml`)
 - [ ] Add new parameters to `/listings/search`
