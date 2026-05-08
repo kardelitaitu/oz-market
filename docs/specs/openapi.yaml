@@ -26,6 +26,8 @@ tags:
     description: Negotiation and offer state flows.
   - name: contact-reveals
     description: Controlled contact reveal flows.
+  - name: reviews
+    description: Listing review and rating flows.
 paths:
   /listings:
     post:
@@ -79,6 +81,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /listings/{listing_id}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/ListingId'
+    post:
+      tags: [reviews]
+      summary: Create review for listing
+      description: >
+        Create a review for a listing. The caller must be a buyer
+        (buyer_searcher or buyer_negotiator) and the review will be
+        pending until approved by admin.
+      operationId: createReview
+      x-required-scopes: [listing:read]
+      x-allowed-roles: [buyer_searcher, buyer_negotiator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '201':
+          description: Review created (pending approval)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags: [reviews]
+      summary: List reviews for listing
+      description: >
+        List all reviews for a listing, ordered by creation date (newest first).
+      operationId: listReviews
+      x-required-scopes: [listing:read]
+      x-allowed-roles: [seller_listing_writer, seller_negotiator, seller_contact_reveal_approver, buyer_searcher, buyer_negotiator, admin, support_reviewer]
+      responses:
+        '200':
+          description: List of reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -441,6 +498,82 @@ components:
       type: string
       enum: [pending, approved, rejected, expired]
       example: pending
+    ReviewStatus:
+      type: string
+      enum: [pending, approved, rejected]
+      example: pending
+    Review:
+      type: object
+      additionalProperties: false
+      required: [review_id, listing_id, seller_account_id, reviewer_id, rating, title, status, created_at]
+      properties:
+        review_id:
+          type: string
+          description: Unique review identifier
+          example: rev_12345
+        listing_id:
+          $ref: '#/components/schemas/ResourceId'
+        seller_account_id:
+          type: string
+          description: Seller's account ID
+          example: seller_123
+        reviewer_id:
+          type: string
+          description: Reviewer's subject ID
+          example: buyer_456
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Rating from 1 to 5
+          example: 5
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+          example: "Great product!"
+        body:
+          type: string
+          description: Optional review body text
+          example: "Very satisfied with the purchase."
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
+        created_at:
+          type: string
+          format: date-time
+          description: When the review was created
+          example: "2026-05-08T01:32:28Z"
+    CreateReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [rating, title]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Rating from 1 to 5
+          example: 5
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+          example: "Great product!"
+        body:
+          type: string
+          description: Optional review body text
+          example: "Very satisfied with the purchase."
+    ReviewCreateResponse:
+      type: object
+      additionalProperties: false
+      required: [review_id, status]
+      properties:
+        review_id:
+          type: string
+          description: Unique review identifier
+          example: rev_12345
+        status:
+          $ref: '#/components/schemas/ReviewStatus'
     SearchSort:
       type: string
       description: >
