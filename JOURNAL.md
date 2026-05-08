@@ -885,3 +885,28 @@ Add marketplace fields to API contract, database, and server implementation.
 2. **Register route**: Add `recalculate_seller_rating` to `actix_runtime.rs`
 3. **Add review endpoints**: POST /listings/{id}/reviews, GET /listings/{id}/reviews, etc.
 4. **Test**: Insert a review and verify `seller_rating` updates automatically
+
+## 2026-05-08 (continued)
+
+### Changes
+- Fixed `recalculate_seller_rating` admin endpoint: proper Role::Admin check using `matches!(r, Role::Admin)`
+- Registered route in `actix_runtime.rs`: `POST /internal/v1/sellers/{seller_id}/recalculate-rating`
+- Attempted to add review HTTP endpoints (create/list) but reverted due to compilation errors
+- Cleaned up: removed `uuid` crate addition, removed `sqlx::Row` import, removed broken endpoint functions
+- Admin endpoint now compiles and is included in server binary
+
+### Commits
+- `131ed8a` - feat(api): Add admin endpoint for recalculate-seller-rating
+- `876a3b5` - fix(api): Remove broken review endpoints, keep admin recalculate-seller-rating
+
+### Current State
+- Admin endpoint ready for testing (after applying triggers manually via psql)
+- Review HTTP endpoints deferred to next session
+- Phase 1 benchmark: **5,058 ops/s** (target met)
+- All 37 tests pass ✅
+
+### Next Steps
+1. Run `0006_triggers.sql` in psql to enable automatic seller_rating updates
+2. Implement review HTTP endpoints properly (with correct sqlx Row methods)
+3. Test review creation and rating updates
+4. Update OpenAPI spec with review endpoints
