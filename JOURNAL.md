@@ -955,3 +955,47 @@ Add marketplace fields to API contract, database, and server implementation.
 3. Verify automatic `seller_rating` updates via triggers
 4. Update OpenAPI spec with review endpoints
 5. Add review status update endpoint (approve/reject)
+
+## 2026-05-08 Session 3 (Testing Review System)
+
+### Testing Progress
+- **Server started** on port 3003 ✅
+- **Created seller accounts** for existing listing owners (bench-seller) ✅
+- **Create review endpoint works!** ✅
+  - Successfully created review for lst_000001
+  - Returns: `{"review_id": "...", "status": "pending"}`
+- **List reviews endpoint broken** ❌
+  - Returns empty reply (server panic?)
+  - SQL query works fine in test script (`test_reviews.rs`)
+  - Issue likely in Actix handler response generation
+  - Simplified handler (removed created_at) but still broken
+
+### Debugging Attempts
+- Fixed `created_at` casting issue (timestamp → text)
+- Simplified response to not include created_at
+- Server rebuilds successful (release & debug)
+- Port conflicts encountered (killed processes)
+- Could not capture server logs (binary output issues)
+
+### Test Scripts Created
+- `check_seller.rs` - verify seller_accounts exist
+- `create_seller_accounts.rs` - populate missing seller accounts
+- `test_reviews.rs` - test SQL query directly (works!)
+
+### Commits
+- `dd363ad` - feat(api): Test review system - create works, list needs debug
+
+### Next Steps for User
+1. **Debug list reviews endpoint**:
+   - Run server with `RUST_BACKTRACE=1` and check panic
+   - Possibly rewrite `list_reviews_for_listing` to use `try_get` or proper error handling
+   - Check if `web::Path<String>` extraction works
+2. **Test review approval flow**:
+   - Approve review: need admin endpoint or DB update
+   - Verify `seller_rating` auto-updates via triggers
+3. **Update OpenAPI spec** with review endpoints
+4. **Add review management endpoints** (approve/reject)
+
+### Known Issues
+- `GET /v1/listings/{id}/reviews` causes server to return empty reply (panic)
+- Need to investigate Actix handler further
