@@ -364,3 +364,40 @@ LIMIT 20;
 **Last Updated**: 2026-05-08  
 **Author**: AI Assistant (based on user request to expand marketplace categories)  
 **Industry Standards Used**: eBay, Amazon, Zillow, Craigslist, Upwork, Fiverr
+
+---
+
+## Progress Update (2026-05-09)
+
+### ✅ Phase 1: Backend Data Model - COMPLETED
+- Updated `api-contract` with new types (ListingType, ServiceType, PropertyTransactionType, PropertySubType)
+- Updated `ListingPayload` with conditional fields
+- Updated `SearchRequest` with new filters
+- **Committed**: `172b511`
+
+### ✅ Phase 2: Database Migrations - COMPLETED
+- Created `0008_add_listing_type.sql` - Add listing_type to listings table
+- Created `0009_create_service_listings.sql` - Create service_listings table
+- Created `0010_create_property_listings.sql` - Create property_listings table
+- **Committed**: `dfa8685`
+
+### ✅ Phase 3: Update Rust Models & Repositories - COMPLETED
+- Added `listing_type: String` field to `ListingRow` in `db.rs`
+- Updated `into_payload()` to use new api-contract fields (`title` instead of `product_name`)
+- Updated `row_to_summary()` to extract `listing_type` from DB
+- Updated `summary_to_row()` to include `listing_type`
+- Added missing fields to all `ListingPayload` initializers (zoning, service_type, etc.)
+- Added missing fields to all `SearchRequest` initializers
+- Fixed all `product_name` → `title` references in:
+  - `search.rs` (listing_index_text, score_listing)
+  - `listings.rs` (row_to_summary, matches_filters)
+  - `app.rs`, `runtime.rs`, `phase5_bench.rs`, `mcp/src/lib.rs`
+- Fixed `matches_filters()` for `Option<Category>` and `Option<Condition>`
+- Added missing SearchSort match arms (PricePerSqmAsc, PricePerSqmDesc)
+- **Committed**: `8b14500`
+
+### ⏳ Phase 4: Business Logic & Search - PENDING
+- Connect separate tables (service_listings, property_listings) to API
+- Update search to handle new listing types
+- Add new API endpoints for service/property-specific operations
+- Implement price_per_sqm sorting for properties

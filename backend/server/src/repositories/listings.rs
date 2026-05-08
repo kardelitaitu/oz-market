@@ -526,6 +526,107 @@ impl PostgresListingRepository {
             }
         }
 
+        // NEW: Phase 4 - listing_type filter
+        if let Some(listing_type) = request.listing_type {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder
+                .push("listing_type = ")
+                .push_bind(db_enum_value(&listing_type));
+
+            // JOIN with separate table based on listing_type
+            if matches!(listing_type, marketplace_api_contract::ListingType::Service) {
+                builder.push(" LEFT JOIN service_listings sl ON l.listing_id = sl.listing_id");
+            } else if matches!(
+                listing_type,
+                marketplace_api_contract::ListingType::Property
+            ) {
+                builder.push(" LEFT JOIN property_listings pl ON l.listing_id = pl.listing_id");
+            }
+        }
+
+        // NEW: Service filters
+        if let Some(service_type) = request.service_type {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder
+                .push("sl.service_type = ")
+                .push_bind(db_enum_value(&service_type));
+        }
+
+        // NEW: Property filters
+        if let Some(prop_transaction_type) = request.property_transaction_type {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder
+                .push("pl.property_transaction_type = ")
+                .push_bind(db_enum_value(&prop_transaction_type));
+        }
+
+        if let Some(prop_sub_type) = request.property_sub_type {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder
+                .push("pl.property_sub_type = ")
+                .push_bind(db_enum_value(&prop_sub_type));
+        }
+
+        if let Some(min_area) = request.min_area_sqm {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("pl.area_sqm >= ").push_bind(min_area);
+        }
+
+        if let Some(max_area) = request.max_area_sqm {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("pl.area_sqm <= ").push_bind(max_area);
+        }
+
+        if let Some(min_bed) = request.min_bedrooms {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("pl.bedrooms >= ").push_bind(min_bed);
+        }
+
+        if let Some(min_bath) = request.min_bathrooms {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("pl.bathrooms >= ").push_bind(min_bath);
+        }
+
         // Phase A: Faceted search filters
         if let Some(min_rating) = request.min_seller_rating {
             if where_added {
@@ -696,6 +797,45 @@ impl ListingRepository for PostgresListingRepository {
         .fetch_one(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;
+
+        // NEW: Phase 4 - Insert into separate table based on listing_type
+        match request.listing.listing_type {
+            marketplace_api_contract::ListingType::Service => {
+                sqlx::query(
+                    "INSERT INTO service_listings (listing_id, service_type, hourly_rate, project_rate, qualifications, service_radius_km) 
+                     VALUES ($1, $2, $3, $4, $5, $6)"
+                )
+                .bind(&listing_id)
+                .bind(db_enum_value(&request.listing.service_type))
+                .bind(request.listing.hourly_rate)
+                .bind(request.listing.project_rate)
+                .bind(Json(&request.listing.qualifications))
+                .bind(request.listing.service_radius_km)
+                .execute(&mut *conn)
+                .await
+                .map_err(|error| storage(error.to_string()))?;
+            }
+            marketplace_api_contract::ListingType::Property => {
+                sqlx::query(
+                    "INSERT INTO property_listings (listing_id, property_transaction_type, property_sub_type, area_sqm, bedrooms, bathrooms, year_built, lot_size_sqm, zoning) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+                )
+                .bind(&listing_id)
+                .bind(db_enum_value(&request.listing.property_transaction_type))
+                .bind(db_enum_value(&request.listing.property_sub_type))
+                .bind(request.listing.area_sqm)
+                .bind(request.listing.bedrooms)
+                .bind(request.listing.bathrooms)
+                .bind(request.listing.year_built)
+                .bind(request.listing.lot_size_sqm)
+                .bind(&request.listing.zoning)
+                .execute(&mut *conn)
+                .await
+                .map_err(|error| storage(error.to_string()))?;
+            }
+            _ => {} // Product - no separate table needed
+        }
+
         row_to_summary(row)
     }
 
@@ -712,7 +852,7 @@ impl ListingRepository for PostgresListingRepository {
             "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\",
                 l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls,
                 l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes,
-                l.latitude, l.longitude, l.geolocation_opt_out,
+                l.listing_type, l.latitude, l.longitude, l.geolocation_opt_out,
                 s.display_name, s.seller_rating, s.verified_at
              FROM listings l
              LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id
@@ -722,6 +862,41 @@ impl ListingRepository for PostgresListingRepository {
         .fetch_optional(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;
+
+        if let Some(row) = &row {
+            // NEW: Phase 4 - Fetch from separate table based on listing_type
+            let listing_type_str: String = row
+                .try_get("listing_type")
+                .ok()
+                .unwrap_or_else(|| "product".to_string());
+
+            if listing_type_str == "service" {
+                // Fetch from service_listings
+                let _service_row = sqlx::query(
+                    "SELECT service_type, hourly_rate, project_rate, qualifications, service_radius_km FROM service_listings WHERE listing_id = $1"
+                )
+                .bind(listing_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|error| storage(error.to_string()))?;
+
+                // TODO: Merge service data into summary
+                // For now, just return base summary
+            } else if listing_type_str == "property" {
+                // Fetch from property_listings
+                let _property_row = sqlx::query(
+                    "SELECT property_transaction_type, property_sub_type, area_sqm, bedrooms, bathrooms, year_built, lot_size_sqm, zoning 
+                     FROM property_listings WHERE listing_id = $1"
+                )
+                .bind(listing_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|error| storage(error.to_string()))?;
+
+                // TODO: Merge property data into summary
+            }
+        }
+
         row.map(row_to_summary).transpose()
     }
 

@@ -1937,3 +1937,21 @@ Since the tester has issues, test manually:
 - Updated SearchSort to include PricePerSqmAsc/Desc
 - All api-contract changes compile successfully
 - Updated MARKETPLACE_EXPANSION_PLAN.md to mark Phase 1 as COMPLETED
+
+05-05-09--03-00
+- Phase 3 (Marketplace Expansion) COMPLETED: Update Rust Models & Repositories
+  - Added `listing_type: String` field to `ListingRow` in db.rs
+  - Updated `into_payload()` to use new api-contract fields (`title` instead of `product_name`)
+  - Updated `row_to_summary()` to extract `listing_type` from DB and map to enum
+  - Updated `summary_to_row()` to include `listing_type` field
+  - Fixed all `product_name` → `title` references in:
+    - `search.rs` (listing_index_text, score_listing)
+    - `listings.rs` (row_to_summary, matches_filters)
+    - `app.rs`, `runtime.rs`, `phase5_bench.rs`, `mcp/src/lib.rs`
+  - Fixed `matches_filters()` for `Option<Category>` and `Option<Condition>`
+  - Added missing fields to all `ListingPayload` initializers (zoning, service_type, etc.)
+  - Added missing fields to all `SearchRequest` initializers (listing_type, etc.)
+  - Added missing SearchSort match arms (PricePerSqmAsc, PricePerSqmDesc)
+  - Fixed MCP crate compilation errors
+  - **Result**: `cargo check` passes, formatting fixed
+  - **Committed**: 8b14500
