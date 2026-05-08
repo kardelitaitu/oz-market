@@ -41,21 +41,16 @@ pub enum ListingStatus {
     Archived,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchSort {
+    #[default]
     Relevance,
     Newest,
     PriceAsc,
     PriceDesc,
-    RatingHighest,  // Phase B: Sort by seller rating descending
-    RatingLowest,   // Phase B: Sort by seller rating ascending
-}
-
-impl Default for SearchSort {
-    fn default() -> Self {
-        Self::Relevance
-    }
+    RatingHighest, // Phase B: Sort by seller rating descending
+    RatingLowest,  // Phase B: Sort by seller rating ascending
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]

@@ -182,12 +182,10 @@ pub fn authorize(claims: &Claims, action: Action, ownership: OwnershipContext) -
         } => {
             let seller_ok = claims
                 .seller_account_id
-                .as_ref()
-                .map_or(false, |sid| sid == &seller_account_id);
+                .as_ref() == Some(&seller_account_id);
             let buyer_ok = claims
                 .buyer_agent_id
-                .as_ref()
-                .map_or(false, |bid| bid == &buyer_agent_id);
+                .as_ref() == Some(&buyer_agent_id);
             if seller_ok || buyer_ok {
                 Ok(())
             } else {
@@ -219,7 +217,11 @@ mod tests {
         Claims {
             sub: "agent_123".to_string(),
             roles: vec![Role::SellerListingWriter, Role::BuyerNegotiator],
-            scopes: vec![Scope::ListingCreate, Scope::ListingRead, Scope::NegotiationCreate],
+            scopes: vec![
+                Scope::ListingCreate,
+                Scope::ListingRead,
+                Scope::NegotiationCreate,
+            ],
             seller_account_id: Some("seller_123".to_string()),
             buyer_agent_id: Some("buyer_123".to_string()),
             hardware_id: Some("device_123".to_string()),

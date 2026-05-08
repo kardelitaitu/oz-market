@@ -38,11 +38,17 @@ pub struct InMemorySellerAccountRepository {
     accounts: RwLock<HashMap<String, SellerAccountRow>>,
 }
 
-impl InMemorySellerAccountRepository {
-    pub fn new() -> Self {
+impl Default for InMemorySellerAccountRepository {
+    fn default() -> Self {
         Self {
             accounts: RwLock::new(HashMap::new()),
         }
+    }
+}
+
+impl InMemorySellerAccountRepository {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn add_account(&self, account: SellerAccountRow) {

@@ -26,13 +26,8 @@ pub fn conflict(message: impl Into<String>) -> RepositoryError {
     RepositoryError::new(RepositoryErrorKind::Conflict, message)
 }
 
+#[derive(Default)]
 pub struct InMemoryNegotiationRepository;
-
-impl InMemoryNegotiationRepository {
-    pub fn new() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl NegotiationRepository for InMemoryNegotiationRepository {

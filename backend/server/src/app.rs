@@ -809,8 +809,8 @@ mod tests {
     use crate::repositories::contact_reveals::InMemoryContactRevealRepository;
     use crate::repositories::listings::InMemoryListingRepository;
     use crate::repositories::outbox_events::InMemoryOutboxEventRepository;
-    use crate::repositories::seller_accounts::InMemorySellerAccountRepository;
     use crate::repositories::reservations::InMemoryReservationLeaseRepository;
+    use crate::repositories::seller_accounts::InMemorySellerAccountRepository;
     use crate::repositories::{ListingRepository, RepositoryError, RepositoryErrorKind};
     use crate::services::idempotency::InMemoryIdempotencyRepository;
     use marketplace_api_contract::{

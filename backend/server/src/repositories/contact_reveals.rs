@@ -244,12 +244,13 @@ impl ContactRevealRepository for PostgresContactRevealRepository {
             .await
             .map_err(|error| storage(error.to_string()))?;
 
-        let negotiation_row =
-            sqlx::query("SELECT listing_id FROM reservation_leases WHERE negotiation_id = $1 FOR UPDATE")
-                .bind(negotiation_id)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(|error| storage(error.to_string()))?;
+        let negotiation_row = sqlx::query(
+            "SELECT listing_id FROM reservation_leases WHERE negotiation_id = $1 FOR UPDATE",
+        )
+        .bind(negotiation_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| storage(error.to_string()))?;
         let Some(negotiation_row) = negotiation_row else {
             return Err(not_found("negotiation not found"));
         };

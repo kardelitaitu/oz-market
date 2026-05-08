@@ -34,22 +34,18 @@ pub trait ReviewRepository: Send + Sync {
         status: &str,
     ) -> Result<Option<ReviewRow>, RepositoryError>;
 
-    async fn get_by_id(
-        &self,
-        review_id: &str,
-    ) -> Result<Option<ReviewRow>, RepositoryError>;
+    async fn get_by_id(&self, review_id: &str) -> Result<Option<ReviewRow>, RepositoryError>;
 }
 
 // InMemory Implementation
+#[derive(Default)]
 pub struct InMemoryReviewRepository {
     reviews: RwLock<HashMap<String, ReviewRow>>,
 }
 
 impl InMemoryReviewRepository {
     pub fn new() -> Self {
-        Self {
-            reviews: RwLock::new(HashMap::new()),
-        }
+        Self::default()
     }
 }
 
@@ -66,7 +62,7 @@ impl ReviewRepository for InMemoryReviewRepository {
         body: Option<&str>,
     ) -> Result<ReviewRow, RepositoryError> {
         let mut guard = self.reviews.write().expect("review write lock");
-        
+
         let now = chrono::Utc::now().to_rfc3339();
         let review = ReviewRow {
             review_id: review_id.to_string(),
@@ -80,7 +76,7 @@ impl ReviewRepository for InMemoryReviewRepository {
             created_at: now.clone(),
             updated_at: now,
         };
-        
+
         guard.insert(review_id.to_string(), review.clone());
         Ok(review)
     }
@@ -126,10 +122,7 @@ impl ReviewRepository for InMemoryReviewRepository {
         }
     }
 
-    async fn get_by_id(
-        &self,
-        review_id: &str,
-    ) -> Result<Option<ReviewRow>, RepositoryError> {
+    async fn get_by_id(&self, review_id: &str) -> Result<Option<ReviewRow>, RepositoryError> {
         let guard = self.reviews.read().expect("review read lock");
         Ok(guard.get(review_id).cloned())
     }
@@ -158,9 +151,12 @@ impl ReviewRepository for PostgresReviewRepository {
         title: &str,
         body: Option<&str>,
     ) -> Result<ReviewRow, RepositoryError> {
-        let mut conn = self.pool.acquire().await
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         let row = sqlx::query(
             "INSERT INTO reviews (review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', now(), now())
@@ -176,7 +172,7 @@ impl ReviewRepository for PostgresReviewRepository {
         .fetch_one(&mut *conn)
         .await
         .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         Ok(ReviewRow {
             review_id: row.get("review_id"),
             listing_id: row.get("listing_id"),
@@ -195,9 +191,12 @@ impl ReviewRepository for PostgresReviewRepository {
         &self,
         listing_id: &str,
     ) -> Result<Vec<ReviewRow>, RepositoryError> {
-        let mut conn = self.pool.acquire().await
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         let rows = sqlx::query(
             "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at, updated_at
              FROM reviews WHERE listing_id = $1 ORDER BY created_at DESC"
@@ -206,20 +205,23 @@ impl ReviewRepository for PostgresReviewRepository {
         .fetch_all(&mut *conn)
         .await
         .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
-        let reviews = rows.into_iter().map(|row| ReviewRow {
-            review_id: row.get("review_id"),
-            listing_id: row.get("listing_id"),
-            seller_account_id: row.get("seller_account_id"),
-            reviewer_id: row.get("reviewer_id"),
-            rating: row.get("rating"),
-            title: row.get("title"),
-            body: row.get("body"),
-            status: row.get("status"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        }).collect();
-        
+
+        let reviews = rows
+            .into_iter()
+            .map(|row| ReviewRow {
+                review_id: row.get("review_id"),
+                listing_id: row.get("listing_id"),
+                seller_account_id: row.get("seller_account_id"),
+                reviewer_id: row.get("reviewer_id"),
+                rating: row.get("rating"),
+                title: row.get("title"),
+                body: row.get("body"),
+                status: row.get("status"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })
+            .collect();
+
         Ok(reviews)
     }
 
@@ -227,9 +229,12 @@ impl ReviewRepository for PostgresReviewRepository {
         &self,
         seller_account_id: &str,
     ) -> Result<Vec<ReviewRow>, RepositoryError> {
-        let mut conn = self.pool.acquire().await
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         let rows = sqlx::query(
             "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at, updated_at
              FROM reviews WHERE seller_account_id = $1 ORDER BY created_at DESC"
@@ -238,20 +243,23 @@ impl ReviewRepository for PostgresReviewRepository {
         .fetch_all(&mut *conn)
         .await
         .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
-        let reviews = rows.into_iter().map(|row| ReviewRow {
-            review_id: row.get("review_id"),
-            listing_id: row.get("listing_id"),
-            seller_account_id: row.get("seller_account_id"),
-            reviewer_id: row.get("reviewer_id"),
-            rating: row.get("rating"),
-            title: row.get("title"),
-            body: row.get("body"),
-            status: row.get("status"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        }).collect();
-        
+
+        let reviews = rows
+            .into_iter()
+            .map(|row| ReviewRow {
+                review_id: row.get("review_id"),
+                listing_id: row.get("listing_id"),
+                seller_account_id: row.get("seller_account_id"),
+                reviewer_id: row.get("reviewer_id"),
+                rating: row.get("rating"),
+                title: row.get("title"),
+                body: row.get("body"),
+                status: row.get("status"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })
+            .collect();
+
         Ok(reviews)
     }
 
@@ -260,9 +268,12 @@ impl ReviewRepository for PostgresReviewRepository {
         review_id: &str,
         status: &str,
     ) -> Result<Option<ReviewRow>, RepositoryError> {
-        let mut conn = self.pool.acquire().await
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         let row = sqlx::query(
             "UPDATE reviews SET status = $1, updated_at = now() WHERE review_id = $2
              RETURNING review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at, updated_at"
@@ -272,7 +283,7 @@ impl ReviewRepository for PostgresReviewRepository {
         .fetch_optional(&mut *conn)
         .await
         .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         Ok(row.map(|row| ReviewRow {
             review_id: row.get("review_id"),
             listing_id: row.get("listing_id"),
@@ -287,13 +298,13 @@ impl ReviewRepository for PostgresReviewRepository {
         }))
     }
 
-    async fn get_by_id(
-        &self,
-        review_id: &str,
-    ) -> Result<Option<ReviewRow>, RepositoryError> {
-        let mut conn = self.pool.acquire().await
+    async fn get_by_id(&self, review_id: &str) -> Result<Option<ReviewRow>, RepositoryError> {
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         let row = sqlx::query(
             "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at, updated_at
              FROM reviews WHERE review_id = $1"
@@ -302,7 +313,7 @@ impl ReviewRepository for PostgresReviewRepository {
         .fetch_optional(&mut *conn)
         .await
         .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
-        
+
         Ok(row.map(|row| ReviewRow {
             review_id: row.get("review_id"),
             listing_id: row.get("listing_id"),

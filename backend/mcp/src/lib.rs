@@ -1,5 +1,5 @@
 //! MCP Server for Marketplace
-//! 
+//!
 //! Implements Model Context Protocol (MCP) to let AI agents interact
 //! with the marketplace via standardized tools.
 
@@ -31,7 +31,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository::new(),
+            marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository::new(
+            ),
         ),
     );
     let _mcp = MarketplaceMcp::new(app);
@@ -122,7 +123,9 @@ impl MarketplaceMcp {
         claims: &Claims,
         negotiation_id: &str,
     ) -> Result<NegotiationResponse, marketplace_server::http::handlers::HandlerError> {
-        self.app.get_negotiation_status(claims, negotiation_id).await
+        self.app
+            .get_negotiation_status(claims, negotiation_id)
+            .await
     }
 
     pub async fn request_contact_reveal(
@@ -134,7 +137,13 @@ impl MarketplaceMcp {
         now_rfc3339: &str,
     ) -> Result<ContactRevealResponse, marketplace_server::http::handlers::HandlerError> {
         self.app
-            .request_contact_reveal(claims, negotiation_id, request, request_fingerprint, now_rfc3339)
+            .request_contact_reveal(
+                claims,
+                negotiation_id,
+                request,
+                request_fingerprint,
+                now_rfc3339,
+            )
             .await
     }
 
@@ -149,7 +158,8 @@ impl MarketplaceMcp {
     pub async fn get_contact_reveal(
         &self,
         reveal_id: &str,
-    ) -> Result<Option<ContactRevealResponse>, marketplace_server::http::handlers::HandlerError> {
+    ) -> Result<Option<ContactRevealResponse>, marketplace_server::http::handlers::HandlerError>
+    {
         self.app.get_contact_reveal(reveal_id).await
     }
 
@@ -160,7 +170,9 @@ impl MarketplaceMcp {
         reason: &str,
         now_rfc3339: &str,
     ) -> Result<Option<ListingSummary>, marketplace_server::http::handlers::HandlerError> {
-        self.app.archive_listing(claims, listing_id, reason, now_rfc3339).await
+        self.app
+            .archive_listing(claims, listing_id, reason, now_rfc3339)
+            .await
     }
 
     pub async fn set_seller_trust_level(
@@ -170,7 +182,10 @@ impl MarketplaceMcp {
         trust_level: &str,
         reason: &str,
         now_rfc3339: &str,
-    ) -> Result<Option<marketplace_server::models::db::SellerAccountRow>, marketplace_server::http::handlers::HandlerError> {
+    ) -> Result<
+        Option<marketplace_server::models::db::SellerAccountRow>,
+        marketplace_server::http::handlers::HandlerError,
+    > {
         self.app
             .set_seller_trust_level(claims, seller_account_id, trust_level, reason, now_rfc3339)
             .await
@@ -183,9 +198,18 @@ impl MarketplaceMcp {
         quota_override: Option<i32>,
         reason: &str,
         now_rfc3339: &str,
-    ) -> Result<Option<marketplace_server::models::db::SellerAccountRow>, marketplace_server::http::handlers::HandlerError> {
+    ) -> Result<
+        Option<marketplace_server::models::db::SellerAccountRow>,
+        marketplace_server::http::handlers::HandlerError,
+    > {
         self.app
-            .set_seller_quota_override(claims, seller_account_id, quota_override, reason, now_rfc3339)
+            .set_seller_quota_override(
+                claims,
+                seller_account_id,
+                quota_override,
+                reason,
+                now_rfc3339,
+            )
             .await
     }
 }
@@ -344,7 +368,12 @@ mod tests {
         let claims = build_claims();
 
         let created = mcp
-            .create_listing(&claims, &build_create_request(), "fp-create-1", "2026-05-04T00:00:00Z")
+            .create_listing(
+                &claims,
+                &build_create_request(),
+                "fp-create-1",
+                "2026-05-04T00:00:00Z",
+            )
             .await
             .unwrap();
 
@@ -364,7 +393,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(open.status, marketplace_api_contract::NegotiationStatus::Reserved);
+        assert_eq!(
+            open.status,
+            marketplace_api_contract::NegotiationStatus::Reserved
+        );
         assert!(open.reservation_lease_id.is_some());
     }
 }

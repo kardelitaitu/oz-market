@@ -1,9 +1,5 @@
 use crate::app::MarketplaceApp;
 use crate::observability::ServerObservability;
-use crate::repositories::{
-    ContactRevealRepository, IdempotencyKeyRepository, ListingRepository,
-    ReservationLeaseRepository,
-};
 #[cfg(not(test))]
 use crate::repositories::audit_events::PostgresAuditEventRepository;
 #[cfg(not(test))]
@@ -16,6 +12,10 @@ use crate::repositories::outbox_events::PostgresOutboxEventRepository;
 use crate::repositories::reservations::PostgresReservationLeaseRepository;
 #[cfg(not(test))]
 use crate::repositories::seller_accounts::PostgresSellerAccountRepository;
+use crate::repositories::{
+    ContactRevealRepository, IdempotencyKeyRepository, ListingRepository,
+    ReservationLeaseRepository,
+};
 use crate::services::idempotency::InMemoryIdempotencyRepository;
 use marketplace_api_contract::{
     ApiErrorCode, Category, Condition, CreateListingRequest, ListingStatus, OpenNegotiationRequest,
@@ -40,8 +40,8 @@ type ProductionRuntimeApp = MarketplaceApp<
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     #[cfg(not(test))]
     {
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(async_run())
+        let runtime = tokio::runtime::Runtime::new()?;
+        runtime.block_on(async_run())
     }
 
     #[cfg(test)]
@@ -220,8 +220,7 @@ where
 
     match (request.method.as_str(), request.path.as_str()) {
         ("POST", path)
-            if path.starts_with("/internal/v1/listings/")
-                && path.ends_with("/archive") =>
+            if path.starts_with("/internal/v1/listings/") && path.ends_with("/archive") =>
         {
             if let Err(response) = authorize_internal_write(&claims) {
                 return response;
@@ -249,14 +248,14 @@ where
                     None,
                 );
             };
-            match app.archive_listing(&claims, listing_id, reason, &current_time_marker()).await {
+            match app
+                .archive_listing(&claims, listing_id, reason, &current_time_marker())
+                .await
+            {
                 Ok(Some(listing)) => json_response(200, serde_json::to_value(listing).unwrap()),
-                Ok(None) => api_error_response(
-                    404,
-                    ApiErrorCode::NotFound,
-                    "listing not found",
-                    None,
-                ),
+                Ok(None) => {
+                    api_error_response(404, ApiErrorCode::NotFound, "listing not found", None)
+                }
                 Err(error) => map_handler_error(&error),
             }
         }
@@ -343,7 +342,9 @@ where
                 Err(error) => map_handler_error(&error),
             }
         }
-        ("POST", path) if path.starts_with("/internal/v1/sellers/") && path.ends_with("/trust-level") => {
+        ("POST", path)
+            if path.starts_with("/internal/v1/sellers/") && path.ends_with("/trust-level") =>
+        {
             if let Err(response) = authorize_internal_write(&claims) {
                 return response;
             }
@@ -379,7 +380,13 @@ where
                 );
             };
             match app
-                .set_seller_trust_level(&claims, seller_account_id, trust_level, reason, &current_time_marker())
+                .set_seller_trust_level(
+                    &claims,
+                    seller_account_id,
+                    trust_level,
+                    reason,
+                    &current_time_marker(),
+                )
                 .await
             {
                 Ok(Some(account)) => json_response(200, serde_json::to_value(account).unwrap()),
@@ -392,7 +399,9 @@ where
                 Err(error) => map_handler_error(&error),
             }
         }
-        ("POST", path) if path.starts_with("/internal/v1/sellers/") && path.ends_with("/quota-override") => {
+        ("POST", path)
+            if path.starts_with("/internal/v1/sellers/") && path.ends_with("/quota-override") =>
+        {
             if let Err(response) = authorize_internal_write(&claims) {
                 return response;
             }
@@ -411,7 +420,10 @@ where
                     );
                 }
             };
-            let quota_override = body.get("quota_override").and_then(|v| v.as_i64()).map(|v| v as i32);
+            let quota_override = body
+                .get("quota_override")
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32);
             let Some(reason) = body.get("reason").and_then(|v| v.as_str()) else {
                 return api_error_response(
                     400,
@@ -421,7 +433,13 @@ where
                 );
             };
             match app
-                .set_seller_quota_override(&claims, seller_account_id, quota_override, reason, &current_time_marker())
+                .set_seller_quota_override(
+                    &claims,
+                    seller_account_id,
+                    quota_override,
+                    reason,
+                    &current_time_marker(),
+                )
                 .await
             {
                 Ok(Some(account)) => json_response(200, serde_json::to_value(account).unwrap()),
@@ -677,7 +695,9 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
             .get("status")
             .and_then(|value| parse_listing_status(value)),
         min_seller_rating: query.get("min_seller_rating").and_then(|v| v.parse().ok()),
-        verified_sellers_only: query.get("verified_sellers_only").and_then(|v| v.parse().ok()),
+        verified_sellers_only: query
+            .get("verified_sellers_only")
+            .and_then(|v| v.parse().ok()),
         sort_by: query
             .get("sort_by")
             .and_then(|value| parse_sort(value))
@@ -942,7 +962,12 @@ mod tests {
         claims_header_for(&claims())
     }
 
-    fn http_request(method: &str, path: &str, claims: Option<&Claims>, body: Option<&str>) -> String {
+    fn http_request(
+        method: &str,
+        path: &str,
+        claims: Option<&Claims>,
+        body: Option<&str>,
+    ) -> String {
         let claims_header = claims.map(claims_header_for).unwrap_or_default();
         let body = body.unwrap_or("");
         let content_length = body.len();
@@ -955,9 +980,7 @@ mod tests {
                 "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n{body}"
             )
         } else {
-            format!(
-                "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-            )
+            format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
         }
     }
 
@@ -1232,7 +1255,12 @@ mod tests {
         denied_claims.roles = vec![Role::BuyerNegotiator];
         let response = round_trip(
             &address,
-            &http_request("POST", "/v1/listings", Some(&denied_claims), Some(&create_body())),
+            &http_request(
+                "POST",
+                "/v1/listings",
+                Some(&denied_claims),
+                Some(&create_body()),
+            ),
         )
         .await;
 
@@ -1281,5 +1309,4 @@ mod tests {
         .await;
         assert!(archived.contains("\"status\":\"archived\""));
     }
-
 }

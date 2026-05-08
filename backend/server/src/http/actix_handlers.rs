@@ -1,35 +1,35 @@
-use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use crate::app::MarketplaceApp;
 use crate::http::handlers::HandlerError;
 use crate::repositories::{
-    PostgresListingRepository, PostgresReservationLeaseRepository,
-    PostgresContactRevealRepository,
+    PostgresContactRevealRepository, PostgresListingRepository, PostgresReservationLeaseRepository,
 };
 use crate::services::idempotency::InMemoryIdempotencyRepository;
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use marketplace_api_contract::{
-    SearchRequest, CreateListingRequest,
-    OpenNegotiationRequest, RequestContactRevealRequest,
+    CreateListingRequest, OpenNegotiationRequest, RequestContactRevealRequest, SearchRequest,
 };
 use marketplace_auth_core::{Claims, Role};
-use sqlx::Row;
-use serde_json::json;
 use moka::future::Cache;
+use serde_json::json;
+use sqlx::Row;
 use std::sync::Arc;
 
 // Production hardening: tracing + metrics
-use tracing::{info, error};
 use metrics::{counter, histogram};
+use tracing::{error, info};
 
 // OpenAPI annotations
 // use utoipa::path;  // Removed - causes ambiguity with actix_web::web::Path
 
 // Type alias for the concrete app type used in Actix handlers
-type ActixApp = Arc<MarketplaceApp<
-    PostgresListingRepository,
-    InMemoryIdempotencyRepository,
-    PostgresReservationLeaseRepository,
-    PostgresContactRevealRepository,
->>;
+type ActixApp = Arc<
+    MarketplaceApp<
+        PostgresListingRepository,
+        InMemoryIdempotencyRepository,
+        PostgresReservationLeaseRepository,
+        PostgresContactRevealRepository,
+    >,
+>;
 
 // Helper to map HandlerError to HttpResponse
 fn map_handler_error(error: &HandlerError) -> HttpResponse {
@@ -66,7 +66,8 @@ fn extract_claims(req: &HttpRequest) -> Result<Claims, HttpResponse> {
                 Ok(claims) => return Ok(claims),
                 Err(e) => {
                     error!("Claims parse error: {}", e);
-                    return Err(HttpResponse::Unauthorized().json(serde_json::json!({"error": format!("invalid claims: {}", e)})));
+                    return Err(HttpResponse::Unauthorized()
+                        .json(serde_json::json!({"error": format!("invalid claims: {}", e)})));
                 }
             }
         }
@@ -95,7 +96,9 @@ pub async fn get_listing(
         counter!("cache_hits_total", "type" => "listing").increment(1);
         histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
             .record(start.elapsed().as_secs_f64());
-        return HttpResponse::Ok().content_type("application/json").body(cached_json);
+        return HttpResponse::Ok()
+            .content_type("application/json")
+            .body(cached_json);
     }
     info!("Cache miss for listing {}", cache_key);
     counter!("cache_misses_total", "type" => "listing").increment(1);
@@ -107,7 +110,7 @@ pub async fn get_listing(
             histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
                 .record(start.elapsed().as_secs_f64());
             HttpResponse::Ok().json(listing)
-        },
+        }
         Ok(None) => HttpResponse::NotFound().json(json!({
             "error_code": "NOT_FOUND",
             "message": "listing not found"
@@ -134,7 +137,9 @@ pub async fn search_listings(
         counter!("cache_hits_total", "type" => "search").increment(1);
         histogram!("request_duration_seconds", "endpoint" => "/listings/search")
             .record(start.elapsed().as_secs_f64());
-        return HttpResponse::Ok().content_type("application/json").body(cached_json);
+        return HttpResponse::Ok()
+            .content_type("application/json")
+            .body(cached_json);
     }
     info!("Cache miss for search");
     counter!("cache_misses_total", "type" => "search").increment(1);
@@ -146,11 +151,10 @@ pub async fn search_listings(
             histogram!("request_duration_seconds", "endpoint" => "/listings/search")
                 .record(start.elapsed().as_secs_f64());
             HttpResponse::Ok().json(response)
-        },
+        }
         Err(e) => map_handler_error(&e),
     }
 }
-
 
 pub async fn create_listing(
     app: web::Data<ActixApp>,
@@ -187,7 +191,10 @@ pub async fn open_negotiation(
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
     search_cache.invalidate_all();
-    match app.open_negotiation(&claims, &body, &fingerprint, &now).await {
+    match app
+        .open_negotiation(&claims, &body, &fingerprint, &now)
+        .await
+    {
         Ok(response) => HttpResponse::Ok().json(response),
         Err(e) => map_handler_error(&e),
     }
@@ -208,7 +215,10 @@ pub async fn request_contact_reveal(
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
     search_cache.invalidate_all();
-    match app.request_contact_reveal(&claims, "", &body, &fingerprint, &now).await {
+    match app
+        .request_contact_reveal(&claims, "", &body, &fingerprint, &now)
+        .await
+    {
         Ok(response) => HttpResponse::Accepted().json(response),
         Err(e) => map_handler_error(&e),
     }
@@ -272,7 +282,10 @@ pub async fn set_seller_trust_level(
     let now = crate::http::runtime::current_time_marker();
     search_cache.invalidate_all();
     // set_seller_trust_level(claims, seller_account_id, trust_level, reason, now)
-    match app.set_seller_trust_level(&claims, &seller_id, &trust_level, "", &now).await {
+    match app
+        .set_seller_trust_level(&claims, &seller_id, &trust_level, "", &now)
+        .await
+    {
         Ok(Some(_account)) => HttpResponse::NoContent().finish(),
         Ok(None) => HttpResponse::NotFound().json(json!({
             "error_code": "NOT_FOUND",
@@ -296,7 +309,10 @@ pub async fn set_seller_quota_override(
     let now = crate::http::runtime::current_time_marker();
     search_cache.invalidate_all();
     // set_seller_quota_override(claims, seller_account_id, quota_override, reason, now)
-    match app.set_seller_quota_override(&claims, &seller_id, quota.clone(), "", &now).await {
+    match app
+        .set_seller_quota_override(&claims, &seller_id, *quota, "", &now)
+        .await
+    {
         Ok(Some(_account)) => HttpResponse::NoContent().finish(),
         Ok(None) => HttpResponse::NotFound().json(json!({
             "error_code": "NOT_FOUND",
@@ -316,7 +332,7 @@ pub async fn recalculate_seller_rating(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    
+
     // Check admin role
     if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
         return HttpResponse::Forbidden().json(json!({
@@ -324,18 +340,18 @@ pub async fn recalculate_seller_rating(
             "message": "Admin access required"
         }));
     }
-    
+
     let pool = pool.get_ref();
     let result = sqlx::query(
         "UPDATE seller_accounts SET seller_rating = (
             SELECT AVG(rating)::DECIMAL(3,2) FROM reviews 
             WHERE seller_account_id = $1 AND status = 'approved'
-        ) WHERE seller_account_id = $1"
+        ) WHERE seller_account_id = $1",
     )
     .bind(seller_id.as_str())
     .execute(pool)
     .await;
-    
+
     match result {
         Ok(_) => HttpResponse::NoContent().finish(),
         Err(e) => {
@@ -344,7 +360,6 @@ pub async fn recalculate_seller_rating(
         }
     }
 }
-
 
 /// Create a review for a listing (buyer only)
 pub async fn create_review(
@@ -357,23 +372,27 @@ pub async fn create_review(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    
+
     // Check buyer role
-    if !claims.roles.iter().any(|r| matches!(r, Role::BuyerSearcher | Role::BuyerNegotiator)) {
+    if !claims
+        .roles
+        .iter()
+        .any(|r| matches!(r, Role::BuyerSearcher | Role::BuyerNegotiator))
+    {
         return HttpResponse::Forbidden().json(json!({
             "error_code": "FORBIDDEN",
             "message": "Buyer access required"
         }));
     }
-    
+
     let rating = review.get("rating").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-    if rating < 1 || rating > 5 {
+    if !(1..=5).contains(&rating) {
         return HttpResponse::BadRequest().json(json!({
             "error_code": "VALIDATION_ERROR",
             "message": "Rating must be between 1 and 5"
         }));
     }
-    
+
     let title = review.get("title").and_then(|v| v.as_str()).unwrap_or("");
     if title.len() < 3 || title.len() > 200 {
         return HttpResponse::BadRequest().json(json!({
@@ -381,34 +400,36 @@ pub async fn create_review(
             "message": "Title must be between 3 and 200 characters"
         }));
     }
-    
+
     let body = review.get("body").and_then(|v| v.as_str());
     let review_id = format!("rev_{}", uuid::Uuid::new_v4());
-    
+
     let pool = pool.get_ref();
-    
+
     // Get seller_account_id for this listing
     let seller_row = sqlx::query(
         "SELECT s.seller_account_id FROM listings l 
          JOIN seller_accounts s ON l.owner_id = s.owner_id 
-         WHERE l.listing_id = $1"
+         WHERE l.listing_id = $1",
     )
     .bind(listing_id.as_str())
     .fetch_optional(pool)
     .await;
-    
+
     let seller_account_id = match seller_row {
         Ok(Some(row)) => row.get::<String, _>("seller_account_id"),
-        Ok(None) => return HttpResponse::NotFound().json(json!({
-            "error_code": "NOT_FOUND",
-            "message": "Listing or seller not found"
-        })),
+        Ok(None) => {
+            return HttpResponse::NotFound().json(json!({
+                "error_code": "NOT_FOUND",
+                "message": "Listing or seller not found"
+            }))
+        }
         Err(e) => {
             error!("DB error fetching seller: {}", e);
             return HttpResponse::InternalServerError().finish();
         }
     };
-    
+
     let result = sqlx::query(
         "INSERT INTO reviews (review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')"
@@ -422,7 +443,7 @@ pub async fn create_review(
     .bind(body)
     .execute(pool)
     .await;
-    
+
     match result {
         Ok(_) => HttpResponse::Created().json(json!({
             "review_id": review_id,
@@ -448,7 +469,7 @@ pub async fn list_reviews_for_listing(
     .bind(listing_id.as_str())
     .fetch_all(pool)
     .await;
-    
+
     match rows {
         Ok(rows) => {
             let mut reviews = Vec::new();
@@ -462,7 +483,7 @@ pub async fn list_reviews_for_listing(
                 let body: Option<String> = row.get("body");
                 let status: String = row.get("status");
                 let created_at: String = row.get("created_at");
-                
+
                 reviews.push(serde_json::json!({
                     "review_id": review_id,
                     "listing_id": listing_id,
@@ -494,7 +515,7 @@ pub async fn approve_review(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    
+
     // Check admin role
     if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
         return HttpResponse::Forbidden().json(json!({
@@ -502,15 +523,13 @@ pub async fn approve_review(
             "message": "Admin access required"
         }));
     }
-    
+
     let pool = pool.get_ref();
-    let result = sqlx::query(
-        "UPDATE reviews SET status = 'approved' WHERE review_id = $1"
-    )
-    .bind(review_id.as_str())
-    .execute(pool)
-    .await;
-    
+    let result = sqlx::query("UPDATE reviews SET status = 'approved' WHERE review_id = $1")
+        .bind(review_id.as_str())
+        .execute(pool)
+        .await;
+
     match result {
         Ok(result) => {
             if result.rows_affected() > 0 {
@@ -539,7 +558,7 @@ pub async fn reject_review(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    
+
     // Check admin role
     if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
         return HttpResponse::Forbidden().json(json!({
@@ -547,15 +566,13 @@ pub async fn reject_review(
             "message": "Admin access required"
         }));
     }
-    
+
     let pool = pool.get_ref();
-    let result = sqlx::query(
-        "UPDATE reviews SET status = 'rejected' WHERE review_id = $1"
-    )
-    .bind(review_id.as_str())
-    .execute(pool)
-    .await;
-    
+    let result = sqlx::query("UPDATE reviews SET status = 'rejected' WHERE review_id = $1")
+        .bind(review_id.as_str())
+        .execute(pool)
+        .await;
+
     match result {
         Ok(result) => {
             if result.rows_affected() > 0 {

@@ -1,3 +1,6 @@
 pub mod db;
 
-pub use db::{ListingRow, SellerAccountRow, ReviewRow, AgentCredentialRow, IdempotencyKeyRow, IdempotencyKeyStatus};
+pub use db::{
+    AgentCredentialRow, IdempotencyKeyRow, IdempotencyKeyStatus, ListingRow, ReviewRow,
+    SellerAccountRow,
+};

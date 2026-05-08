@@ -3,7 +3,11 @@ use marketplace_auth_core::{Claims, Role, Scope};
 pub fn seller_claims() -> Claims {
     Claims {
         sub: "sub-1".to_string(),
-        roles: vec![Role::SellerListingWriter, Role::BuyerNegotiator, Role::SellerContactRevealApprover],
+        roles: vec![
+            Role::SellerListingWriter,
+            Role::BuyerNegotiator,
+            Role::SellerContactRevealApprover,
+        ],
         scopes: vec![
             Scope::ListingCreate,
             Scope::ListingRead,

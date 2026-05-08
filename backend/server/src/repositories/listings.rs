@@ -87,7 +87,11 @@ impl InMemoryListingRepository {
             // NEW: Marketplace fields
             sku: summary.listing.sku.clone(),
             quantity: summary.listing.quantity.map(|q| q as i32).unwrap_or(1),
-            shipping_info: summary.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)),
+            shipping_info: summary
+                .listing
+                .shipping_info
+                .as_ref()
+                .map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)),
             condition_details: summary.listing.condition_details.clone(),
             seller_notes: summary.listing.seller_notes.clone(),
             status: summary.status,
@@ -293,15 +297,15 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let display_name: Option<String> = row.try_get("display_name").ok();
     let seller_rating: Option<f64> = row.try_get("seller_rating").ok();
     let verified_at: Option<String> = row.try_get("verified_at").ok();
-    
+
     let seller_verified = verified_at.is_some();
     let seller_name = display_name;
-    
+
     // Phase D: Extract geolocation fields (optional)
     let latitude: Option<f64> = row.try_get("latitude").ok();
     let longitude: Option<f64> = row.try_get("longitude").ok();
     let geolocation_opt_out: Option<bool> = row.try_get("geolocation_opt_out").ok();
-    
+
     Ok(ListingSummary {
         listing_id,
         status,
@@ -332,7 +336,11 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             attributes,
             // NEW: Marketplace fields
             sku,
-            quantity: if quantity == 1 { None } else { Some(quantity as u32) },
+            quantity: if quantity == 1 {
+                None
+            } else {
+                Some(quantity as u32)
+            },
             shipping_info: shipping_info.and_then(|v| serde_json::from_value(v).ok()),
             condition_details,
             seller_notes,
@@ -372,7 +380,9 @@ impl PostgresListingRepository {
                 builder.push(" WHERE ");
                 where_added = true;
             }
-            builder.push("category = ").push_bind(db_enum_value(&category));
+            builder
+                .push("category = ")
+                .push_bind(db_enum_value(&category));
         }
         if let Some(condition) = request.condition {
             if where_added {
@@ -381,7 +391,9 @@ impl PostgresListingRepository {
                 builder.push(" WHERE ");
                 where_added = true;
             }
-            builder.push("\"condition\" = ").push_bind(db_enum_value(&condition));
+            builder
+                .push("\"condition\" = ")
+                .push_bind(db_enum_value(&condition));
         }
         if let Some(status) = request.status {
             if where_added {
@@ -438,7 +450,9 @@ impl PostgresListingRepository {
                     builder.push(" WHERE ");
                     where_added = true;
                 }
-                builder.push("LOWER(city) = ").push_bind(city.to_ascii_lowercase());
+                builder
+                    .push("LOWER(city) = ")
+                    .push_bind(city.to_ascii_lowercase());
             }
         }
         if let Some(query) = &request.query {
@@ -452,10 +466,14 @@ impl PostgresListingRepository {
             if query.to_lowercase().starts_with("seller:") {
                 // Extract seller name after "seller:" prefix
                 let seller_query = query.trim_start_matches("seller:").trim();
-                builder.push("s.display_name ILIKE ").push_bind(format!("%{}%", seller_query));
+                builder
+                    .push("s.display_name ILIKE ")
+                    .push_bind(format!("%{}%", seller_query));
             } else {
                 // Normal search in search_text
-                builder.push("search_text LIKE ").push_bind(format!("%{}%", query.to_ascii_lowercase()));
+                builder
+                    .push("search_text LIKE ")
+                    .push_bind(format!("%{}%", query.to_ascii_lowercase()));
             }
         }
 
@@ -481,7 +499,9 @@ impl PostgresListingRepository {
 
         // Phase D: Geolocation search ("near me")
         if let Some(true) = request.near_me {
-            if let (Some(user_lat), Some(user_lon)) = (request.user_latitude, request.user_longitude) {
+            if let (Some(user_lat), Some(user_lon)) =
+                (request.user_latitude, request.user_longitude)
+            {
                 if where_added {
                     builder.push(" AND ");
                 } else {
@@ -490,28 +510,47 @@ impl PostgresListingRepository {
                 }
                 // Only include listings that opted in (have coordinates and didn't opt out)
                 builder.push("l.latitude IS NOT NULL AND l.longitude IS NOT NULL ");
-                builder.push("AND (l.geolocation_opt_out IS NULL OR l.geolocation_opt_out = false) ");
-                
+                builder
+                    .push("AND (l.geolocation_opt_out IS NULL OR l.geolocation_opt_out = false) ");
+
                 // Calculate distance using Haversine formula (inline in WHERE)
-                let radius_km = request.radius_km.unwrap_or(50.0);  // Default: 50km
-                
+                let radius_km = request.radius_km.unwrap_or(50.0); // Default: 50km
+
                 builder.push("AND (");
-                builder.push("  6371 * acos(");  // Earth's radius in km
-                builder.push("    cos(radians(").push_bind(user_lat).push(")) * ");
+                builder.push("  6371 * acos("); // Earth's radius in km
+                builder
+                    .push("    cos(radians(")
+                    .push_bind(user_lat)
+                    .push(")) * ");
                 builder.push("    cos(radians(l.latitude)) * ");
-                builder.push("    cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
-                builder.push("    sin(radians(").push_bind(user_lat).push(")) * ");
+                builder
+                    .push("    cos(radians(l.longitude) - radians(")
+                    .push_bind(user_lon)
+                    .push(")) + ");
+                builder
+                    .push("    sin(radians(")
+                    .push_bind(user_lat)
+                    .push(")) * ");
                 builder.push("    sin(radians(l.latitude))");
                 builder.push("  ) <= ").push_bind(radius_km);
                 builder.push(")");
-                
+
                 // Order by distance (nearest first) - compute inline
                 builder.push(" ORDER BY ");
                 builder.push("  6371 * acos(");
-                builder.push("    cos(radians(").push_bind(user_lat).push(")) * ");
+                builder
+                    .push("    cos(radians(")
+                    .push_bind(user_lat)
+                    .push(")) * ");
                 builder.push("    cos(radians(l.latitude)) * ");
-                builder.push("    cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
-                builder.push("    sin(radians(").push_bind(user_lat).push(")) * ");
+                builder
+                    .push("    cos(radians(l.longitude) - radians(")
+                    .push_bind(user_lon)
+                    .push(")) + ");
+                builder
+                    .push("    sin(radians(")
+                    .push_bind(user_lat)
+                    .push(")) * ");
                 builder.push("    sin(radians(l.latitude))");
                 builder.push("  ) ASC, l.listing_id");
             } else {

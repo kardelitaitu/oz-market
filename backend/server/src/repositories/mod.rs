@@ -6,14 +6,14 @@ pub mod listings;
 pub mod negotiations;
 pub mod outbox_events;
 pub mod reservations;
-pub mod seller_accounts;
 pub mod reviews;
+pub mod seller_accounts;
 
 use std::fmt::{Display, Formatter};
 
 pub const MODULE_NAME: &str = "repositories";
 
-pub use reviews::{ReviewRepository, InMemoryReviewRepository, PostgresReviewRepository};
+pub use reviews::{InMemoryReviewRepository, PostgresReviewRepository, ReviewRepository};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepositoryErrorKind {
@@ -54,8 +54,10 @@ pub use contact_reveals::{
     ContactRevealRepository, InMemoryContactRevealRepository, PostgresContactRevealRepository,
 };
 pub use idempotency_keys::IdempotencyKeyRepository;
-pub use listings::{ListingRepository, InMemoryListingRepository, PostgresListingRepository};
-pub use negotiations::{InMemoryNegotiationRepository, NegotiationRepository, PostgresNegotiationRepository};
+pub use listings::{InMemoryListingRepository, ListingRepository, PostgresListingRepository};
+pub use negotiations::{
+    InMemoryNegotiationRepository, NegotiationRepository, PostgresNegotiationRepository,
+};
 pub use outbox_events::OutboxEventRepository;
 pub use reservations::{
     InMemoryReservationLeaseRepository, PostgresReservationLeaseRepository,
