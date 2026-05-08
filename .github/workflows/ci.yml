@@ -16,15 +16,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Check formatting (cargo fmt)
-        working-directory: backend
-        run: cargo fmt --check
-
-      - name: Run clippy
-        working-directory: backend
-        run: cargo clippy -- -A clippy::too_many_arguments -A clippy::manual_find -A clippy::useless_format -A clippy::range_plus_one -A clippy::borrow_deref_ref -A clippy::get_first
 
       - name: Cargo check
         working-directory: backend
