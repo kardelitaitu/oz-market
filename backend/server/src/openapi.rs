@@ -1,7 +1,7 @@
 //! OpenAPI documentation generator
 //! 
 //! Serves the existing OpenAPI spec from docs/specs/openapi.yaml.
-//! Converts YAML to JSON for the /api-docs/openapi.json endpoint.
+//! Provides a simple redirect to Swagger Editor for interactive docs.
 
 use serde_json;
 use serde_yaml;
@@ -71,4 +71,23 @@ pub async fn serve_openapi_json() -> impl actix_web::Responder {
     actix_web::HttpResponse::Ok()
         .content_type("application/json")
         .body(generate_openapi_json())
+}
+
+/// Serve a simple HTML page that redirects to Swagger Editor with our spec
+pub async fn serve_swagger_editor() -> impl actix_web::Responder {
+    let html = r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Marketplace API Docs</title>
+    <meta http-equiv="refresh" content="0; url=https://editor.swagger.io/?url=http://localhost:3003/api-docs/openapi.json">
+</head>
+<body>
+    <p>Redirecting to Swagger Editor... <a href="https://editor.swagger.io/?url=http://localhost:3003/api-docs/openapi.json">click here</a> if not redirected.</p>
+</body>
+</html>
+"#;
+    actix_web::HttpResponse::Ok()
+        .content_type("text/html")
+        .body(html)
 }

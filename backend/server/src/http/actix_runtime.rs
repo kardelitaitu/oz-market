@@ -20,8 +20,8 @@ use tracing::{info, error};
 use tracing_actix_web::TracingLogger;
 
 // OpenAPI documentation
-// use utoipa_swagger_ui::SwaggerUi; // Removed - manual spec now
-// use crate::openapi::ApiDoc; // Removed - manual spec now
+// use utoipa_swagger_ui::SwaggerUi; // Not used - using redirect to Swagger Editor
+// use crate::openapi::ApiDoc; // Not needed - we serve JSON directly
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -63,6 +63,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
             .app_data(pool_data.clone())
+            // Redirect to Swagger Editor for interactive docs
+            .route("/docs", web::get().to(crate::openapi::serve_swagger_editor))
             // Serve OpenAPI JSON
             .route("/api-docs/openapi.json", web::get().to(crate::openapi::serve_openapi_json))
             // Public API v1 routes
