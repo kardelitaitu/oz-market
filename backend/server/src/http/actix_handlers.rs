@@ -11,6 +11,7 @@ use marketplace_api_contract::{
     OpenNegotiationRequest, RequestContactRevealRequest,
 };
 use marketplace_auth_core::{Claims, Role};
+use sqlx::Row;
 use serde_json::json;
 use moka::future::Cache;
 use std::sync::Arc;
@@ -340,3 +341,130 @@ pub async fn recalculate_seller_rating(
     }
 }
 
+
+/// Create a review for a listing (buyer only)
+pub async fn create_review(
+    pool: web::Data<sqlx::postgres::PgPool>,
+    listing_id: web::Path<String>,
+    review: web::Json<serde_json::Value>,
+    req: HttpRequest,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    
+    // Check buyer role
+    if !claims.roles.iter().any(|r| matches!(r, Role::BuyerSearcher | Role::BuyerNegotiator)) {
+        return HttpResponse::Forbidden().json(json!({
+            "error_code": "FORBIDDEN",
+            "message": "Buyer access required"
+        }));
+    }
+    
+    let rating = review.get("rating").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    if rating < 1 || rating > 5 {
+        return HttpResponse::BadRequest().json(json!({
+            "error_code": "VALIDATION_ERROR",
+            "message": "Rating must be between 1 and 5"
+        }));
+    }
+    
+    let title = review.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    if title.len() < 3 || title.len() > 200 {
+        return HttpResponse::BadRequest().json(json!({
+            "error_code": "VALIDATION_ERROR",
+            "message": "Title must be between 3 and 200 characters"
+        }));
+    }
+    
+    let body = review.get("body").and_then(|v| v.as_str());
+    let review_id = format!("rev_{}", uuid::Uuid::new_v4());
+    
+    let pool = pool.get_ref();
+    
+    // Get seller_account_id for this listing
+    let seller_row = sqlx::query(
+        "SELECT s.seller_account_id FROM listings l 
+         JOIN seller_accounts s ON l.owner_id = s.owner_id 
+         WHERE l.listing_id = $1"
+    )
+    .bind(listing_id.as_str())
+    .fetch_optional(pool)
+    .await;
+    
+    let seller_account_id = match seller_row {
+        Ok(Some(row)) => row.get::<String, _>("seller_account_id"),
+        Ok(None) => return HttpResponse::NotFound().json(json!({
+            "error_code": "NOT_FOUND",
+            "message": "Listing or seller not found"
+        })),
+        Err(e) => {
+            error!("DB error fetching seller: {}", e);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    
+    let result = sqlx::query(
+        "INSERT INTO reviews (review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')"
+    )
+    .bind(&review_id)
+    .bind(listing_id.as_str())
+    .bind(&seller_account_id)
+    .bind(&claims.sub)
+    .bind(rating)
+    .bind(title)
+    .bind(body)
+    .execute(pool)
+    .await;
+    
+    match result {
+        Ok(_) => HttpResponse::Created().json(json!({
+            "review_id": review_id,
+            "status": "pending"
+        })),
+        Err(e) => {
+            error!("Create review error: {}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+/// List reviews for a listing
+pub async fn list_reviews_for_listing(
+    pool: web::Data<sqlx::postgres::PgPool>,
+    listing_id: web::Path<String>,
+) -> impl Responder {
+    let pool = pool.get_ref();
+    let rows = sqlx::query(
+        "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at
+         FROM reviews WHERE listing_id = $1 ORDER BY created_at DESC"
+    )
+    .bind(listing_id.as_str())
+    .fetch_all(pool)
+    .await;
+    
+    match rows {
+        Ok(rows) => {
+            let reviews: Vec<serde_json::Value> = rows.into_iter().map(|row| {
+                json!({
+                    "review_id": row.get::<String, _>("review_id"),
+                    "listing_id": row.get::<String, _>("listing_id"),
+                    "seller_account_id": row.get::<String, _>("seller_account_id"),
+                    "reviewer_id": row.get::<String, _>("reviewer_id"),
+                    "rating": row.get::<i32, _>("rating"),
+                    "title": row.get::<String, _>("title"),
+                    "body": row.get::<Option<String>, _>("body"),
+                    "status": row.get::<String, _>("status"),
+                    "created_at": row.get::<String, _>("created_at"),
+                })
+            }).collect();
+            HttpResponse::Ok().json(reviews)
+        }
+        Err(e) => {
+            error!("List reviews error: {}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}

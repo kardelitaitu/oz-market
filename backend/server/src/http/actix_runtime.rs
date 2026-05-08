@@ -65,6 +65,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .route("/listings/search", web::get().to(crate::http::actix_handlers::search_listings))
                     .route("/listings/{listing_id}", web::get().to(crate::http::actix_handlers::get_listing))
                     .route("/listings", web::post().to(crate::http::actix_handlers::create_listing))
+                    .route("/listings/{listing_id}/reviews", web::post().to(crate::http::actix_handlers::create_review))
+                    .route("/listings/{listing_id}/reviews", web::get().to(crate::http::actix_handlers::list_reviews_for_listing))
                     .route("/negotiations", web::post().to(crate::http::actix_handlers::open_negotiation))
                     .route("/contact-reveals", web::post().to(crate::http::actix_handlers::request_contact_reveal))
             )
