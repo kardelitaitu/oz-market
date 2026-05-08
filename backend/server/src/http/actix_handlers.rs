@@ -438,7 +438,7 @@ pub async fn list_reviews_for_listing(
 ) -> impl Responder {
     let pool = pool.get_ref();
     let rows = sqlx::query(
-        "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status
+        "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at::text as created_at
          FROM reviews WHERE listing_id = $1 ORDER BY created_at DESC"
     )
     .bind(listing_id.as_str())
@@ -447,18 +447,30 @@ pub async fn list_reviews_for_listing(
     
     match rows {
         Ok(rows) => {
-            let reviews: Vec<serde_json::Value> = rows.into_iter().map(|row| {
-                json!({
-                    "review_id": row.get::<String, _>("review_id"),
-                    "listing_id": row.get::<String, _>("listing_id"),
-                    "seller_account_id": row.get::<String, _>("seller_account_id"),
-                    "reviewer_id": row.get::<String, _>("reviewer_id"),
-                    "rating": row.get::<i32, _>("rating"),
-                    "title": row.get::<String, _>("title"),
-                    "body": row.get::<Option<String>, _>("body"),
-                    "status": row.get::<String, _>("status"),
-                })
-            }).collect();
+            let mut reviews = Vec::new();
+            for row in rows {
+                let review_id: String = row.get("review_id");
+                let listing_id: String = row.get("listing_id");
+                let seller_account_id: String = row.get("seller_account_id");
+                let reviewer_id: String = row.get("reviewer_id");
+                let rating: i32 = row.get("rating");
+                let title: String = row.get("title");
+                let body: Option<String> = row.get("body");
+                let status: String = row.get("status");
+                let created_at: String = row.get("created_at");
+                
+                reviews.push(serde_json::json!({
+                    "review_id": review_id,
+                    "listing_id": listing_id,
+                    "seller_account_id": seller_account_id,
+                    "reviewer_id": reviewer_id,
+                    "rating": rating,
+                    "title": title,
+                    "body": body,
+                    "status": status,
+                    "created_at": created_at,
+                }));
+            }
             HttpResponse::Ok().json(reviews)
         }
         Err(e) => {
