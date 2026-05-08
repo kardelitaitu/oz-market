@@ -20,9 +20,8 @@ use tracing::{info, error};
 use tracing_actix_web::TracingLogger;
 
 // OpenAPI documentation
-// use utoipa::path; // Removed to avoid ambiguity
-use utoipa_swagger_ui::SwaggerUi;
-use crate::openapi::ApiDoc;
+// use utoipa_swagger_ui::SwaggerUi; // Removed - manual spec now
+// use crate::openapi::ApiDoc; // Removed - manual spec now
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {

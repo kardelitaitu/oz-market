@@ -77,19 +77,6 @@ fn extract_claims(req: &HttpRequest) -> Result<Claims, HttpResponse> {
 
 // --- Listing handlers ---
 
-#[path(
-    get,
-    path = "/v1/listings/{listing_id}",
-    params(
-        ("listing_id" = String, Path, description = "Listing ID")
-    ),
-    responses(
-        (status = 200, description = "Listing found", body = ListingSummary),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "Listing not found")
-    ),
-    tag = "listings"
-)]
 pub async fn get_listing(
     app: web::Data<ActixApp>,
     listing_cache: web::Data<Cache<String, String>>,
