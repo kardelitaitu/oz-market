@@ -24,6 +24,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 metrics = "0.22"
 metrics-exporter-prometheus = "0.12"
 uuid = "1"
+serde_yaml = "0.9"
 
 # OpenAPI generation
 utoipa = "3"
