@@ -438,7 +438,7 @@ pub async fn list_reviews_for_listing(
 ) -> impl Responder {
     let pool = pool.get_ref();
     let rows = sqlx::query(
-        "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status, created_at
+        "SELECT review_id, listing_id, seller_account_id, reviewer_id, rating, title, body, status
          FROM reviews WHERE listing_id = $1 ORDER BY created_at DESC"
     )
     .bind(listing_id.as_str())
@@ -457,7 +457,6 @@ pub async fn list_reviews_for_listing(
                     "title": row.get::<String, _>("title"),
                     "body": row.get::<Option<String>, _>("body"),
                     "status": row.get::<String, _>("status"),
-                    "created_at": row.get::<String, _>("created_at"),
                 })
             }).collect();
             HttpResponse::Ok().json(reviews)
