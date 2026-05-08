@@ -215,66 +215,218 @@ if let Some(query) = &request.query {
 
 ---
 
-## 4. Geolocation-Based Search ("Near Me")
+## 4. Geolocation-Based Search ("Near Me") - UPDATED!
 
-### Current State
-- ✅ Search by country_code and city
-- ❌ Cannot search by "near me" with radius
-- ❌ No distance calculation
+### Requirements:
+1. ✅ **More accurate** - Use lat/long coordinates (not just city matching)
+2. ✅ **Free** - No paid APIs, use Haversine formula
+3. ✅ **Optional** - Listings can opt out (no lat/long = excluded from "near me")
+4. ✅ **Simple** - No PostGIS required!
 
-### Implementation
+### 4.1 Add Location Fields to Listings (Optional)
 
-#### 4.1 Add PostGIS Extension (Optional - Heavy)
-For true geolocation, need PostGIS. For simplicity, use **city + country** matching:
-
-#### 4.2 Simple "Near Me" Implementation
 **File**: `backend/crates/api-contract/src/listing.rs`
 
-Add to `SearchRequest`:
+```rust
+pub struct ListingLocation {
+    pub country_code: String,
+    pub country_name: String,
+    pub city: String,
+    // NEW: Optional coordinates (listing can opt out)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geolocation_opt_out: Option<bool>,  // NEW: Explicit opt-out
+}
+```
+
+**Logic**:
+- If `geolocation_opt_out = Some(true)` → Exclude from "near me" searches
+- If `latitude` or `longitude` is `None` → Exclude from "near me" (opted out)
+- If both present → Include in distance calculations
+
+---
+
+### 4.2 Add to SearchRequest
+
+**File**: `backend/crates/api-contract/src/listing.rs`
+
 ```rust
 pub struct SearchRequest {
     // ... existing fields
+    
+    // NEW: "Near me" search
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub near_me: Option<bool>,  // NEW: Use requestor's location
+    pub near_me: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub latitude: Option<f64>,   // NEW: For "near me" (future)
+    pub user_latitude: Option<f64>,   // From browser Geolocation API
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub longitude: Option<f64>,  // NEW: For "near me" (future)
+    pub user_longitude: Option<f64>,  // From browser Geolocation API
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub radius_km: Option<f64>,  // NEW: Search radius (default: 50km)
 }
 ```
 
-#### 4.3 Get User's Location from Claims
-**File**: `backend/server/src/http/actix_handlers.rs`
+---
 
-Extract location from claims or request:
+### 4.3 Haversine Distance Calculation (No PostGIS!)
+
+**File**: `backend/server/src/repositories/listings.rs` (in `fetch_rows()`)
+
+Add SQL with **Haversine formula** (free, accurate distance calculation):
+
 ```rust
-// In search_listings handler, check for "near_me" flag
-if request.near_me.unwrap_or(false) {
-    // Get user's location from claims (if stored) or use default
-    // For now, just prioritize results from same city/country
+if let Some(true) = request.near_me {
+    if let (Some(user_lat), Some(user_lon)) = (request.user_latitude, request.user_longitude) {
+        if where_added {
+            builder.push(" AND ");
+        } else {
+            builder.push(" WHERE ");
+            where_added = true;
+        }
+        
+        // Only include listings that opted in (have coordinates and didn't opt out)
+        builder.push("l.latitude IS NOT NULL AND l.longitude IS NOT NULL ");
+        builder.push("AND (l.geolocation_opt_out IS NULL OR l.geolocation_opt_out = false) ");
+        
+        // Calculate distance using Haversine formula
+        let radius_km = request.radius_km.unwrap_or(50.0);  // Default: 50km
+        
+        builder.push("AND (");
+        builder.push("  6371 * acos(");  // Earth's radius in km
+        builder.push("    cos(radians(").push_bind(user_lat).push(")) * ");
+        builder.push("    cos(radians(l.latitude)) * ");
+        builder.push("    cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
+        builder.push("    sin(radians(").push_bind(user_lat).push(")) * ");
+        builder.push("    sin(radians(l.latitude))");
+        builder.push("  ) <= ").push_bind(radius_km);
+        builder.push(")");
+        
+        // Order by distance (nearest first)
+        builder.push(" ORDER BY distance_km ASC, l.listing_id");
+    } else {
+        // User location not provided - fall back to city/country match
+        // (already implemented via existing location filter)
+    }
 }
 ```
 
-**Simpler approach**: Add `location_preference` to claims or use cookie.
+---
 
-#### 4.4 Update OpenAPI Spec
+### 4.4 Update OpenAPI Spec
+
+**File**: `docs/specs/openapi.yaml`
+
 ```yaml
 - name: near_me
   in: query
   schema:
     type: boolean
-    description: Prioritize results near the user (uses requestor's location)
-- name: latitude
+  description: Prioritize results near the user (requires lat/long)
+
+- name: user_latitude
   in: query
   schema:
     type: number
-    description: Latitude for distance calculation (future)
-- name: longitude
+    description: User's latitude (from browser Geolocation API)
+
+- name: user_longitude
   in: query
   schema:
     type: number
-    description: Longitude for distance calculation (future)
+    description: User's longitude (from browser Geolocation API)
+
+- name: radius_km
+  in: query
+  schema:
+    type: number
+    minimum: 1
+    maximum: 500
+    default: 50
+    description: Search radius in kilometers (default: 50km)
 ```
+
+---
+
+### 4.5 Client-Side: Browser Geolocation API
+
+**Frontend/JavaScript**:
+```javascript
+// Get user's location from browser
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            // Send to search API
+            fetch(`/v1/listings/search?near_me=true&user_latitude=${lat}&user_longitude=${lon}&radius_km=25`)
+                .then(response => response.json())
+                .then(data => console.log(data));
+        },
+        (error) => {
+            console.log("Geolocation denied or unavailable");
+            // Fall back to city/country search
+        }
+    );
+}
+```
+
+---
+
+### 4.6 Database Migration
+
+**File**: `backend/server/migrations/0007_add_coordinates.sql` (NEW)
+
+```sql
+ALTER TABLE listings 
+ADD COLUMN latitude DECIMAL(10,8),
+ADD COLUMN longitude DECIMAL(11,8),
+ADD COLUMN geolocation_opt_out BOOLEAN DEFAULT FALSE;
+
+-- Optional: Create index for distance queries
+CREATE INDEX idx_listings_coordinates 
+ON listings (latitude, longitude) 
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+```
+
+---
+
+### 4.7 How Listings Opt Out
+
+**Option A**: **Explicit opt-out flag** (recommended)
+```sql
+UPDATE listings SET geolocation_opt_out = true WHERE listing_id = 'lst_123';
+```
+
+**Option B**: **No coordinates** (implicit opt-out)
+```rust
+// When creating listing, seller can:
+let listing = ListingPayload {
+    // ... other fields
+    location: ListingLocation {
+        country_code: "US".to_string(),
+        country_name: "United States".to_string(),
+        city: "New York".to_string(),
+        latitude: None,   // Opt out by not providing coordinates
+        longitude: None,
+        geolocation_opt_out: Some(true),  // Or explicit opt-out
+    },
+}
+```
+
+---
+
+## 📊 Summary of Changes
+
+| Feature | Implementation | Cost | Accuracy |
+|---------|-----------------|------|----------|
+| **Distance calc** | Haversine formula in SQL | ✅ Free | ✅ ~99% accurate |
+| **User location** | Browser Geolocation API | ✅ Free | ✅ High |
+| **Opt out** | `geolocation_opt_out` flag OR no lat/long | ✅ Free | ✅ Flexible |
+| **No PostGIS** | Pure SQL calculation | ✅ Free | ✅ Good enough |
 
 ---
 
