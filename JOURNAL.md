@@ -1868,3 +1868,17 @@ Since the tester has issues, test manually:
 - fixed CI failure caused by unused `std::sync::Arc` import in `backend/server/src/services/ai_cache.rs`
 - removed unused import to resolve `-D unused-imports` error in CI pipeline
 - committed and pushed fix (commit `90b7bf6`) to repair CI
+
+05-08-26--17-35
+- fixed CI by removing unused `std::sync::Arc` import in `ai_cache.rs`
+- added `cargo fmt --check` and `cargo clippy` to CI workflow
+- fixed all clippy lint issues:
+  - simplified `map_or` to direct comparison in auth-core
+  - derived `Default` for `SearchSort` enum (with `#[default]` attribute)
+  - implemented `Default` for `InMemory` repositories
+  - replaced manual loop with `Iterator::find()` in `openapi.rs`
+  - fixed `clone()` on `Option<i32>` (Copy type) in `actix_handlers.rs`
+  - used `RangeInclusive::contains` instead of manual range check
+- ran `cargo fmt` to fix all formatting issues across backend workspace
+- updated CI to suppress some stricter clippy lints (too_many_arguments, etc.)
+- committed and pushed all fixes to repair CI pipeline
