@@ -1839,3 +1839,27 @@ Since the tester has issues, test manually:
 
 **The MCP server is ready! Just needs testing.** 🚀
 
+
+## 2026-05-08 - Design Docs Added 📚
+
+### Files Added
+1. **Premium Plan & AI Credit System Design.md**
+   - Design for premium subscription plans
+   - AI credit system for users without their own API keys
+   - Pricing tiers, credit allocation, usage tracking
+
+2. **Trust & Verification System Design.md**
+   - Seller verification system design
+   - Trust levels (New, Verified, Trusted, Premium)
+   - Verification process and criteria
+
+### Status
+- ✅ Files committed and pushed (commit `0217cfb`)
+- 📋 Design only (not yet implemented)
+- 📋 Future reference for when these features are built
+
+### Next Steps
+- Implement Premium Plan features
+- Implement Trust & Verification system
+- These designs provide the blueprint
+
