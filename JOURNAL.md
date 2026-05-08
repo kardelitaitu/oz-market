@@ -1882,3 +1882,14 @@ Since the tester has issues, test manually:
 - ran `cargo fmt` to fix all formatting issues across backend workspace
 - updated CI to suppress some stricter clippy lints (too_many_arguments, etc.)
 - committed and pushed all fixes to repair CI pipeline
+
+05-08-26--17-42
+- modified check.ps1 for this project (removed speclint, adjusted for backend/Cargo.toml)
+- fixed mcp_tester.rs compilation errors:
+  - added serde_json as dependency to marketplace-mcp
+  - fixed imports: BufReader (struct) not BufRead (trait)
+  - added BufRead trait import for read_line method
+  - used serde_json directly instead of rmcp::serde_json
+- ran cargo fmt to fix formatting across backend workspace
+- all checks now pass: cargo check, cargo fmt --check, cargo clippy
+- updated AGENTS.md with new Workflow Rules (never push without asking)
