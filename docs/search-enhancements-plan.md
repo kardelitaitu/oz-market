@@ -113,16 +113,29 @@ pub enum SearchSort {
 }
 ```
 
+**IMPORTANT**: `sort_by` field in `SearchRequest` is **NOT optional** (uses `Default` impl):
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SearchRequest {
+    // ... existing fields
+    #[serde(default)]
+    pub sort_by: SearchSort,  // NOT optional! Has Default impl.
+}
+```
+
 #### 2.2 Implement Rating Sort in SQL
 **File**: `backend/server/src/repositories/listings.rs`
 
 Modify `fetch_rows()` to handle new sort options:
 ```rust
-match request.sort_by {
-    Some(SearchSort::RatingHighest) => {
+// NOTE: sort_by is NOT optional - it has a Default impl (Relevance)
+let sort_by = request.sort_by;  // No need for Option checking
+
+match sort_by {
+    SearchSort::RatingHighest => {
         builder.push(" ORDER BY s.seller_rating DESC NULLS LAST, l.listing_id");
     }
-    Some(SearchSort::RatingLowest) => {
+    SearchSort::RatingLowest => {
         builder.push(" ORDER BY s.seller_rating ASC NULLS FIRST, l.listing_id");
     }
     // ... existing sort options
@@ -135,9 +148,12 @@ match request.sort_by {
   in: query
   schema:
     $ref: '#/components/schemas/SearchSort'
+    default: "relevance"
     # Add to SearchSort enum:
     # - rating_highest
     # - rating_lowest
+    # NOTE: sort_by is NOT optional in API contract
+    # It uses Default impl (returns "relevance")
 ```
 
 ---
@@ -519,3 +535,71 @@ let listing = ListingPayload {
 **Created**: 2026-05-08  
 **Author**: pi  
 **Priority**: High (improves search experience significantly)
+
+## 🔍 Pre-Flight Checklist (Before Implementation)
+
+### 1. API Contract (`backend/crates/api-contract/src/listing.rs`)
+- [ ] Add `RatingHighest` and `RatingLowest` to `SearchSort` enum
+- [ ] Add `min_seller_rating: Option<f64>` to `SearchRequest`
+- [ ] Add `verified_sellers_only: Option<bool>` to `SearchRequest`
+- [ ] Add `near_me: Option<bool>` to `SearchRequest`
+- [ ] Add `user_latitude: Option<f64>` to `SearchRequest`
+- [ ] Add `user_longitude: Option<f64>` to `SearchRequest`
+- [ ] Add `radius_km: Option<f64>` to `SearchRequest`
+- [ ] Add `latitude: Option<f64>` to `ListingLocation`
+- [ ] Add `longitude: Option<f64>` to `ListingLocation`
+- [ ] Add `geolocation_opt_out: Option<bool>` to `ListingLocation`
+- [ ] **NOTE**: `sort_by` is `SearchSort` (NOT `Option<SearchSort>`) - has `Default` impl!
+
+### 2. Repository (`backend/server/src/repositories/listings.rs`)
+- [ ] Update `fetch_rows()` to handle new `SearchRequest` fields
+- [ ] Add `ORDER BY s.seller_rating` for `RatingHighest/RatingLowest`
+- [ ] Add `WHERE s.seller_rating >= $1` for `min_seller_rating`
+- [ ] Add `WHERE s.verified_at IS NOT NULL` for `verified_sellers_only`
+- [ ] Add Haversine formula for `near_me` (with lat/long)
+- [ ] Ensure `where_added` logic handles all new fields
+- [ ] Test SQL generation (unit tests)
+
+### 3. Search Service (`backend/server/src/services/search.rs`)
+- [ ] Update `listing_index_text()` to include `seller_name` (if available)
+- [ ] Ensure `normalize_search_terms()` handles "seller:" prefix (optional)
+
+### 4. Migration (`backend/server/migrations/0007_*.sql`)
+- [ ] `ALTER TABLE listings ADD COLUMN latitude DECIMAL(10,8)`
+- [ ] `ALTER TABLE listings ADD COLUMN longitude DECIMAL(11,8)`
+- [ ] `ALTER TABLE listings ADD COLUMN geolocation_opt_out BOOLEAN DEFAULT FALSE`
+- [ ] Update `search_text` to include `s.display_name`
+- [ ] Rebuild trigram index: `DROP INDEX IF EXISTS idx_listings_search_text; CREATE INDEX...`
+- [ ] **Test on copy** of production database first!
+
+### 5. OpenAPI Spec (`docs/specs/openapi.yaml`)
+- [ ] Add new parameters to `/listings/search`
+- [ ] Add `min_seller_rating`, `verified_sellers_only`
+- [ ] Add `near_me`, `user_latitude`, `user_longitude`, `radius_km`
+- [ ] Update `SearchSort` enum to include `rating_highest`, `rating_lowest`
+- [ ] Add examples for new parameters
+
+### 6. Handlers (`backend/server/src/http/actix_handlers.rs`)
+- [ ] Extract `near_me` from `SearchRequest` (optional)
+- [ ] No changes needed for other fields (automatically deserialized)
+
+### 7. Testing
+- [ ] **Unit tests**: Test `fetch_rows()` SQL generation with new fields
+- [ ] **Integration tests**: Test search with 100k listings (maintain ~42k ops/s)
+- [ ] **Manual tests**:
+     - Search with `min_seller_rating=4.0`
+     - Search with `verified_sellers_only=true`
+     - Sort by `rating_highest`
+     - Search by seller name: `query="seller:Shop Name"`
+     - Test `near_me=true` with lat/long
+- [ ] **Benchmark**: Ensure performance doesn't degrade!
+
+### 8. Rollback Plan (Just in Case)
+- [ ] **Keep migration reversible**: `ALTER TABLE listings DROP COLUMN IF EXISTS latitude`
+- [ ] **Feature flag**: Add `enable_geolocation_search` config (optional)
+- [ ] **Monitor performance**: Watch ops/s after deployment
+
+---
+
+**✅ Ready to start Phase A (Facetted Search) - Highest ROI!**
+
