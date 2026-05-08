@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 #[async_trait]
+#[allow(clippy::too_many_arguments)]
 pub trait ReviewRepository: Send + Sync {
     async fn create_review(
         &self,

@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if resp.status().is_success() {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(listings) = json.get("listings").and_then(|l| l.as_array()) {
-                    if let Some(first) = listings.get(0) {
+                    if let Some(first) = listings.first() {
                         if let Some(listing_id) = first.get("listing_id").and_then(|id| id.as_str())
                         {
                             println!("Found listing_id: {}", listing_id);

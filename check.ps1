@@ -123,12 +123,17 @@ if (-not $SkipClippy -and -not $failed) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        cargo clippy
+        $clippyOutput = cargo clippy 2>&1 | Out-String
         $elapsed = $sw.Elapsed.TotalSeconds
-        $passed = $LASTEXITCODE -eq 0
+        # Check if output contains warnings or errors
+        $hasWarnings = $clippyOutput -match "warning:|error:"
+        $passed = (-not $hasWarnings) -and ($LASTEXITCODE -eq 0)
         $results.Clippy = @{ Passed = $passed; Duration = $elapsed }
         Write-StepResult $passed
-        if (-not $passed) { $failed = $true }
+        if (-not $passed) { 
+            Write-Output $clippyOutput
+            $failed = $true 
+        }
     } catch {
         $elapsed = $sw.Elapsed.TotalSeconds
         $results.Clippy = @{ Passed = $false; Duration = $elapsed }

@@ -113,9 +113,9 @@ async fn main() -> Result<(), sqlx::Error> {
             .bind(city_data.1)
             .bind(city_data.2)
             .bind(serde_json::json!([format!("https://example.com/{}.jpg", listing_id)]))
-            .bind(&description)
-            .bind(&serde_json::json!({"brand": brand, "model": format!("{}-{}", category, j + 1)}))
-            .bind(&Uuid::new_v4().to_string())
+            .bind(description.clone())
+            .bind(serde_json::json!({"brand": brand, "model": format!("{}-{}", category, j + 1)}))
+            .bind(Uuid::new_v4().to_string())
             .bind(format!("{} {} {} {}", category, product_name, description, city_data.2))
             .execute(&pool)
             .await?;

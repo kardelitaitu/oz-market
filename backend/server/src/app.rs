@@ -721,6 +721,7 @@ where
         Ok(updated)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn record_audit_event(
         &self,
         entity_type: &str,

@@ -147,9 +147,9 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn metrics_handler() -> impl actix_web::Responder {
     // Simple metrics endpoint - can be extended later
-    let metrics = format!(
+    let metrics =
         "# HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n"
-    );
+            .to_string();
     actix_web::HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(metrics)

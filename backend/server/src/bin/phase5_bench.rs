@@ -204,7 +204,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let harness = if let Some(database_url) = std::env::var("DATABASE_URL").ok() {
+    let harness = if let Ok(database_url) = std::env::var("DATABASE_URL") {
         let pool = PgPoolOptions::new()
             .max_connections(5)
             .connect(&database_url)
@@ -410,10 +410,10 @@ fn benchmark_search_request() -> SearchRequest {
 fn benchmark_listing_read_pattern() -> Vec<BenchmarkStep> {
     let mut steps = Vec::with_capacity(50);
     for _ in 0..4 {
-        steps.extend(std::iter::repeat(BenchmarkStep::Read).take(9));
+        steps.extend(std::iter::repeat_n(BenchmarkStep::Read, 9));
         steps.push(BenchmarkStep::Search);
     }
-    steps.extend(std::iter::repeat(BenchmarkStep::Read).take(9));
+    steps.extend(std::iter::repeat_n(BenchmarkStep::Read, 9));
     steps.push(BenchmarkStep::OpenNegotiation);
     steps
 }
@@ -421,8 +421,8 @@ fn benchmark_listing_read_pattern() -> Vec<BenchmarkStep> {
 fn benchmark_search_heavy_pattern() -> Vec<BenchmarkStep> {
     let mut steps = Vec::with_capacity(50);
     for _ in 0..5 {
-        steps.extend(std::iter::repeat(BenchmarkStep::Search).take(6));
-        steps.extend(std::iter::repeat(BenchmarkStep::Read).take(3));
+        steps.extend(std::iter::repeat_n(BenchmarkStep::Search, 6));
+        steps.extend(std::iter::repeat_n(BenchmarkStep::Read, 3));
         steps.push(BenchmarkStep::OpenNegotiation);
     }
     steps
@@ -469,7 +469,7 @@ async fn seed_listings<A: BenchmarkAppFacade + Sync>(
 }
 
 fn build_listing_request(seed: usize) -> CreateListingRequest {
-    let thinkpad = seed % 5 != 0;
+    let thinkpad = !seed.is_multiple_of(5);
     let product_name = if thinkpad {
         format!("ThinkPad Benchmark {seed}")
     } else {
@@ -518,6 +518,7 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_profile<A: BenchmarkAppFacade + Sync>(
     name: &'static str,
     app: &A,

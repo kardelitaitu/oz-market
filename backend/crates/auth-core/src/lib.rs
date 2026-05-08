@@ -180,12 +180,8 @@ pub fn authorize(claims: &Claims, action: Action, ownership: OwnershipContext) -
             seller_account_id,
             buyer_agent_id,
         } => {
-            let seller_ok = claims
-                .seller_account_id
-                .as_ref() == Some(&seller_account_id);
-            let buyer_ok = claims
-                .buyer_agent_id
-                .as_ref() == Some(&buyer_agent_id);
+            let seller_ok = claims.seller_account_id.as_ref() == Some(&seller_account_id);
+            let buyer_ok = claims.buyer_agent_id.as_ref() == Some(&buyer_agent_id);
             if seller_ok || buyer_ok {
                 Ok(())
             } else {
