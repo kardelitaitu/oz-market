@@ -294,22 +294,29 @@ Add SQL with **Haversine formula** (free, accurate distance calculation):
 
 **⚠️ CRITICAL FIX**: The initial SELECT in `fetch_rows()` must include `distance_km` computed column when `near_me` is true!
 
-Modify the QueryBuilder to conditionally add the computed column:
+**⚠️ IMPORTANT**: Use `push_bind` for user coordinates, NOT string concatenation (SQL injection + type safety).
+
+Revised approach: Build SELECT dynamically with QueryBuilder:
 ```rust
-// At the start of fetch_rows(), build SELECT dynamically:
-let mut base_select = String::from(
+let mut builder = QueryBuilder::<Postgres>::new(
     "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, s.display_name, s.seller_rating, s.verified_at"
 );
+
+// If near_me and coordinates provided, add distance_km column
 if request.near_me.unwrap_or(false) {
-    base_select.push_str(", 6371 * acos(cos(radians(");
-    base_select.push_str(&user_lat.to_string());
-    base_select.push_str(")) * cos(radians(l.latitude)) * cos(radians(l.longitude) - radians(");
-    base_select.push_str(&user_lon.to_string());
-    base_select.push_str(")) + sin(radians(");
-    base_select.push_str(&user_lat.to_string());
-    base_select.push_str(")) * sin(radians(l.latitude))) AS distance_km");
+    if let (Some(user_lat), Some(user_lon)) = (request.user_latitude, request.user_longitude) {
+        builder.push(", 6371 * acos(");
+        builder.push("cos(radians(").push_bind(user_lat).push(")) * ");
+        builder.push("cos(radians(l.latitude)) * ");
+        builder.push("cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
+        builder.push("sin(radians(").push_bind(user_lat).push(")) * ");
+        builder.push("sin(radians(l.latitude))") ;
+        builder.push(") AS distance_km");
+    }
 }
-let mut builder = QueryBuilder::<Postgres>::new(&base_select);
+
+// Now add FROM and other clauses...
+builder.push(" FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id");
 ```
 
 Then add the WHERE clause:
