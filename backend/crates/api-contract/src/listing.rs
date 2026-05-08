@@ -51,6 +51,43 @@ pub enum SearchSort {
     PriceDesc,
     RatingHighest, // Phase B: Sort by seller rating descending
     RatingLowest,  // Phase B: Sort by seller rating ascending
+    PricePerSqmAsc,    // NEW: For property (price per sqm)
+    PricePerSqmDesc,   // NEW: For property (price per sqm)
+}
+
+// NEW: Listing type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ListingType {
+    Product,  // Physical goods (existing)
+    Service,  // Labor, consulting, digital services
+    Property, // Real estate (rent/sale)
+}
+
+// NEW: Service type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ServiceType {
+    Local,   // In-person, location-based services
+    Online,  // Remote/digital services
+}
+
+// NEW: Property transaction type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PropertyTransactionType {
+    Rent,    // Lease/rental
+    Sale,    // Permanent ownership transfer
+}
+
+// NEW: Property sub-type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PropertySubType {
+    Building,  // Commercial/industrial structures
+    House,    // Single-family homes, townhouses
+    Apartment, // Multi-unit residential
+    Land,     // Empty plots/land
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -87,9 +124,10 @@ pub struct ShippingInfo {
 pub struct ListingPayload {
     pub schema_version: String,
     pub owner_id: String,
-    pub category: Category,
-    pub product_name: String,
-    pub condition: Condition,
+    pub listing_type: ListingType,  // NEW: "product", "service", or "property"
+    pub category: Option<Category>,  // Optional: only for products
+    pub title: String,  // Used for all types (renamed from product_name)
+    pub condition: Option<Condition>,  // Optional: mainly for products
     pub price: Price,
     pub location: ListingLocation,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -97,7 +135,7 @@ pub struct ListingPayload {
     pub description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attributes: Option<serde_json::Value>,
-    // NEW: Marketplace fields
+    // Existing marketplace fields
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sku: Option<String>,
     #[serde(default)]
@@ -108,6 +146,34 @@ pub struct ListingPayload {
     pub condition_details: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seller_notes: Option<String>,
+    // NEW: Service-specific fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_type: Option<ServiceType>,  // "local" or "online"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hourly_rate: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_rate: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qualifications: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_radius_km: Option<i32>,
+    // NEW: Property-specific fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_transaction_type: Option<PropertyTransactionType>,  // "rent" or "sale"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_sub_type: Option<PropertySubType>,  // "building", "house", "apartment", "land"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_sqm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bedrooms: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bathrooms: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub year_built: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lot_size_sqm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zoning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -170,6 +236,25 @@ pub struct SearchRequest {
     pub min_seller_rating: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verified_sellers_only: Option<bool>,
+    // NEW: Listing type filter
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listing_type: Option<ListingType>,  // "product", "service", "property"
+    // NEW: Service filters
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_type: Option<ServiceType>,  // "local", "online"
+    // NEW: Property filters
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_transaction_type: Option<PropertyTransactionType>,  // "rent", "sale"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_sub_type: Option<PropertySubType>,  // "building", "house", "apartment", "land"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_bedrooms: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_bathrooms: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_area_sqm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_area_sqm: Option<f64>,
     #[serde(default)]
     pub sort_by: SearchSort,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -198,6 +283,17 @@ impl Default for SearchRequest {
             status: None,
             min_seller_rating: None,
             verified_sellers_only: None,
+            // NEW: Listing type filter
+            listing_type: None,
+            // NEW: Service filters
+            service_type: None,
+            // NEW: Property filters
+            property_transaction_type: None,
+            property_sub_type: None,
+            min_bedrooms: None,
+            min_bathrooms: None,
+            min_area_sqm: None,
+            max_area_sqm: None,
             sort_by: SearchSort::Relevance,
             limit: None,
             cursor: None,
