@@ -119,12 +119,11 @@ if (-not $SkipFormat -and -not $failed) {
 
 # ---- CLIPPY ----------------------------------------------------------
 if (-not $SkipClippy -and -not $failed) {
-    $cmd = "cargo clippy -- -A clippy::too_many_arguments -A clippy::manual_find -A clippy::useless_format -A clippy::range_plus_one -A clippy::borrow_deref_ref -A clippy::get_first"
+    $cmd = "cargo clippy"
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        # Match CI settings: suppress some strict lints
-        cargo clippy -- -A clippy::too_many_arguments -A clippy::manual_find -A clippy::useless_format -A clippy::range_plus_one -A clippy::borrow_deref_ref -A clippy::get_first 2>&1 | Out-Null
+        cargo clippy 2>&1 | Out-Null
         $elapsed = $sw.Elapsed.TotalSeconds
         $passed = $LASTEXITCODE -eq 0
         $results.Clippy = @{ Passed = $passed; Duration = $elapsed }
