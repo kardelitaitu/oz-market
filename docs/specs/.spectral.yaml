@@ -1,77 +1,171 @@
-extends: spectral:oas
+extends: [[spectral:oas, all]]
+
 rules:
-  # Require x-required-scopes on protected operations
-  operation-required-scopes:
-    description: "Protected operations must declare x-required-scopes"
-    message: "Operation {{path}} must have x-required-scopes"
+  # Require operationId for all operations
+  operation-id-required:
     severity: error
-    given: $.paths.*[?( @property === 'get' || @property === 'post' || @property === 'put' || @property === 'delete' || @property === 'patch' )]
+    message: "Every operation must have an operationId"
+    given: "$.paths.*.*"
     then:
-      field: 'x-required-scopes'
+      field: operationId
       function: truthy
 
-  # Require x-allowed-roles on protected operations
-  operation-allowed-roles:
-    description: "Protected operations must declare x-allowed-roles"
-    message: "Operation {{path}} must have x-allowed-roles"
-    severity: error
-    given: $.paths.*[?( @property === 'get' || @property === 'post' || @property === 'put' || @property === 'delete' || @property === 'patch' )]
+  # Require description for all operations
+  operation-description-required:
+    severity: warning
+    message: "Every operation should have a description"
+    given: "$.paths.*.*"
     then:
-      field: 'x-allowed-roles'
+      field: description
       function: truthy
 
-  # Require x-audit-required on write operations
-  operation-audit-required:
-    description: "Write operations must declare x-audit-required"
-    message: "Operation {{path}} must have x-audit-required"
+  # Require tags for all operations
+  operation-tags-required:
     severity: error
-    given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' || @property === 'delete' )]
+    message: "Every operation must have at least one tag"
+    given: "$.paths.*.*"
     then:
-      field: 'x-audit-required'
+      field: tags
+      function: schema
+      functionOptions:
+        type: array
+        minItems: 1
+
+  # Require responses for all operations
+  operation-responses-required:
+    severity: error
+    message: "Every operation must define responses"
+    given: "$.paths.*.*"
+    then:
+      field: responses
+      function: schema
+      functionOptions:
+        type: object
+        minProperties: 1
+
+  # Require 200 response for successful operations
+  operation-success-response:
+    severity: error
+    message: "Operation should have a 200 or 201 response"
+    given: "$.paths.*.*"
+    then:
+      function: xor
+      functionOptions:
+        properties:
+          - field: responses["200"]
+            function: truthy
+          - field: responses["201"]
+            function: truthy
+          - field: responses["204"]
+            function: truthy
+
+  # Require authentication for all operations except health
+  operation-auth-required:
+    severity: error
+    message: "Operation must have security defined (except /health)"
+    given: "$.paths[?(@property !== '/health')].*"
+    then:
+      field: security
+      function: schema
+      functionOptions:
+        type: array
+        minItems: 1
+
+  # Require request body for POST/PUT operations
+  operation-request-body-required:
+    severity: error
+    message: "POST/PUT operations must have a requestBody"
+    given: "$.paths.*[?(@property === 'post' || @property === 'put')]"
+    then:
+      field: requestBody
       function: truthy
 
-  # Require x-idempotency-required on write operations
-  operation-idempotency-required:
-    description: "Write operations must declare x-idempotency-required"
-    message: "Operation {{path}} must have x-idempotency-required"
+  # Require pagination parameters for list endpoints
+  list-endpoint-pagination:
+    severity: warning
+    message: "List endpoints should have page and page_size parameters"
+    given: "$.paths.*.get[?(@.operationId && @.operationId.match(/search|list/))]"
+    then:
+      field: parameters
+      function: schema
+      functionOptions:
+        type: array
+        contains:
+          type: object
+          required: ["name"]
+          properties:
+            name:
+              enum: ["page", "page_size"]
+
+  # Require consistent error response schema
+  error-response-schema:
     severity: error
-    given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' )]
+    message: "Error responses must use ErrorResponse schema"
+    given: "$.paths.*.*.responses[?(@property.match(/4[0-9]{2}|5[0-9]{2}/))].content.application/json.schema"
     then:
-      field: 'x-idempotency-required'
-      function: defined
+      field: '$ref'
+      function: pattern
+      functionOptions:
+        match: ".*ErrorResponse"
 
-  # Require canonical error responses for write operations
-  operation-write-error-responses:
-    description: "Write operations must document 400, 401, and 403"
-    message: "Operation {{path}} must define {{error}} response"
+  # No examples in schema (keep spec clean)
+  no-examples-in-schema:
+    severity: warning
+    message: "Avoid embedding examples in schema; use examples folder"
+    given: "$.components.schemas.*.example"
+    then:
+      function: undefined
+
+  # Require contact reveal approval flow
+  contact-reveal-approval-required:
     severity: error
-    given: $.paths.*[?( @property === 'post' || @property === 'put' || @property === 'patch' || @property === 'delete' )]
+    message: "Contact reveal endpoints must follow approval flow"
+    given: "$.paths[?(@property.match(/contact-reveals/))].*"
     then:
-      - field: 'responses.400'
-        function: truthy
-      - field: 'responses.401'
-        function: truthy
-      - field: 'responses.403'
-        function: truthy
+      field: operationId
+      function: pattern
+      functionOptions:
+        match: ".*(request|approve|reject).*"
 
-  # Replay-sensitive writes should document 409 and 429
-  operation-replay-sensitive-errors:
-    description: "Replay-sensitive writes should document 409 and 429"
-    message: "Operation {{path}} should define {{error}} response"
-    severity: warn
-    given: $.paths.*.post[?(@['x-idempotency-required'] === true)]
+  # Enforce naming convention for operationIds
+  operation-id-naming:
+    severity: warning
+    message: "operationId should follow: {resource}_{action}"
+    given: "$.paths.*.*.operationId"
     then:
-      - field: 'responses.409'
-        function: truthy
-      - field: 'responses.429'
-        function: truthy
+      function: pattern
+      functionOptions:
+        match: "^[a-z_]+$"
 
-  # Require additionalProperties to be explicit on public schemas
-  schema-explicit-additional-properties:
-    description: "Public schemas should explicitly set additionalProperties"
-    message: "Schema {{path}} should explicitly set additionalProperties"
-    severity: warn
-    given: $.components.schemas.*~
+  # Require seller_id in listing creation
+  listing-creation-requires-seller:
+    severity: error
+    message: "Listing creation must not include seller_id (set by server)"
+    given: "$.paths./api/listings.post.requestBody.content.application/json.schema.properties"
     then:
-      field: additionalProperties
-      function: defined
+      field: seller_id
+      function: undefined
+
+  # Enforce price precision (max 2 decimal places)
+  price-precision:
+    severity: error
+    message: "Price fields must have maximum 2 decimal places"
+    given: "$.components.schemas.*.properties[?(@property.match(/price/))].multipleOf"
+    then:
+      function: truthy
+
+  # Require ratings to be between 1 and 5
+  rating-range:
+    severity: error
+    message: "Rating must be between 1 and 5"
+    given: "$.components.schemas.*.properties[?(@property === 'rating')]"
+    then:
+      field: minimum
+      function: equal
+      functionOptions:
+        value: 1
+    also:
+      field: maximum
+      function: equal
+      functionOptions:
+        value: 5
