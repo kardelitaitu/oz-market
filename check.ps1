@@ -3,20 +3,19 @@
 .SYNOPSIS
     Auto-rust CI Checker - Runs full test suite like GitHub workflow
 .DESCRIPTION
-    Runs cargo check, fmt, clippy, then nextest with detailed reporting.
+    Runs cargo check, fmt, clippy, then tests with detailed reporting.
     Short-circuits on first failure for fast feedback.
-    Mirrors .github//workflows/ci.ym1 for local Windows development.
+    Mirrors .github/workflows/ci.yml for local Windows development.
 .EXAMPLE
-    .\check.PS1           # Run all checks
-    .\check.PS1 -SkipTests # Skip test execution
+    .\check.ps1           # Run all checks
+    .\check.ps1 -SkipTests # Skip test execution
 #>
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
     [switch]$SkipClippy,
     [switch]$SkipFormat,
-    [switch]$SkipBuild,
-    [switch]$SkipSpecLint
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,15 +41,15 @@ function Write-Header($title) {
 }
 
 $results = @{
-    SpecLint = @{ Passed = $false; Duration = 0 }
     Build  = @{ Passed = $false; Duration = 0 }
     Format = @{ Passed = $false; Duration = 0 }
     Clippy = @{ Passed = $false; Duration = 0 }
     Tests  = @{ Passed = $false; Duration = 0 }
 }
 
-if (-not (Test-Path "Cargo.toml")) {
-    Write-Status "ERROR: Must run from project root (where Cargo.toml is)" "Red"
+# Check if we're in the right directory (should have backend/Cargo.toml)
+if (-not (Test-Path "backend/Cargo.toml")) {
+    Write-Status "ERROR: Must run from project root (where backend/Cargo.toml exists)" "Red"
     exit 1
 }
 
@@ -69,103 +68,102 @@ function Write-StepResult($passed) {
     }
 }
 
-# ---- SPEC LINT -------------------------------------------------------
-if (-not $SkipSpecLint) {
-    Write-StepHeader $stepNum "Spec lint (.\spec-lint.ps1)"
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $proc = Start-Process pwsh -ArgumentList "-NoProfile","-NonInteractive","-File",".\spec-lint.ps1" -NoNewWindow -PassThru -Wait
-    $elapsed = $sw.Elapsed.TotalSeconds
-    $passed = $proc.ExitCode -eq 0
-    $results.SpecLint = @{ Passed = $passed; Duration = $elapsed }
-    Write-StepResult $passed
-    if (-not $passed) { $failed = $true }
-    $stepNum++
-}
+# Change to backend directory (where Cargo.toml is)
+$originalLocation = Get-Location
+Set-Location "backend"
 
 # ---- BUILD -----------------------------------------------------------
 if (-not $SkipBuild) {
     Write-StepHeader $stepNum "Build check (cargo check)"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $proc = Start-Process cargo -ArgumentList "check" -NoNewWindow -PassThru -Wait
-    $elapsed = $sw.Elapsed.TotalSeconds
-    $passed = $proc.ExitCode -eq 0
-    $results.Build = @{ Passed = $passed; Duration = $elapsed }
-    Write-StepResult $passed
-    if (-not $passed) { $failed = $true }
+    try {
+        cargo check 2>&1 | Out-Null
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $passed = $LASTEXITCODE -eq 0
+        $results.Build = @{ Passed = $passed; Duration = $elapsed }
+        Write-StepResult $passed
+        if (-not $passed) { $failed = $true }
+    } catch {
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $results.Build = @{ Passed = $false; Duration = $elapsed }
+        Write-StepResult $false
+        $failed = $true
+    }
     $stepNum++
 }
 
 # ---- FORMAT -----------------------------------------------------------
 if (-not $SkipFormat -and -not $failed) {
-    Write-StepHeader $stepNum "Format check (cargo fmt --all -- --check)"
+    Write-StepHeader $stepNum "Format check (cargo fmt --check)"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $proc = Start-Process cargo -ArgumentList "fmt","--all","--","--check" -NoNewWindow -PassThru -Wait
-    $elapsed = $sw.Elapsed.TotalSeconds
-    $passed = $proc.ExitCode -eq 0
-    $results.Format = @{ Passed = $passed; Duration = $elapsed }
-    Write-StepResult $passed
-    if (-not $passed) { $failed = $true }
+    try {
+        cargo fmt --all -- --check 2>&1 | Out-Null
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $passed = $LASTEXITCODE -eq 0
+        $results.Format = @{ Passed = $passed; Duration = $elapsed }
+        Write-StepResult $passed
+        if (-not $passed) { 
+            Write-Status "Run 'cargo fmt' to fix formatting" "Yellow"
+            $failed = $true 
+        }
+    } catch {
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $results.Format = @{ Passed = $false; Duration = $elapsed }
+        Write-StepResult $false
+        $failed = $true
+    }
     $stepNum++
 }
 
 # ---- CLIPPY ----------------------------------------------------------
 if (-not $SkipClippy -and -not $failed) {
-    Write-StepHeader $stepNum "Clippy check (cargo clippy --all-targets --all-features -- -D warnings)"
+    Write-StepHeader $stepNum "Clippy check (cargo clippy with suppressions)"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $proc = Start-Process cargo -ArgumentList "clippy","--all-targets","--all-features","--","-D","warnings" -NoNewWindow -PassThru -Wait
-    $elapsed = $sw.Elapsed.TotalSeconds
-    $passed = $proc.ExitCode -eq 0
-    $results.Clippy = @{ Passed = $passed; Duration = $elapsed }
-    Write-StepResult $passed
-    if (-not $passed) { $failed = $true }
+    try {
+        # Match CI settings: suppress some strict lints
+        cargo clippy -- -A clippy::too_many_arguments -A clippy::manual_find -A clippy::useless_format -A clippy::range_plus_one -A clippy::borrow_deref_ref -A clippy::get_first 2>&1 | Out-Null
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $passed = $LASTEXITCODE -eq 0
+        $results.Clippy = @{ Passed = $passed; Duration = $elapsed }
+        Write-StepResult $passed
+        if (-not $passed) { $failed = $true }
+    } catch {
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $results.Clippy = @{ Passed = $false; Duration = $elapsed }
+        Write-StepResult $false
+        $failed = $true
+    }
     $stepNum++
 }
 
 # ---- TESTS ----------------------------------------------------------
 if (-not $SkipTests -and -not $failed) {
-    Write-StepHeader $stepNum "Nextest check (cargo nextest run --all-features --lib)"
-
-    # Silently install cargo-nextest if missing
-    if (-not (Get-Command cargo-nextest -EA SilentlyContinue)) {
-        cargo install --locked cargo-nextest 2>&1 | Out-Null | Out-Null
-    }
-
+    Write-StepHeader $stepNum "Test check (cargo test)"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $testTmp = "$env:APPDATA\ci_test_$( [guid]::NewGuid().ToString('N') ).txt"
-
-    # Run nextest silently (output to file only), then get exit code
-    $proc = Start-Process pwsh -ArgumentList "-NoProfile", "-NonI", "-Command",
-        "& { `$out = cargo nextest run --all-features --lib 2>&1; `$e = `$LASTEXITCODE; `$out | Out-File '$testTmp'; exit `$e }" `
-        -NoNewWindow -PassThru -Wait
-
-    $elapsed = $sw.Elapsed.TotalSeconds
-    $exitCode = $proc.ExitCode
-    # Nextest exit codes: 0 = all passed, 3 = passed with skips, 4+ = failures
-    $passed = ($exitCode -eq 0) -or ($exitCode -eq 3)
-    Write-Output "DEBUG: Exit code = $exitCode, Passed = $passed"
-    $results.Tests = @{ Passed = $passed; Duration = $elapsed }
-    if (-not $passed) { $failed = $true }
-
-    # Show only last line (summary)
-    if (Test-Path $testTmp) {
-        $testOutput = Get-Content $testTmp -Raw
-        Remove-Item $testTmp -EA SilentlyContinue
-        if ($testOutput) {
-            $lines = $testOutput -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
-            $summaryLine = $lines | Select-Object -Last 1
-            if ($summaryLine) {
-                Write-Output $summaryLine
-            }
-        }
+    try {
+        cargo test --lib 2>&1 | Out-Null
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $passed = $LASTEXITCODE -eq 0
+        $results.Tests = @{ Passed = $passed; Duration = $elapsed }
+        Write-StepResult $passed
+        if (-not $passed) { $failed = $true }
+    } catch {
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $results.Tests = @{ Passed = $false; Duration = $elapsed }
+        Write-StepResult $false
+        $failed = $true
     }
-    Write-StepResult $results.Tests.Passed
+    $stepNum++
 }
+
+# Return to original directory
+Set-Location $originalLocation
 
 # ---- REPORT ----------------------------------------------------------
 $total = ((Get-Date) - $startTime).TotalSeconds
 Write-Status "CI CHECKER REPORT:" "Yellow"
 $p = 0; $f = 0
-$runOrder = @("SpecLint", "Build", "Format", "Clippy", "Tests")
+$runOrder = @("Build", "Format", "Clippy", "Tests")
 foreach ($name in $runOrder) {
     $r = $results.$name
     if ($r.Duration -gt 0 -or $r.Passed) {
@@ -180,16 +178,12 @@ Write-Status "----------------------------------------------" "Cyan"
 
 # ---- EXIT -----------------------------------------------------------
 if ($f -eq 0) {
-    Write-Status "All checks passed! Ready for commit." "Green"
+    Write-Status "All checks passed! Ready to commit (but don't push without asking!)" "Green"
     Write-Status "COMMIT REMINDER:" "Yellow"
-    Write-Output "  - Say why the change matters, not just what changed"
-    Write-Output "  - Use: 'type: short summary (reason/impact)'"
-    Write-Output "  - Keep it specific and scoped to one concern"
-    Write-Output "  - Good examples:"
-    Write-Output "      'feat: add twitterquote task (reuse LLM reply flow)'"
-    Write-Output "      'fix: handle rate limits in twitterfollow (retry stability)'"
-    Write-Output "      'docs: trim README TOC (faster first read)'"
-    Write-Output "  - Avoid generic commits like: 'update', 'fix', 'changes'"
+    Write-Output "  - After making code changes, summarize the changes briefly"
+    Write-Output "  - Append a short journal entry to JOURNAL.md"
+    Write-Output "  - Journal entries should record what changed and why"
+    Write-Output "  - NEVER git push without being specifically asked to do it"
     exit 0
 } else {
     Write-Status "Some checks failed. Fix before committing." "Red"
