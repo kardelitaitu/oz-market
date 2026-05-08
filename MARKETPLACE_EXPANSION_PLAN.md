@@ -319,28 +319,108 @@ LIMIT 20;
 
 ---
 
-## Open Questions for Review
+## Open Questions for Review (With Analysis)
 
-1. **Database Design**:
-   - Should we use **single table** with JSONB for variable fields, or **separate tables** (service_listings, property_listings)?
-   - *Current proposal*: Separate tables for clarity and indexing.
+### 1. Database Design: Single Table vs Separate Tables
 
-2. **Search Implementation**:
-   - Should we use **full-text search** (Phase B) before adding categories, or add categories first?
-   - *Recommendation*: Add categories now, FTS can be layered on later.
+**Option A: Separate Tables (Current Proposal)**
+- ✅ **Pros**: Clear schema, efficient indexing (bedrooms, hourly_rate), type safety in Rust, enforce constraints, no NULLs for irrelevant fields
+- ❌ **Cons**: JOINs needed for search, more migrations
 
-3. **Pricing Models**:
-   - Services: Should we support **tiered pricing** (different rates for different service types)?
-   - Property: Should we support **price per sqm** as a sort option?
+**Option B: Single Table with JSONB**
+- ✅ **Pros**: Flexible schema, one table, easy to add new category-specific fields
+- ❌ **Cons**: Can't index inside JSONB efficiently, slow search, no type safety, hard to enforce constraints
 
-4. **Geolocation**:
-   - Property: Should we require **exact coordinates** (lat/lng) for properties, or keep city-level for now?
-   - *Current*: Keep city-level (already have `location` field).
+**Option C: Single Table with All Columns**
+- ✅ **Pros**: No JOINs, simple queries
+- ❌ **Cons**: Many NULLs, unclear which fields apply to which type, can't enforce constraints
 
-5. **Images**:
-   - Current system has **no image support** (per spec).
-   - Should we add image support for property listings (critical for real estate)?
-   - *Recommendation*: Defer to Phase B (image support), but plan for it.
+**Industry Standard**: **Separate Tables** (or Single Table Inheritance with discriminator). 
+- E-commerce: eBay, Amazon use separate tables or table-per-type for different product types
+- Real Estate: Zillow, Realtor.com separate properties from products/services
+
+**Recommendation**: **Separate Tables** (Option A). 
+Reason: We're performance-focused (42k+ ops/s), need efficient filtering on category-specific fields.
+
+---
+
+### 2. Search Implementation: Full-Text Search vs Categories First
+
+**Option A: Add Categories First, FTS Later**
+- ✅ **Pros**: Get core functionality out, FTS is Phase B anyway, incremental development
+- ❌ **Cons**: Search within descriptions not available until FTS
+
+**Option B: Implement FTS Before Categories**
+- ✅ **Pros**: Rich search experience from day one
+- ❌ **Cons**: More complex, delays category expansion, FTS is Phase B per whitepaper
+
+**Industry Standard**: **Categories First**. 
+- Craigslist: categories first, then FTS
+- Facebook Marketplace: categories → FTS
+- Most MVPs: structured search (filters) → add FTS later
+
+**Recommendation**: **Add Categories First** (Option A). 
+Reason: FTS is already planned for Phase B; categories are needed now.
+
+---
+
+### 3. Pricing Models
+
+**Services: Tiered Pricing?**
+- **Option A**: Single rate (hourly or project)
+  - ✅ Simple, matches current `price` field
+  - ❌ Less flexible for complex services
+- **Option B**: Tiered pricing (different rates for different service types)
+  - ✅ Flexible, can have "basic" vs "premium" rates
+  - ❌ Complex, requires `pricing_tiers` table
+
+**Industry Standard**: **Single rate** for MVP, add tiered later. 
+- Upwork, Fiverr started with simple hourly/project rates.
+
+**Property: Price per sqm Sort?**
+- ✅ Useful for comparing properties
+- ❌ Only works if `area_sqm` is populated
+- **Recommendation**: Add as a `SearchSort` option: `price_per_sqm_asc/desc`
+
+---
+
+### 4. Geolocation
+
+**Option A: City-Level (Current)**
+- ✅ Simple, already have `location` field
+- ❌ Less precise, can't do "within 5km" searches
+
+**Option B: Exact Coordinates (lat/lng)**
+- ✅ Precise, enables radius searches
+- ❌ More complex, requires geocoding API, privacy concerns
+
+**Option C: Both (Hybrid)**
+- Add `lat`/`lng` fields optional, keep `location` as fallback
+- ✅ Best of both worlds
+- ❌ More fields to maintain
+
+**Industry Standard**: **Both** (Hybrid). 
+- Zillow, Realtor.com: coordinates for map views and radius searches, but also store city/state for filtering
+- Craigslist: city-level (simpler MVP)
+
+**Recommendation for MVP**: **Keep City-Level** (Option A). 
+Reason: Simpler, matches current architecture. Add coordinates in Phase B (Geolocation enhancement).
+
+---
+
+### 5. Images
+
+**Current State**: No image support (per spec).
+
+**Question**: Should we add image support for property listings (critical for real estate)?
+
+**Industry Standard**: 
+- Zillow: 30+ photos per listing
+- Realtor.com: professional photos, virtual tours
+- Craigslist: basic image support
+
+**Recommendation**: **Defer to Phase B** (image support), but plan for it. 
+Reason: Not critical for MVP; can launch with text-only, add images later.
 
 ---
 
