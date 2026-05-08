@@ -14,13 +14,20 @@ use tracing::{debug, info};
 /// Cached AI response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedResponse {
+    /// The content of the AI response
     pub content: String,
+    /// Model used for the response (e.g., "gpt-4", "openrouter/...")
     pub model: String,
+    /// Hash of the prompt (system + user + model) used as cache key
     pub prompt_hash: String,
-    pub cached_at: String,  // Simplified: store as string instead of chrono
+    /// Timestamp when cached (simplified to string for now)
+    pub cached_at: String,
 }
 
 /// AI Prompt Cache Service
+/// 
+/// Uses Moka cache for in-memory storage with TTL expiration.
+/// Designed to be provider-agnostic (works with any AI service).
 #[derive(Clone)]
 pub struct AiPromptCache {
     cache: Cache<String, CachedResponse>,
@@ -29,6 +36,16 @@ pub struct AiPromptCache {
 
 impl AiPromptCache {
     /// Create a new AI prompt cache
+    ///
+    /// # Arguments
+    /// * `enabled` - Whether caching is enabled
+    /// * `max_capacity` - Maximum number of entries in cache
+    ///
+    /// # Example
+    /// ```rust
+    /// use marketplace_server::services::ai_cache::AiPromptCache;
+    /// let cache = AiPromptCache::new(true, 1000);
+    /// ```
     pub fn new(enabled: bool, max_capacity: u64) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_capacity)
@@ -44,6 +61,8 @@ impl AiPromptCache {
     }
     
     /// Generate a hash for a prompt (used as cache key)
+    ///
+    /// Combines system_prompt, user_prompt, and model into a single hash.
     fn hash_prompt(system_prompt: &str, user_prompt: &str, model: &str) -> String {
         let mut hasher = DefaultHasher::new();
         system_prompt.hash(&mut hasher);
@@ -53,6 +72,8 @@ impl AiPromptCache {
     }
     
     /// Try to get a cached response
+    ///
+    /// Returns `Some(CachedResponse)` if found, `None` if not in cache or cache disabled.
     pub fn get_cached(
         &self,
         system_prompt: &str,
@@ -84,6 +105,8 @@ impl AiPromptCache {
     }
     
     /// Cache an AI response
+    ///
+    /// Stores the response in cache if caching is enabled.
     pub fn cache_response(
         &self,
         system_prompt: &str,
@@ -112,6 +135,8 @@ impl AiPromptCache {
     }
     
     /// Get cache statistics
+    ///
+    /// Returns (entry_count, weighted_size) where weighted_size is approximate memory usage.
     pub fn stats(&self) -> (u64, u64) {
         (self.cache.entry_count(), self.cache.weighted_size())
     }

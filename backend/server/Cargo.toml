@@ -25,5 +25,9 @@ metrics = "0.22"
 metrics-exporter-prometheus = "0.12"
 uuid = "1"
 
+# OpenAPI generation
+utoipa = { version = "4", features = ["actix_extras", "yaml"] }
+utoipa-swagger-ui = { version = "6", features = ["actix-web"] }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

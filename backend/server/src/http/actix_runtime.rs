@@ -18,6 +18,11 @@ use std::sync::Arc;
 // Production hardening: tracing
 use tracing::{info, error};
 use tracing_actix_web::TracingLogger;
+
+// OpenAPI documentation
+// use utoipa::path; // Removed to avoid ambiguity
+use utoipa_swagger_ui::SwaggerUi;
+use crate::openapi::ApiDoc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -59,6 +64,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
             .app_data(pool_data.clone())
+            // Swagger UI for interactive API docs
+            .service(SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()))
             // Public API v1 routes
             .service(
                 web::scope("/v1")

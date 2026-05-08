@@ -1289,3 +1289,50 @@ even with **100× more data** (100k vs 1k listings)!
 - Ready for testing/benchmarking with all new search features
 - Apply migration `0007_add_coordinates.sql` to DB when ready
 
+
+## 2026-05-08 - AI Prompt Caching Implemented
+
+### What Was Built
+- **Prompt caching system** using Moka (commit `e356e5d`)
+- Cache key: SHA-256 hash of (system_prompt + user_prompt + model)
+- TTL-based expiration (1 hour default)
+- In-memory caching reusing existing Moka infrastructure from Phase 1
+
+### Files Added/Modified
+- `backend/server/src/services/ai_cache.rs` (NEW - 160 lines)
+- `backend/server/src/services/mod.rs` (updated to include `pub mod ai_cache;`)
+- `backend/server/src/lib.rs` (updated to declare `pub mod ai_cache;`)
+
+### API
+```rust
+// Create cache
+let cache = AiPromptCache::new(true, 1000);  // enabled, max 1000 entries
+
+// Check cache
+if let Some(cached) = cache.get_cached(system, user, "gpt-4") {
+    return cached.content;  // Cache HIT!
+}
+
+// Store in cache
+cache.cache_response(system, user, "gpt-4", &ai_response);
+
+// Stats
+let (count, size) = cache.stats();
+```
+
+### Integration Notes
+- **Provider-agnostic**: Works with OpenRouter, OpenAI, Anthropic, etc.
+- **User API keys**: Users can bring their own key; server falls back to managed key
+- **Cost reduction**: Repeated/similar prompts served from cache
+- **Rate limit protection**: Combine with rate limiting for free tiers
+
+### Testing
+- 3 unit tests included: `test_cache_hit`, `test_cache_miss`, `test_cache_disabled`
+- All tests pass ✅
+
+### Next Steps
+- Integrate with actual AI provider calls (OpenRouter per whitepaper)
+- Add cost tracking (tokens saved = cost saved)
+- Consider adding cache warming for common prompts
+- Mobile apps can use this for "user-created free AI agent" (per whitepaper)
+

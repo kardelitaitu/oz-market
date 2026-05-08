@@ -7,6 +7,7 @@ pub mod errors;
 pub mod http;
 pub mod models;
 pub mod observability;
+pub mod openapi;
 pub mod repositories;
 pub mod services;
 pub mod test_support;
