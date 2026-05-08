@@ -1925,3 +1925,15 @@ Since the tester has issues, test manually:
 - added multiple JSON examples (online service, local service, apartment, house, land)
 - updated all tables, structs, enums, and database migration examples
 - document now reflects refined category structure for review
+
+05-08-26--20-52
+- Phase 1 COMPLETED: Backend Data Model updated
+- Added ListingType enum: Product, Service, Property
+- Added ServiceType enum: Local, Online
+- Added PropertyTransactionType enum: Rent, Sale
+- Added PropertySubType enum: Building, House, Apartment, Land
+- Updated ListingPayload to include listing_type and conditional fields
+- Updated SearchRequest with new filters (listing_type, service_type, property filters)
+- Updated SearchSort to include PricePerSqmAsc/Desc
+- All api-contract changes compile successfully
+- Updated MARKETPLACE_EXPANSION_PLAN.md to mark Phase 1 as COMPLETED
