@@ -1909,3 +1909,19 @@ Since the tester has issues, test manually:
   - ReviewRepository trait in repositories/reviews.rs
   - run_profile in phase5_bench.rs
 - now check.ps1 passes with all checks: Build, Format, Clippy
+
+05-08-26--18-35
+- created MARKETPLACE_EXPANSION_PLAN.md in root directory
+- planning document to expand marketplace categories beyond products
+- proposes adding Services (labor, consulting, digital) and Property (rent/sale: building, housing, land)
+- includes data model changes, API updates, DB migrations, phased implementation plan
+- document status: DRAFT, ready for team review
+
+05-08-26--18-47
+- updated MARKETPLACE_EXPANSION_PLAN.md with user's sub-type preferences
+- Services: changed to 'local' and 'online' (not hourly/project)
+- Property: changed to 'building', 'house', 'apartment', 'land' (not 'housing')
+- added 'service_radius_km' field for local services
+- added multiple JSON examples (online service, local service, apartment, house, land)
+- updated all tables, structs, enums, and database migration examples
+- document now reflects refined category structure for review
