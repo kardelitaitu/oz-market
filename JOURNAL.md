@@ -1863,3 +1863,8 @@ Since the tester has issues, test manually:
 - Implement Trust & Verification system
 - These designs provide the blueprint
 
+
+05-08-26--17-25
+- fixed CI failure caused by unused `std::sync::Arc` import in `backend/server/src/services/ai_cache.rs`
+- removed unused import to resolve `-D unused-imports` error in CI pipeline
+- committed and pushed fix (commit `90b7bf6`) to repair CI
