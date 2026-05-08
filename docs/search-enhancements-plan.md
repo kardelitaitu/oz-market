@@ -123,24 +123,61 @@ pub struct SearchRequest {
 }
 ```
 
-#### 2.2 Implement Rating Sort in SQL
-**File**: `backend/server/src/repositories/listings.rs`
+#### 2.2 Implement Rating Sort in Rust (compare_search_items)
+**File**: `backend/server/src/services/search.rs`
 
-Modify `fetch_rows()` to handle new sort options:
+**IMPORTANT**: Current architecture uses **Rust sorting** via `compare_search_items()`, not SQL ORDER BY!
+
+Update `compare_search_items()` to handle new sort options:
 ```rust
-// NOTE: sort_by is NOT optional - it has a Default impl (Relevance)
-let sort_by = request.sort_by;  // No need for Option checking
-
-match sort_by {
-    SearchSort::RatingHighest => {
-        builder.push(" ORDER BY s.seller_rating DESC NULLS LAST, l.listing_id");
+pub fn compare_search_items(
+    a: &ListingSummary,
+    b: &ListingSummary,
+    query_terms: &[String],
+    sort_by: SearchSort,
+) -> Ordering {
+    match sort_by {
+        SearchSort::Relevance => {
+            // ... existing relevance logic
+        }
+        SearchSort::Newest => {
+            // ... existing newest logic
+        }
+        SearchSort::PriceAsc => {
+            // ... existing price_asc logic
+        }
+        SearchSort::PriceDesc => {
+            // ... existing price_desc logic
+        }
+        // NEW: Rating sort
+        SearchSort::RatingHighest => {
+            // Sort by seller_rating descending (highest first)
+            let rating_a = a.seller_rating.unwrap_or(0.0);
+            let rating_b = b.seller_rating.unwrap_or(0.0);
+            rating_b.partial_cmp(&rating_a)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.listing_id.cmp(&b.listing_id))
+        }
+        SearchSort::RatingLowest => {
+            // Sort by seller_rating ascending (lowest first)
+            let rating_a = a.seller_rating.unwrap_or(0.0);
+            let rating_b = b.seller_rating.unwrap_or(0.0);
+            rating_a.partial_cmp(&rating_b)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.listing_id.cmp(&b.listing_id))
+        }
     }
-    SearchSort::RatingLowest => {
-        builder.push(" ORDER BY s.seller_rating ASC NULLS FIRST, l.listing_id");
-    }
-    // ... existing sort options
 }
 ```
+
+**NOTE**: `fetch_rows()` in `listings.rs` calls this function AFTER fetching rows:
+```rust
+items.sort_by(|a, b| {
+    crate::services::search::compare_search_items(a, b, &query_terms, request.sort_by)
+});
+```
+
+No SQL ORDER BY changes needed! ✅
 
 #### 2.3 Update OpenAPI Spec
 ```yaml
@@ -167,67 +204,29 @@ match sort_by {
 
 ### Implementation
 
-#### 3.1 Add Seller Name to Search Index
-**File**: `backend/server/src/services/search.rs`
+#### 3.3 Add "seller:" Search Prefix (Recommended - Simple!)
 
-Update `listing_index_text()` to include seller name:
-```rust
-pub fn listing_index_text(listing: &ListingPayload) -> String {
-    let mut parts = vec![
-        listing.product_name.clone(),
-        listing.description.clone(),
-        listing.location.city.clone(),
-        listing.location.country_name.clone(),
-    ];
-    
-    // Add seller name if available
-    if let Some(seller_name) = &listing.seller_name {
-        parts.push(seller_name.clone());
-    }
-    
-    parts.join(" ")
-}
-```
-
-#### 3.2 Update Trigram Index
-**File**: `backend/server/migrations/0007_add_seller_name_to_search.sql` (NEW)
-
-```sql
--- Update search_text to include seller name
-UPDATE listings l
-SET search_text = (
-    SELECT CONCAT_WS(' ', 
-        l2.product_name, 
-        l2.description, 
-        l2.city, 
-        l2.country_name,
-        s.display_name
-    )
-    FROM listings l2
-    LEFT JOIN seller_accounts s ON l2.owner_id = s.owner_id
-    WHERE l2.listing_id = l.listing_id
-);
-
--- Rebuild trigram index (optional, for performance)
-DROP INDEX IF EXISTS idx_listings_search_text;
-CREATE INDEX idx_listings_search_text ON listings USING GIN (search_text gin_trgm_ops);
-```
-
-#### 3.3 Add "seller:" Search Prefix (Optional)
 Allow queries like `seller:"Shop Name"` to explicitly search seller names:
 
 ```rust
 // In fetch_rows(), modify query parsing:
 if let Some(query) = &request.query {
-    // Check for "seller:" prefix
-    if query.starts_with("seller:") {
-        let seller_query = query.trim_start_matches("seller:");
+    // Check for "seller:" prefix (case-insensitive)
+    if query.to_lowercase().starts_with("seller:") {
+        let seller_query = query.trim_start_matches("seller:").trim();
         builder.push("s.display_name ILIKE ").push_bind(format!("%{}%", seller_query));
     } else {
         builder.push("l.search_text LIKE ").push_bind(format!("%{}%", query.to_ascii_lowercase()));
     }
 }
 ```
+
+**Why this approach?**
+- ✅ No need to modify `listing_index_text()` (which doesn't have access to `seller_name`)
+- ✅ No migration needed (no `search_text` rebuild)
+- ✅ Simple and fast (uses existing `s.display_name` from LEFT JOIN)
+- ✅ Works with current architecture
+- ✅ Optional: can add "seller:" prefix search later
 
 ---
 
@@ -292,6 +291,28 @@ pub struct SearchRequest {
 **File**: `backend/server/src/repositories/listings.rs` (in `fetch_rows()`)
 
 Add SQL with **Haversine formula** (free, accurate distance calculation):
+
+**⚠️ CRITICAL FIX**: The initial SELECT in `fetch_rows()` must include `distance_km` computed column when `near_me` is true!
+
+Modify the QueryBuilder to conditionally add the computed column:
+```rust
+// At the start of fetch_rows(), build SELECT dynamically:
+let mut base_select = String::from(
+    "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, s.display_name, s.seller_rating, s.verified_at"
+);
+if request.near_me.unwrap_or(false) {
+    base_select.push_str(", 6371 * acos(cos(radians(");
+    base_select.push_str(&user_lat.to_string());
+    base_select.push_str(")) * cos(radians(l.latitude)) * cos(radians(l.longitude) - radians(");
+    base_select.push_str(&user_lon.to_string());
+    base_select.push_str(")) + sin(radians(");
+    base_select.push_str(&user_lat.to_string());
+    base_select.push_str(")) * sin(radians(l.latitude))) AS distance_km");
+}
+let mut builder = QueryBuilder::<Postgres>::new(&base_select);
+```
+
+Then add the WHERE clause:
 
 ```rust
 if let Some(true) = request.near_me {
@@ -472,15 +493,17 @@ let listing = ListingPayload {
 2. ✅ Implement rating sort in SQL
 3. ✅ Update OpenAPI spec
 
-### Phase C: Seller Name Search (Medium Effort, Medium Impact)
-1. ✅ Update `listing_index_text()` to include seller name
-2. ✅ Create migration to rebuild `search_text` with seller names
-3. ✅ Test searching by seller name
+### Phase C: Seller Name Search (Low Effort, Medium Impact)
+1. ✅ Add "seller:" prefix search in `fetch_rows()` (simple approach)
+2. ✅ Test searching by seller name: `query="seller:Shop Name"`
+3. ✅ No migration needed (uses existing `s.display_name` from LEFT JOIN)
 
-### Phase D: Geolocation Search (High Effort, Medium Impact)
-1. ✅ Add `near_me` flag to `SearchRequest`
-2. ✅ Implement simple city/country prioritization
-3. ❌ (Future) Add PostGIS for true distance calculation
+### Phase D: Geolocation Search (Medium Effort, Medium Impact)
+1. ✅ Add `near_me`, `user_latitude`, `user_longitude`, `radius_km` to `SearchRequest`
+2. ✅ Add `latitude`, `longitude`, `geolocation_opt_out` to `ListingLocation`
+3. ✅ Implement Haversine distance calculation in `fetch_rows()` (no PostGIS!)
+4. ✅ Add computed `distance_km` column to SELECT when `near_me` is true
+5. ✅ Test with populated database (100k listings)
 
 ---
 
@@ -488,12 +511,12 @@ let listing = ListingPayload {
 
 | File | Changes |
 |------|---------|
-| `backend/crates/api-contract/src/listing.rs` | Add fields to `SearchRequest`, add `RatingHighest/Lowest` to `SearchSort` |
-| `backend/server/src/repositories/listings.rs` | Update `fetch_rows()` SQL for new filters and sorting |
-| `backend/server/src/services/search.rs` | Update `listing_index_text()` to include seller name |
-| `backend/server/migrations/0007_*.sql` | Migration to update `search_text` and rebuild index |
+| `backend/crates/api-contract/src/listing.rs` | Add fields to `SearchRequest`, add `RatingHighest/Lowest` to `SearchSort`, update `ListingLocation` |
+| `backend/server/src/repositories/listings.rs` | Update `fetch_rows()` SQL for new filters, rating sort, geolocation |
+| `backend/server/src/services/search.rs` | Update `compare_search_items()` for rating sort (RatingHighest/Lowest) |
+| `backend/server/migrations/0007_*.sql` | Migration to add lat/long columns to listings (geolocation) |
 | `docs/specs/openapi.yaml` | Add new query parameters to `/listings/search` |
-| `backend/server/src/http/actix_handlers.rs` | Extract `near_me` from request (optional) |
+| `backend/server/src/http/actix_handlers.rs` | No changes needed (auto-deserialization) |
 
 ---
 
