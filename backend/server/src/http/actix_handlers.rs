@@ -116,26 +116,6 @@ pub async fn get_listing(
     }
 }
 
-#[path(
-    get,
-    path = "/v1/listings/search",
-    params(
-        ("query" = Option<String>, Query, description = "Search query text"),
-        ("category" = Option<Category>, Query, description = "Filter by category"),
-        ("min_seller_rating" = Option<f64>, Query, description = "Minimum seller rating (1-5)"),
-        ("verified_sellers_only" = Option<bool>, Query, description = "Only verified sellers"),
-        ("sort_by" = Option<SearchSort>, Query, description = "Sort order"),
-        ("near_me" = Option<bool>, Query, description = "Search near user location"),
-        ("limit" = Option<u32>, Query, description = "Max results"),
-        ("cursor" = Option<String>, Query, description = "Pagination cursor")
-    ),
-    responses(
-        (status = 200, description = "Search results", body = SearchResponse),
-        (status = 400, description = "Invalid search parameters"),
-        (status = 401, description = "Unauthorized - missing/invalid claims")
-    ),
-    tag = "search"
-)]
 pub async fn search_listings(
     app: web::Data<ActixApp>,
     search_cache: web::Data<Cache<String, String>>,
@@ -171,18 +151,7 @@ pub async fn search_listings(
     }
 }
 
-#[path(
-    post,
-    path = "/v1/listings",
-    request_body = CreateListingRequest,
-    responses(
-        (status = 201, description = "Listing created", body = CreateListingResponse),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 409, description = "Idempotency conflict")
-    ),
-    tag = "listings"
-)]
+
 pub async fn create_listing(
     app: web::Data<ActixApp>,
     search_cache: web::Data<Cache<String, String>>,
