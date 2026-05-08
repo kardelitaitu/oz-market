@@ -910,3 +910,48 @@ Add marketplace fields to API contract, database, and server implementation.
 2. Implement review HTTP endpoints properly (with correct sqlx Row methods)
 3. Test review creation and rating updates
 4. Update OpenAPI spec with review endpoints
+
+## 2026-05-08 Session 2
+
+### Changes
+- **Enabled database triggers** for automatic `seller_rating` calculation:
+  - Created `apply_triggers.rs` binary to apply PL/pgSQL triggers
+  - Triggers now automatically update `seller_rating` on review INSERT/UPDATE/DELETE
+  - Function `update_seller_rating()` calculates average of approved reviews
+
+- **Added review HTTP endpoints**:
+  - `POST /v1/listings/{id}/reviews` - Create review (buyer only, rating 1-5, title 3-200 chars)
+  - `GET /v1/listings/{id}/reviews` - List reviews for a listing
+  - Registered routes in `actix_runtime.rs`
+  - Added `sqlx::Row` import for proper row handling
+  - Added `uuid` dependency for review ID generation
+
+- **Fixed compilation issues**:
+  - Moved `uuid` from `[dev-dependencies]` to `[dependencies]`
+  - Fixed `chrono::DateTime` issue by getting `created_at` as String
+  - Proper error handling in `apply_triggers.rs`
+
+### Commits
+- `a5e93ac` - feat(api): Add review HTTP endpoints and enable seller_rating triggers
+
+### Testing Status
+- Code compiles successfully in both debug and release modes ✅
+- Database triggers applied successfully ✅
+- Server binary builds successfully ✅
+- **Note**: Server testing deferred due to bash/Windows binary execution issues
+  - User can test manually with:
+    ```bash
+    cd backend/server
+    export MARKETPLACE_BIND="127.0.0.1:3003"
+    export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
+    target/release/marketplace-server.exe
+    ```
+
+### Next Steps
+1. Test review endpoints manually:
+   - Create review: `POST /v1/listings/{id}/reviews` with header `x-marketplace-claims: {"sub":"buyer","roles":["buyer_searcher"],"scopes":[]}`
+   - List reviews: `GET /v1/listings/{id}/reviews`
+2. Test admin recalculate-rating: `POST /internal/v1/sellers/{id}/recalculate-rating`
+3. Verify automatic `seller_rating` updates via triggers
+4. Update OpenAPI spec with review endpoints
+5. Add review status update endpoint (approve/reject)
