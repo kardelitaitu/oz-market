@@ -435,7 +435,15 @@ impl PostgresListingRepository {
                 builder.push(" WHERE ");
                 where_added = true;
             }
-            builder.push("search_text LIKE ").push_bind(format!("%{}%", query.to_ascii_lowercase()));
+            // Phase C: Check for "seller:" prefix (case-insensitive)
+            if query.to_lowercase().starts_with("seller:") {
+                // Extract seller name after "seller:" prefix
+                let seller_query = query.trim_start_matches("seller:").trim();
+                builder.push("s.display_name ILIKE ").push_bind(format!("%{}%", seller_query));
+            } else {
+                // Normal search in search_text
+                builder.push("search_text LIKE ").push_bind(format!("%{}%", query.to_ascii_lowercase()));
+            }
         }
 
         // Phase A: Faceted search filters
