@@ -178,5 +178,24 @@ pub fn compare_search_items(
             .partial_cmp(&a.listing.price.amount)
             .unwrap_or(Ordering::Equal)
             .then_with(|| a.listing_id.cmp(&b.listing_id)),
+        // Phase B: Rating sort
+        SearchSort::RatingHighest => {
+            // Sort by seller_rating descending (highest first)
+            let rating_a = a.seller_rating.unwrap_or(0.0);
+            let rating_b = b.seller_rating.unwrap_or(0.0);
+            rating_b
+                .partial_cmp(&rating_a)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.listing_id.cmp(&b.listing_id))
+        }
+        SearchSort::RatingLowest => {
+            // Sort by seller_rating ascending (lowest first)
+            let rating_a = a.seller_rating.unwrap_or(0.0);
+            let rating_b = b.seller_rating.unwrap_or(0.0);
+            rating_a
+                .partial_cmp(&rating_b)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.listing_id.cmp(&b.listing_id))
+        }
     }
 }

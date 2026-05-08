@@ -47,6 +47,8 @@ pub enum SearchSort {
     Newest,
     PriceAsc,
     PriceDesc,
+    RatingHighest,  // Phase B: Sort by seller rating descending
+    RatingLowest,   // Phase B: Sort by seller rating ascending
 }
 
 impl Default for SearchSort {

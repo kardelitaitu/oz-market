@@ -591,7 +591,7 @@ components:
       description: >
         If query exists, default sort is relevance. Otherwise default sort is
         newest. Ties are broken by listing_id.
-      enum: [relevance, newest, price_asc, price_desc]
+      enum: [relevance, newest, price_asc, price_desc, rating_highest, rating_lowest]
       example: relevance
     Price:
       type: object

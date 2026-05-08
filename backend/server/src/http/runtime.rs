@@ -734,6 +734,9 @@ fn parse_sort(input: &str) -> Option<SearchSort> {
         "newest" => Some(SearchSort::Newest),
         "price_asc" => Some(SearchSort::PriceAsc),
         "price_desc" => Some(SearchSort::PriceDesc),
+        // Phase B: Rating sort
+        "rating_highest" => Some(SearchSort::RatingHighest),
+        "rating_lowest" => Some(SearchSort::RatingLowest),
         _ => None,
     }
 }
