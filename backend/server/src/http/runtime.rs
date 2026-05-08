@@ -711,6 +711,18 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
         user_latitude: query.get("user_latitude").and_then(|v| v.parse().ok()),
         user_longitude: query.get("user_longitude").and_then(|v| v.parse().ok()),
         radius_km: query.get("radius_km").and_then(|v| v.parse().ok()),
+        // NEW: Phase 2 fields
+        listing_type: None,
+        min_area_sqm: None,
+        max_area_sqm: None,
+
+        min_bedrooms: None,
+
+        min_bathrooms: None,
+
+        property_transaction_type: None,
+        property_sub_type: None,
+        service_type: None,
     }
 }
 

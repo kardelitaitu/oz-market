@@ -36,16 +36,34 @@ pub struct ListingRow {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub geolocation_opt_out: Option<bool>,
+    // NEW: Phase 2 - Marketplace expansion
+    pub listing_type: String, // "product", "service", or "property"
 }
 
 impl ListingRow {
     pub fn into_payload(self) -> ListingPayload {
+        // Convert listing_type string to enum
+        let listing_type_enum = match self.listing_type.as_str() {
+            "service" => marketplace_api_contract::ListingType::Service,
+            "property" => marketplace_api_contract::ListingType::Property,
+            _ => marketplace_api_contract::ListingType::Product,
+        };
+
         ListingPayload {
             schema_version: self.schema_version,
             owner_id: self.owner_id,
-            category: self.category,
-            product_name: self.product_name,
-            condition: self.item_condition,
+            listing_type: listing_type_enum,
+            category: if listing_type_enum == marketplace_api_contract::ListingType::Product {
+                Some(self.category)
+            } else {
+                None
+            },
+            title: self.product_name, // Maps to title in api-contract
+            condition: if listing_type_enum == marketplace_api_contract::ListingType::Product {
+                Some(self.item_condition)
+            } else {
+                None
+            },
             price: marketplace_api_contract::Price {
                 currency: self.price_currency,
                 amount: self.price_amount,
@@ -54,7 +72,6 @@ impl ListingRow {
                 country_code: self.country_code,
                 country_name: self.country_name,
                 city: self.city,
-                // Phase D: Geolocation (optional)
                 latitude: self.latitude,
                 longitude: self.longitude,
                 geolocation_opt_out: self.geolocation_opt_out,
@@ -74,6 +91,20 @@ impl ListingRow {
                 .and_then(|v| serde_json::from_value(v).ok()),
             condition_details: self.condition_details,
             seller_notes: self.seller_notes,
+            // TODO: Phase 4 - Populate from separate tables
+            service_type: None,
+            hourly_rate: None,
+            project_rate: None,
+            qualifications: None,
+            service_radius_km: None,
+            property_transaction_type: None,
+            property_sub_type: None,
+            area_sqm: None,
+            bedrooms: None,
+            bathrooms: None,
+            year_built: None,
+            lot_size_sqm: None,
+            zoning: None,
         }
     }
 }

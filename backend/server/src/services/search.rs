@@ -82,7 +82,7 @@ pub fn normalize_search_terms(input: &str) -> Vec<String> {
 
 pub fn listing_index_text(listing: &ListingPayload) -> String {
     let mut parts = vec![
-        listing.product_name.clone(),
+        listing.title.clone(),
         format!("{:?}", listing.category),
         format!("{:?}", listing.condition),
         listing.location.country_name.clone(),
@@ -114,12 +114,7 @@ pub fn score_listing(listing: &ListingSummary, query_terms: &[String]) -> i64 {
         if haystack.contains(term) {
             score += 10;
         }
-        if listing
-            .listing
-            .product_name
-            .to_ascii_lowercase()
-            .contains(term)
-        {
+        if listing.listing.title.to_ascii_lowercase().contains(term) {
             score += 20;
         }
         if listing
@@ -157,7 +152,7 @@ pub fn compare_search_items(
             let score_b = score_listing(b, query_terms);
             score_b
                 .cmp(&score_a)
-                .then_with(|| a.listing.product_name.cmp(&b.listing.product_name))
+                .then_with(|| a.listing.title.cmp(&b.listing.title))
                 .then_with(|| a.listing_id.cmp(&b.listing_id))
         }
         SearchSort::Newest => b
@@ -197,5 +192,8 @@ pub fn compare_search_items(
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.listing_id.cmp(&b.listing_id))
         }
+        // NEW: Phase 2 - Price per sqm sorts (TODO: Phase 4 - implement properly)
+        SearchSort::PricePerSqmAsc => Ordering::Equal, // TODO: sort by price_per_sqm asc
+        SearchSort::PricePerSqmDesc => Ordering::Equal, // TODO: sort by price_per_sqm desc
     }
 }

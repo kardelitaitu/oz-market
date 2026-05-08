@@ -486,9 +486,10 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
         listing: ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "bench-seller".to_string(),
-            category: Category::Laptop,
-            product_name,
-            condition: Condition::Used,
+            listing_type: marketplace_api_contract::ListingType::Product,
+            category: Some(Category::Laptop),
+            title: product_name,
+            condition: Some(Condition::Used),
             price: Price {
                 currency: "USD".to_string(),
                 amount: 499.0 + seed as f64,
@@ -514,6 +515,20 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
             shipping_info: None,
             condition_details: None,
             seller_notes: None,
+            // NEW: Phase 2
+            service_type: None,
+            hourly_rate: None,
+            project_rate: None,
+            qualifications: None,
+            service_radius_km: None,
+            property_transaction_type: None,
+            property_sub_type: None,
+            area_sqm: None,
+            bedrooms: None,
+            bathrooms: None,
+            year_built: None,
+            lot_size_sqm: None,
+            zoning: None,
         },
     }
 }

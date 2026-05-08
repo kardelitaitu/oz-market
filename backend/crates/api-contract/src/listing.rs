@@ -49,10 +49,10 @@ pub enum SearchSort {
     Newest,
     PriceAsc,
     PriceDesc,
-    RatingHighest, // Phase B: Sort by seller rating descending
-    RatingLowest,  // Phase B: Sort by seller rating ascending
-    PricePerSqmAsc,    // NEW: For property (price per sqm)
-    PricePerSqmDesc,   // NEW: For property (price per sqm)
+    RatingHighest,   // Phase B: Sort by seller rating descending
+    RatingLowest,    // Phase B: Sort by seller rating ascending
+    PricePerSqmAsc,  // NEW: For property (price per sqm)
+    PricePerSqmDesc, // NEW: For property (price per sqm)
 }
 
 // NEW: Listing type enumeration
@@ -68,16 +68,16 @@ pub enum ListingType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceType {
-    Local,   // In-person, location-based services
-    Online,  // Remote/digital services
+    Local,  // In-person, location-based services
+    Online, // Remote/digital services
 }
 
 // NEW: Property transaction type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyTransactionType {
-    Rent,    // Lease/rental
-    Sale,    // Permanent ownership transfer
+    Rent, // Lease/rental
+    Sale, // Permanent ownership transfer
 }
 
 // NEW: Property sub-type enumeration
@@ -85,9 +85,9 @@ pub enum PropertyTransactionType {
 #[serde(rename_all = "snake_case")]
 pub enum PropertySubType {
     Building,  // Commercial/industrial structures
-    House,    // Single-family homes, townhouses
+    House,     // Single-family homes, townhouses
     Apartment, // Multi-unit residential
-    Land,     // Empty plots/land
+    Land,      // Empty plots/land
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -124,10 +124,10 @@ pub struct ShippingInfo {
 pub struct ListingPayload {
     pub schema_version: String,
     pub owner_id: String,
-    pub listing_type: ListingType,  // NEW: "product", "service", or "property"
-    pub category: Option<Category>,  // Optional: only for products
-    pub title: String,  // Used for all types (renamed from product_name)
-    pub condition: Option<Condition>,  // Optional: mainly for products
+    pub listing_type: ListingType, // NEW: "product", "service", or "property"
+    pub category: Option<Category>, // Optional: only for products
+    pub title: String,             // Used for all types (renamed from product_name)
+    pub condition: Option<Condition>, // Optional: mainly for products
     pub price: Price,
     pub location: ListingLocation,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -148,7 +148,7 @@ pub struct ListingPayload {
     pub seller_notes: Option<String>,
     // NEW: Service-specific fields
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub service_type: Option<ServiceType>,  // "local" or "online"
+    pub service_type: Option<ServiceType>, // "local" or "online"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hourly_rate: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -159,9 +159,9 @@ pub struct ListingPayload {
     pub service_radius_km: Option<i32>,
     // NEW: Property-specific fields
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub property_transaction_type: Option<PropertyTransactionType>,  // "rent" or "sale"
+    pub property_transaction_type: Option<PropertyTransactionType>, // "rent" or "sale"
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub property_sub_type: Option<PropertySubType>,  // "building", "house", "apartment", "land"
+    pub property_sub_type: Option<PropertySubType>, // "building", "house", "apartment", "land"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub area_sqm: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -238,15 +238,15 @@ pub struct SearchRequest {
     pub verified_sellers_only: Option<bool>,
     // NEW: Listing type filter
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub listing_type: Option<ListingType>,  // "product", "service", "property"
+    pub listing_type: Option<ListingType>, // "product", "service", "property"
     // NEW: Service filters
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub service_type: Option<ServiceType>,  // "local", "online"
+    pub service_type: Option<ServiceType>, // "local", "online"
     // NEW: Property filters
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub property_transaction_type: Option<PropertyTransactionType>,  // "rent", "sale"
+    pub property_transaction_type: Option<PropertyTransactionType>, // "rent", "sale"
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub property_sub_type: Option<PropertySubType>,  // "building", "house", "apartment", "land"
+    pub property_sub_type: Option<PropertySubType>, // "building", "house", "apartment", "land"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_bedrooms: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

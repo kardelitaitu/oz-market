@@ -261,9 +261,9 @@ fn build_create_request() -> CreateListingRequest {
         listing: marketplace_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "seller-1".to_string(),
-            category: Category::Laptop,
-            product_name: "ThinkPad T480".to_string(),
-            condition: Condition::Used,
+            category: Some(Category::Laptop),
+            title: "ThinkPad T480".to_string(),
+            condition: Some(Condition::Used),
             price: marketplace_api_contract::Price {
                 currency: "USD".to_string(),
                 amount: 450.0,
@@ -286,6 +286,21 @@ fn build_create_request() -> CreateListingRequest {
             shipping_info: None,
             condition_details: None,
             seller_notes: None,
+            // NEW: Phase 2 fields
+            listing_type: marketplace_api_contract::ListingType::Product,
+            service_type: None,
+            hourly_rate: None,
+            project_rate: None,
+            qualifications: None,
+            service_radius_km: None,
+            property_transaction_type: None,
+            property_sub_type: None,
+            area_sqm: None,
+            bedrooms: None,
+            bathrooms: None,
+            year_built: None,
+            lot_size_sqm: None,
+            zoning: None,
         },
     }
 }
@@ -324,7 +339,7 @@ mod tests {
             .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:00Z")
             .await
             .unwrap();
-        assert_eq!(created.listing.product_name, "ThinkPad T480");
+        assert_eq!(created.listing.title, "ThinkPad T480");
 
         let search = mcp
             .search_listings(

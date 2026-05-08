@@ -73,9 +73,15 @@ impl InMemoryListingRepository {
             listing_id: summary.listing_id.clone(),
             owner_id: summary.listing.owner_id.clone(),
             schema_version: summary.listing.schema_version.clone(),
-            category: summary.listing.category,
-            product_name: summary.listing.product_name.clone(),
-            item_condition: summary.listing.condition,
+            category: summary
+                .listing
+                .category
+                .unwrap_or(marketplace_api_contract::Category::Laptop),
+            product_name: summary.listing.title.clone(), // Maps title -> product_name for DB
+            item_condition: summary
+                .listing
+                .condition
+                .unwrap_or(marketplace_api_contract::Condition::Used),
             price_currency: summary.listing.price.currency.clone(),
             price_amount: summary.listing.price.amount,
             country_code: summary.listing.location.country_code.clone(),
@@ -104,6 +110,13 @@ impl InMemoryListingRepository {
             latitude: summary.listing.location.latitude,
             longitude: summary.listing.location.longitude,
             geolocation_opt_out: summary.listing.location.geolocation_opt_out,
+            // NEW: Phase 2
+            listing_type: match summary.listing.listing_type {
+                marketplace_api_contract::ListingType::Service => "service",
+                marketplace_api_contract::ListingType::Property => "property",
+                _ => "product",
+            }
+            .to_string(),
         }
     }
 }
@@ -123,7 +136,7 @@ impl ListingRepository for InMemoryListingRepository {
         let mut guard = self.listings.write().expect("listing write lock");
         if guard.values().any(|listing| {
             listing.listing.owner_id == request.listing.owner_id
-                && listing.listing.product_name == request.listing.product_name
+                && listing.listing.title == request.listing.title
         }) {
             return Err(conflict("duplicate listing fingerprint"));
         }
@@ -292,6 +305,19 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
         .try_get::<Option<String>, _>("seller_notes")
         .map_err(|error| storage(error.to_string()))?;
 
+    // NEW: Extract listing_type (default to "product" for old rows)
+    let listing_type_str: String = row
+        .try_get("listing_type")
+        .ok()
+        .unwrap_or_else(|| "product".to_string());
+    let listing_type: marketplace_api_contract::ListingType = if listing_type_str == "service" {
+        marketplace_api_contract::ListingType::Service
+    } else if listing_type_str == "property" {
+        marketplace_api_contract::ListingType::Property
+    } else {
+        marketplace_api_contract::ListingType::Product
+    };
+
     // Seller fields (optional, from JOIN with seller_accounts)
     // Use ok() to handle missing columns gracefully
     let display_name: Option<String> = row.try_get("display_name").ok();
@@ -315,9 +341,18 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             owner_id: row
                 .try_get::<String, _>("owner_id")
                 .map_err(|error| storage(error.to_string()))?,
-            category,
-            product_name,
-            condition,
+            listing_type,
+            category: if listing_type == marketplace_api_contract::ListingType::Product {
+                Some(category)
+            } else {
+                None
+            },
+            title: product_name,
+            condition: if listing_type == marketplace_api_contract::ListingType::Product {
+                Some(condition)
+            } else {
+                None
+            },
             price: marketplace_api_contract::Price {
                 currency: price_currency,
                 amount: price_amount,
@@ -344,6 +379,20 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             shipping_info: shipping_info.and_then(|v| serde_json::from_value(v).ok()),
             condition_details,
             seller_notes,
+            // NEW: Phase 2 fields
+            service_type: None,
+            hourly_rate: None,
+            project_rate: None,
+            qualifications: None,
+            service_radius_km: None,
+            property_transaction_type: None,
+            property_sub_type: None,
+            area_sqm: None,
+            bedrooms: None,
+            bathrooms: None,
+            year_built: None,
+            lot_size_sqm: None,
+            zoning: None,
         },
         // Seller fields (read-only)
         seller_name,
@@ -369,7 +418,7 @@ impl PostgresListingRepository {
         request: &SearchRequest,
     ) -> Result<Vec<ListingSummary>, RepositoryError> {
         let mut builder = QueryBuilder::<Postgres>::new(
-            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, l.latitude, l.longitude, l.geolocation_opt_out, s.display_name, s.seller_rating, s.verified_at FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id",
+            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, l.listing_type, l.latitude, l.longitude, l.geolocation_opt_out, s.display_name, s.seller_rating, s.verified_at FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id",
         );
         let mut where_added = false;
 
@@ -616,17 +665,17 @@ impl ListingRepository for PostgresListingRepository {
                 listing_id, owner_id, schema_version, category, product_name, \"condition\",
                 price_currency, price_amount, country_code, country_name, city,
                 picture_urls, description, attributes, status, version, create_idempotency_key,
-                search_text, created_at, updated_at, sku, quantity, shipping_info, condition_details, seller_notes
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now(),$17,$18,$19,$20,$21)
+                search_text, created_at, updated_at, sku, quantity, shipping_info, condition_details, seller_notes, listing_type
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now(),$17,$18,$19,$20,$22)
             RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\",
                 price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls,
-                description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes",
+                description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, listing_type",
         )
         .bind(&listing_id)
         .bind(&request.listing.owner_id)
         .bind(&request.listing.schema_version)
         .bind(db_enum_value(&request.listing.category))
-        .bind(&request.listing.product_name)
+        .bind(&request.listing.title)
         .bind(db_enum_value(&request.listing.condition))
         .bind(&request.listing.price.currency)
         .bind(request.listing.price.amount)
@@ -643,6 +692,7 @@ impl ListingRepository for PostgresListingRepository {
         .bind(request.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)))
         .bind(&request.listing.condition_details)
         .bind(&request.listing.seller_notes)
+        .bind(db_enum_value(&request.listing.listing_type))
         .fetch_one(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;
@@ -719,13 +769,13 @@ impl ListingRepository for PostgresListingRepository {
 
 fn matches_filters(listing: &ListingSummary, request: &SearchRequest) -> bool {
     if let Some(category) = request.category {
-        if listing.listing.category != category {
+        if listing.listing.category != Some(category) {
             return false;
         }
     }
 
     if let Some(condition) = request.condition {
-        if listing.listing.condition != condition {
+        if listing.listing.condition != Some(condition) {
             return false;
         }
     }
@@ -799,7 +849,7 @@ mod tests {
                 schema_version: "1.0".to_string(),
                 owner_id: owner_id.to_string(),
                 category: Category::Laptop,
-                product_name: product_name.to_string(),
+                title: product_name.to_string(),
                 condition: Condition::Used,
                 price: Price {
                     currency: "USD".to_string(),
@@ -815,7 +865,7 @@ mod tests {
                     geolocation_opt_out: None,
                 },
                 picture_urls: vec!["https://example.com/item.jpg".to_string()],
-                description: format!("{product_name} in {city}"),
+                description: format!("{title} in {city}"),
                 attributes: Some(
                     [("brand".to_string(), json!("Lenovo"))]
                         .into_iter()
@@ -864,6 +914,6 @@ mod tests {
         assert!(response
             .items
             .iter()
-            .all(|item| item.listing.product_name.contains("ThinkPad")));
+            .all(|item| item.listing.title.contains("ThinkPad")));
     }
 }
