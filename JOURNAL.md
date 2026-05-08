@@ -1447,3 +1447,59 @@ Completed all three tasks for OpenAPI documentation automation:
 - Or move on to other tasks (server is production-ready!)
 - Consider using tools like `openapi-generator` for client SDK generation
 
+
+## 2026-05-08 - OpenAPI Spec Completion Attempts
+
+### What We Accomplished
+1. **Manual OpenAPI spec** - Created comprehensive spec in `openapi.rs` with:
+   - All public endpoints (listings, search, reviews, negotiations, contact-reveals)
+   - Admin endpoints (archive, release, trust-level, quota-override, recalculate-rating)
+   - Complete schemas for all types (from api-contract and custom)
+
+2. **Switched to serving existing YAML** - Due to `json!` macro recursion limits:
+   - Modified `openapi.rs` to read `docs/specs/openapi.yaml`
+   - Added `serde_yaml` dependency for YAML→JSON conversion
+   - Created `/api-docs/openapi.json` endpoint that serves converted JSON
+   - Fallback to minimal spec if YAML not found
+
+3. **Server endpoints documented** - The existing `openapi.yaml` already includes:
+   - Listings (create, get, search)
+   - Reviews (create, list, approve, reject)
+   - Negotiations (open, submit offer, etc.)
+   - Contact reveals (request, approve, reject)
+
+### What's Missing
+- **Admin endpoints** (`/internal/v1/*`) are NOT in the YAML yet
+  - These are internal admin/support endpoints
+  - Should be added to `docs/specs/openapi.yaml` under paths
+  - Can be added later as they're not user-facing
+
+### Technical Details
+- **Commit**: `0b98526` - "feat: Update OpenAPI to serve existing YAML spec"
+- **Approach**: Runtime YAML→JSON conversion (avoids compile-time macro limits)
+- **Dependencies added**: `serde_yaml = "0.9"` to server Cargo.toml
+- **Files modified**: `backend/server/src/openapi.rs`, `backend/server/Cargo.toml`
+
+### How to Test
+1. Start server: `./target/release/marketplace-server`
+2. View spec: `curl http://localhost:3003/api-docs/openapi.json | jq .`
+3. The spec will be the full YAML-converted-to-JSON (if YAML is found)
+
+### Next Steps for Complete Spec
+1. Add admin endpoints to `docs/specs/openapi.yaml`:
+   - `/internal/v1/listings/{id}/archive`
+   - `/internal/v1/reservations/{id}/release`
+   - `/internal/v1/sellers/{id}/trust-level`
+   - `/internal/v1/sellers/{id}/quota-override`
+   - `/internal/v1/sellers/{id}/recalculate-rating`
+   - `/internal/v1/reviews/{id}/approve`
+   - `/internal/v1/reviews/{id}/reject`
+
+2. Optionally mount SwaggerUI for interactive docs (currently disabled)
+
+### Status
+- ✅ Public API documented (in YAML)
+- ✅ Serving endpoint created (`/api-docs/openapi.json`)
+- ⚠️ Admin API not yet in spec (internal use)
+- ✅ Server remains production-ready with 40k+ ops/s
+
