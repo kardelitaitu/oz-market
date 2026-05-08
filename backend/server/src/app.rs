@@ -1260,11 +1260,10 @@ mod tests {
                     category: Some(Category::Laptop),
                     condition: Some(Condition::Used),
                     // NEW: Phase 2 fields
-                    listing_type: marketplace_api_contract::ListingType::Product,
+                    listing_type: Some(marketplace_api_contract::ListingType::Product),
                     service_type: None,
                     property_transaction_type: None,
                     property_sub_type: None,
-                    area_sqm: None,
                     sort_by: SearchSort::Relevance,
                     limit: Some(10),
                     ..SearchRequest::default()

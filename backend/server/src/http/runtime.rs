@@ -1012,9 +1012,10 @@ mod tests {
             listing: ListingPayload {
                 schema_version: "1.0".to_string(),
                 owner_id: "seller-1".to_string(),
-                category: Category::Laptop,
-                product_name: "ThinkPad T480".to_string(),
-                condition: Condition::Used,
+                listing_type: marketplace_api_contract::ListingType::Product,
+                category: Some(Category::Laptop),
+                title: "ThinkPad T480".to_string(),
+                condition: Some(Condition::Used),
                 price: Price {
                     currency: "USD".to_string(),
                     amount: 450.0,
@@ -1031,12 +1032,27 @@ mod tests {
                 picture_urls: vec!["https://example.com/item.jpg".to_string()],
                 description: "Good battery health".to_string(),
                 attributes: None,
-                // NEW: Marketplace fields
+                // Marketplace fields
                 sku: None,
                 quantity: None,
                 shipping_info: None,
                 condition_details: None,
                 seller_notes: None,
+                // Phase 4: Service fields (None for Product)
+                service_type: None,
+                hourly_rate: None,
+                project_rate: None,
+                qualifications: None,
+                service_radius_km: None,
+                // Phase 4: Property fields (None for Product)
+                property_transaction_type: None,
+                property_sub_type: None,
+                area_sqm: None,
+                bedrooms: None,
+                bathrooms: None,
+                year_built: None,
+                lot_size_sqm: None,
+                zoning: None,
             },
         })
         .unwrap()

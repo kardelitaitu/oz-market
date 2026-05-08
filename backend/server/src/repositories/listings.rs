@@ -1078,9 +1078,10 @@ mod tests {
             listing: ListingPayload {
                 schema_version: "1.0".to_string(),
                 owner_id: owner_id.to_string(),
-                category: Category::Laptop,
+                listing_type: marketplace_api_contract::ListingType::Product,
+                category: Some(Category::Laptop),
                 title: product_name.to_string(),
-                condition: Condition::Used,
+                condition: Some(Condition::Used),
                 price: Price {
                     currency: "USD".to_string(),
                     amount,
@@ -1101,12 +1102,27 @@ mod tests {
                         .into_iter()
                         .collect(),
                 ),
-                // NEW: Marketplace fields
+                // Marketplace fields
                 sku: None,
                 quantity: None,
                 shipping_info: None,
                 condition_details: None,
                 seller_notes: None,
+                // Phase 4: Service fields (None for Product)
+                service_type: None,
+                hourly_rate: None,
+                project_rate: None,
+                qualifications: None,
+                service_radius_km: None,
+                // Phase 4: Property fields (None for Product)
+                property_transaction_type: None,
+                property_sub_type: None,
+                area_sqm: None,
+                bedrooms: None,
+                bathrooms: None,
+                year_built: None,
+                lot_size_sqm: None,
+                zoning: None,
             },
         }
     }
