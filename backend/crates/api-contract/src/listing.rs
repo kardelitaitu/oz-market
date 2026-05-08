@@ -68,6 +68,13 @@ pub struct ListingLocation {
     pub country_code: CountryCode,
     pub country_name: String,
     pub city: String,
+    // Phase D: Geolocation (optional, seller can opt out)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geolocation_opt_out: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -173,6 +180,15 @@ pub struct SearchRequest {
     pub limit: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
+    // Phase D: Geolocation search
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub near_me: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_latitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_longitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radius_km: Option<f64>,
 }
 
 impl Default for SearchRequest {
@@ -189,6 +205,11 @@ impl Default for SearchRequest {
             sort_by: SearchSort::Relevance,
             limit: None,
             cursor: None,
+            // Phase D: Geolocation
+            near_me: None,
+            user_latitude: None,
+            user_longitude: None,
+            radius_km: None,
         }
     }
 }

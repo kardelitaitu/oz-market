@@ -686,6 +686,11 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
             .get("limit")
             .and_then(|value: &String| value.parse::<u32>().ok()),
         cursor: query.get("cursor").cloned(),
+        // Phase D: Geolocation
+        near_me: query.get("near_me").and_then(|v| v.parse().ok()),
+        user_latitude: query.get("user_latitude").and_then(|v| v.parse().ok()),
+        user_longitude: query.get("user_longitude").and_then(|v| v.parse().ok()),
+        radius_km: query.get("radius_km").and_then(|v| v.parse().ok()),
     }
 }
 
@@ -983,6 +988,10 @@ mod tests {
                     country_code: "JP".to_string(),
                     country_name: "Japan".to_string(),
                     city: "Osaka".to_string(),
+                    // Phase D: Geolocation (optional)
+                    latitude: None,
+                    longitude: None,
+                    geolocation_opt_out: None,
                 },
                 picture_urls: vec!["https://example.com/item.jpg".to_string()],
                 description: "Good battery health".to_string(),

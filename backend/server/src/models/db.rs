@@ -32,6 +32,10 @@ pub struct ListingRow {
     pub shipping_info: Option<Value>,
     pub condition_details: Option<String>,
     pub seller_notes: Option<String>,
+    // Phase D: Geolocation
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub geolocation_opt_out: Option<bool>,
 }
 
 impl ListingRow {
@@ -50,6 +54,10 @@ impl ListingRow {
                 country_code: self.country_code,
                 country_name: self.country_name,
                 city: self.city,
+                // Phase D: Geolocation (optional)
+                latitude: self.latitude,
+                longitude: self.longitude,
+                geolocation_opt_out: self.geolocation_opt_out,
             },
             picture_urls: self.picture_urls,
             description: self.description,

@@ -96,6 +96,10 @@ impl InMemoryListingRepository {
             search_text: crate::services::search::listing_index_text(&summary.listing),
             created_at: String::new(),
             updated_at: String::new(),
+            // Phase D: Geolocation fields
+            latitude: summary.listing.location.latitude,
+            longitude: summary.listing.location.longitude,
+            geolocation_opt_out: summary.listing.location.geolocation_opt_out,
         }
     }
 }
@@ -293,6 +297,11 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
     let seller_verified = verified_at.is_some();
     let seller_name = display_name;
     
+    // Phase D: Extract geolocation fields (optional)
+    let latitude: Option<f64> = row.try_get("latitude").ok();
+    let longitude: Option<f64> = row.try_get("longitude").ok();
+    let geolocation_opt_out: Option<bool> = row.try_get("geolocation_opt_out").ok();
+    
     Ok(ListingSummary {
         listing_id,
         status,
@@ -313,6 +322,10 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
                 country_code,
                 country_name,
                 city,
+                // Phase D: Geolocation (optional)
+                latitude,
+                longitude,
+                geolocation_opt_out,
             },
             picture_urls,
             description,
@@ -348,7 +361,7 @@ impl PostgresListingRepository {
         request: &SearchRequest,
     ) -> Result<Vec<ListingSummary>, RepositoryError> {
         let mut builder = QueryBuilder::<Postgres>::new(
-            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, s.display_name, s.seller_rating, s.verified_at FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id",
+            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, l.latitude, l.longitude, l.geolocation_opt_out, s.display_name, s.seller_rating, s.verified_at FROM listings l LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id",
         );
         let mut where_added = false;
 
@@ -466,6 +479,47 @@ impl PostgresListingRepository {
             builder.push("s.verified_at IS NOT NULL");
         }
 
+        // Phase D: Geolocation search ("near me")
+        if let Some(true) = request.near_me {
+            if let (Some(user_lat), Some(user_lon)) = (request.user_latitude, request.user_longitude) {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                // Only include listings that opted in (have coordinates and didn't opt out)
+                builder.push("l.latitude IS NOT NULL AND l.longitude IS NOT NULL ");
+                builder.push("AND (l.geolocation_opt_out IS NULL OR l.geolocation_opt_out = false) ");
+                
+                // Calculate distance using Haversine formula (inline in WHERE)
+                let radius_km = request.radius_km.unwrap_or(50.0);  // Default: 50km
+                
+                builder.push("AND (");
+                builder.push("  6371 * acos(");  // Earth's radius in km
+                builder.push("    cos(radians(").push_bind(user_lat).push(")) * ");
+                builder.push("    cos(radians(l.latitude)) * ");
+                builder.push("    cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
+                builder.push("    sin(radians(").push_bind(user_lat).push(")) * ");
+                builder.push("    sin(radians(l.latitude))");
+                builder.push("  ) <= ").push_bind(radius_km);
+                builder.push(")");
+                
+                // Order by distance (nearest first) - compute inline
+                builder.push(" ORDER BY ");
+                builder.push("  6371 * acos(");
+                builder.push("    cos(radians(").push_bind(user_lat).push(")) * ");
+                builder.push("    cos(radians(l.latitude)) * ");
+                builder.push("    cos(radians(l.longitude) - radians(").push_bind(user_lon).push(")) + ");
+                builder.push("    sin(radians(").push_bind(user_lat).push(")) * ");
+                builder.push("    sin(radians(l.latitude))");
+                builder.push("  ) ASC, l.listing_id");
+            } else {
+                // User location not provided - fall back to city/country match
+                // (already implemented via existing location filter)
+            }
+        }
+
         let mut conn = self
             .pool
             .acquire()
@@ -569,6 +623,7 @@ impl ListingRepository for PostgresListingRepository {
             "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\",
                 l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls,
                 l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes,
+                l.latitude, l.longitude, l.geolocation_opt_out,
                 s.display_name, s.seller_rating, s.verified_at
              FROM listings l
              LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id
@@ -612,7 +667,7 @@ impl ListingRepository for PostgresListingRepository {
             .await
             .map_err(|error| storage(error.to_string()))?;
         let rows = sqlx::query(
-            "UPDATE listings SET status = $1, version = version + 1, updated_at = now() WHERE listing_id = $2 RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes",
+            "UPDATE listings SET status = $1, version = version + 1, updated_at = now() WHERE listing_id = $2 RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, latitude, longitude, geolocation_opt_out",
         )
         .bind(db_enum_value(&status))
         .bind(listing_id)
@@ -715,6 +770,10 @@ mod tests {
                     country_code: "JP".to_string(),
                     country_name: "Japan".to_string(),
                     city: city.to_string(),
+                    // Phase D: Geolocation (optional)
+                    latitude: None,
+                    longitude: None,
+                    geolocation_opt_out: None,
                 },
                 picture_urls: vec!["https://example.com/item.jpg".to_string()],
                 description: format!("{product_name} in {city}"),

@@ -223,6 +223,29 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: near_me
+          in: query
+          schema:
+            type: boolean
+          description: Prioritize results near user (requires lat/long)
+        - name: user_latitude
+          in: query
+          schema:
+            type: number
+          description: User's latitude (from browser Geolocation API)
+        - name: user_longitude
+          in: query
+          schema:
+            type: number
+          description: User's longitude (from browser Geolocation API)
+        - name: radius_km
+          in: query
+          schema:
+            type: number
+            minimum: 1
+            maximum: 500
+            default: 50
+          description: Search radius in kilometers (default: 50km)
       responses:
         '200':
           description: Search results

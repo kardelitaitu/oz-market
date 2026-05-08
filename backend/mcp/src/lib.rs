@@ -243,6 +243,10 @@ fn build_create_request() -> CreateListingRequest {
                 country_code: "JP".to_string(),
                 country_name: "Japan".to_string(),
                 city: "Osaka".to_string(),
+                // Phase D: Geolocation (optional)
+                latitude: None,
+                longitude: None,
+                geolocation_opt_out: None,
             },
             picture_urls: vec!["https://example.com/item.jpg".to_string()],
             description: "Good battery health".to_string(),
