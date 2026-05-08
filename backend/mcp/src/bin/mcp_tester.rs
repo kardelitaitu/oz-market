@@ -4,7 +4,7 @@
 //! Logs results to stdout and mcp_test.log.
 
 use serde_json::{json, Value};
-use std::io::{BufRead, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
