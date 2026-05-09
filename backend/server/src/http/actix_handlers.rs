@@ -80,6 +80,7 @@ fn extract_claims(req: &HttpRequest) -> Result<Claims, HttpResponse> {
 
 pub async fn get_listing(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     listing_cache: web::Data<Cache<String, String>>,
     listing_id: web::Path<String>,
     req: HttpRequest,
@@ -91,14 +92,16 @@ pub async fn get_listing(
     };
     let cache_key = listing_id.to_string();
     // Try cache first (stores pre-serialized JSON)
-    if let Some(cached_json) = listing_cache.get(&cache_key).await {
-        info!("Cache hit for listing {}", cache_key);
-        counter!("cache_hits_total", "type" => "listing").increment(1);
-        histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
-            .record(start.elapsed().as_secs_f64());
-        return HttpResponse::Ok()
-            .content_type("application/json")
-            .body(cached_json);
+    if **cache_enabled {
+        if let Some(cached_json) = listing_cache.get(&cache_key).await {
+            info!("Cache hit for listing {}", cache_key);
+            counter!("cache_hits_total", "type" => "listing").increment(1);
+            histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
+                .record(start.elapsed().as_secs_f64());
+            return HttpResponse::Ok()
+                .content_type("application/json")
+                .body(cached_json);
+        }
     }
     info!("Cache miss for listing {}", cache_key);
     counter!("cache_misses_total", "type" => "listing").increment(1);
@@ -106,7 +109,9 @@ pub async fn get_listing(
     match app.get_listing(&claims, &listing_id).await {
         Ok(Some(listing)) => {
             let json_string = serde_json::to_string(&listing).unwrap_or_default();
-            listing_cache.insert(cache_key, json_string.clone()).await;
+            if **cache_enabled {
+                listing_cache.insert(cache_key, json_string.clone()).await;
+            }
             histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
                 .record(start.elapsed().as_secs_f64());
             HttpResponse::Ok().json(listing)
@@ -121,6 +126,7 @@ pub async fn get_listing(
 
 pub async fn search_listings(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     query: web::Query<SearchRequest>,
     req: HttpRequest,
@@ -132,14 +138,16 @@ pub async fn search_listings(
     };
     let cache_key = format!("{:?}", query.0);
     // Try cache first (stores pre-serialized JSON)
-    if let Some(cached_json) = search_cache.get(&cache_key).await {
-        info!("Cache hit for search");
-        counter!("cache_hits_total", "type" => "search").increment(1);
-        histogram!("request_duration_seconds", "endpoint" => "/listings/search")
-            .record(start.elapsed().as_secs_f64());
-        return HttpResponse::Ok()
-            .content_type("application/json")
-            .body(cached_json);
+    if **cache_enabled {
+        if let Some(cached_json) = search_cache.get(&cache_key).await {
+            info!("Cache hit for search");
+            counter!("cache_hits_total", "type" => "search").increment(1);
+            histogram!("request_duration_seconds", "endpoint" => "/listings/search")
+                .record(start.elapsed().as_secs_f64());
+            return HttpResponse::Ok()
+                .content_type("application/json")
+                .body(cached_json);
+        }
     }
     info!("Cache miss for search");
     counter!("cache_misses_total", "type" => "search").increment(1);
@@ -147,7 +155,9 @@ pub async fn search_listings(
     match app.search_listings(&claims, &query.0).await {
         Ok(response) => {
             let json_string = serde_json::to_string(&response).unwrap_or_default();
-            search_cache.insert(cache_key, json_string.clone()).await;
+            if **cache_enabled {
+                search_cache.insert(cache_key, json_string.clone()).await;
+            }
             histogram!("request_duration_seconds", "endpoint" => "/listings/search")
                 .record(start.elapsed().as_secs_f64());
             HttpResponse::Ok().json(response)
@@ -158,6 +168,7 @@ pub async fn search_listings(
 
 pub async fn create_listing(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
     body: web::Json<CreateListingRequest>,
@@ -169,7 +180,9 @@ pub async fn create_listing(
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
     // Invalidate search cache on write
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     match app.create_listing(&claims, &body, &fingerprint, &now).await {
         Ok(created) => HttpResponse::Created().json(created),
         Err(e) => map_handler_error(&e),
@@ -180,6 +193,7 @@ pub async fn create_listing(
 
 pub async fn open_negotiation(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
     body: web::Json<OpenNegotiationRequest>,
@@ -190,7 +204,9 @@ pub async fn open_negotiation(
     };
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     match app
         .open_negotiation(&claims, &body, &fingerprint, &now)
         .await
@@ -204,6 +220,7 @@ pub async fn open_negotiation(
 
 pub async fn request_contact_reveal(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
     body: web::Json<RequestContactRevealRequest>,
@@ -214,7 +231,9 @@ pub async fn request_contact_reveal(
     };
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     match app
         .request_contact_reveal(&claims, "", &body, &fingerprint, &now)
         .await
@@ -228,6 +247,7 @@ pub async fn request_contact_reveal(
 
 pub async fn archive_listing(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     listing_id: web::Path<String>,
     req: HttpRequest,
@@ -237,7 +257,9 @@ pub async fn archive_listing(
         Err(resp) => return resp,
     };
     let now = crate::http::runtime::current_time_marker();
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     match app.archive_listing(&claims, &listing_id, "", &now).await {
         Ok(Some(_listing)) => HttpResponse::NoContent().finish(),
         Ok(None) => HttpResponse::NotFound().json(json!({
@@ -250,12 +272,15 @@ pub async fn archive_listing(
 
 pub async fn release_reservation(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     lease_id: web::Path<String>,
     claims: web::ReqData<Claims>,
 ) -> impl Responder {
     let now = crate::http::runtime::current_time_marker();
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     // release_reservation needs listing_id, not lease_id
     // For now, we'll use lease_id as listing_id (simplification - real code would look up lease first)
     match app.release_reservation(&claims, &lease_id, "", &now).await {
@@ -270,6 +295,7 @@ pub async fn release_reservation(
 
 pub async fn set_seller_trust_level(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     seller_id: web::Path<String>,
     trust_level: web::Json<String>,
@@ -280,7 +306,9 @@ pub async fn set_seller_trust_level(
         Err(resp) => return resp,
     };
     let now = crate::http::runtime::current_time_marker();
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     // set_seller_trust_level(claims, seller_account_id, trust_level, reason, now)
     match app
         .set_seller_trust_level(&claims, &seller_id, &trust_level, "", &now)
@@ -297,6 +325,7 @@ pub async fn set_seller_trust_level(
 
 pub async fn set_seller_quota_override(
     app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     seller_id: web::Path<String>,
     quota: web::Json<Option<i32>>,
@@ -307,7 +336,9 @@ pub async fn set_seller_quota_override(
         Err(resp) => return resp,
     };
     let now = crate::http::runtime::current_time_marker();
-    search_cache.invalidate_all();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
     // set_seller_quota_override(claims, seller_account_id, quota_override, reason, now)
     match app
         .set_seller_quota_override(&claims, &seller_id, *quota, "", &now)

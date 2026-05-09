@@ -49,7 +49,7 @@ cargo run --manifest-path backend/Cargo.toml -p marketplace-server --bin populat
 ### Run the real HTTP benchmark
 
 ```powershell
-.\backend\scripts\bench-http.ps1 -Ops 10000 -Concurrency 50 -SeedDatabase
+.\backend\scripts\bench-http.ps1 -Ops 1000 -ConcurrencyLevels "1,10,50,100,250,500,1000" -SeedDatabase
 ```
 
 ### Run the local Postgres dev flow
@@ -78,3 +78,5 @@ cargo run --manifest-path backend/Cargo.toml -p marketplace-server --bin populat
 - Prefer the HTTP benchmark when measuring real server performance.
 - Seed once, benchmark many.
 - The real benchmark is the Actix server + HTTP path, not the direct app/repo benchmark.
+- Use lower concurrency first, then sweep higher levels to see saturation.
+- Current baseline for future comparisons: release build with cache on, search peaks around 6.5k ops/s and get_listing around 4.6k ops/s.

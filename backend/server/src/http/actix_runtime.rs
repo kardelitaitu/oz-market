@@ -42,12 +42,17 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let app = build_app(pool.clone(), audit_repo, outbox_repo);
     let observability = Arc::new(ServerObservability::new());
 
+    let cache_enabled = std::env::var("MARKETPLACE_DISABLE_CACHE")
+        .map(|value| value != "1" && !value.eq_ignore_ascii_case("true"))
+        .unwrap_or(true);
+
     // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
     let listing_cache: Cache<String, String> = Cache::new(10_000);
     let search_cache: Cache<String, String> = Cache::new(1_000);
 
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
+    let cache_enabled_data = web::Data::new(cache_enabled);
     let listing_cache_data = web::Data::new(listing_cache);
     let search_cache_data = web::Data::new(search_cache);
     let pool_data = web::Data::new(pool);
@@ -59,6 +64,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .wrap(TracingLogger::default()) // Add tracing middleware
             .app_data(app_data.clone())
             .app_data(obs_data.clone())
+            .app_data(cache_enabled_data.clone())
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
             .app_data(pool_data.clone())

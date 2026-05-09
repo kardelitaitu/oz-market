@@ -22,7 +22,8 @@ This is the low-level app/repo benchmark.
 - Seed the database once with `populate_db` and reuse it for repeated runs.
 - The in-memory fallback is for smoke checks only.
 - Use the Postgres run before changing quota or index settings.
-- For the real Actix/HTTP benchmark, use `backend/scripts/bench-http.ps1`.
+- For the real Actix/HTTP benchmark, use `backend/scripts/bench-http.ps1` (release build, concurrency sweep, percentiles).
+- Future benchmark baseline: release build with cache on, search around 6.5k ops/s and get_listing around 4.6k ops/s.
 
 ## Local Postgres Path
 

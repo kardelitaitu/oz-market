@@ -2048,3 +2048,22 @@ Since the tester has issues, test manually:
 - fixed check.ps1 so clippy warnings fail the check instead of being reported as PASS
 - tightened the clippy command to `-- -D warnings` and removed the warning-producing auth/module layout plus benchmark generator patterns
 - verified the full check pipeline passes cleanly with zero clippy warnings
+
+09-05-26--08-42
+- upgraded the real HTTP benchmark to report p50/p95 latency, success rate, and a concurrency sweep instead of a single fixed-point run
+- switched the benchmark path to release builds and added warm-cache vs cold-cache reporting for the search endpoint
+- kept the benchmark focused on the Actix HTTP server so it measures the real request path, not the direct app layer
+
+09-05-26--08-48
+- recorded the real HTTP benchmark results from the release Actix server with concurrency sweeps
+- observed warm search throughput stabilizing around ~6k ops/s and noted the cold-start hit cost is much lower on first request
+- kept this journal entry to explain the difference between earlier lower-level numbers and the real end-to-end server benchmark
+
+09-05-26--10-00
+- added a runtime cache toggle to the Actix server so benchmarks can compare cache on vs off without changing code
+- ran comparative HTTP benchmarks on release and debug builds, plus the Postgres-backed phase5 app benchmark, to isolate how much of the ceiling comes from transport overhead vs lower-level app/repo work
+- kept the check pipeline green after the cache-toggle changes
+
+09-05-26--11-00
+- recorded the future benchmark baseline in the CLI and backend benchmark docs so the release + cache-on numbers are the default comparison point
+- kept the benchmark runbooks aligned with the real Actix/HTTP path instead of the lower-level app/repo benchmark

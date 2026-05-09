@@ -1,8 +1,8 @@
 param(
     [string]$DatabaseUrl = $env:DATABASE_URL,
     [string]$BaseUrl = "http://127.0.0.1:3000",
-    [int]$Ops = 10000,
-    [int]$Concurrency = 50,
+    [int]$Ops = 1000,
+    [string]$ConcurrencyLevels = "1,10,50,100,250,500,1000",
     [switch]$SeedDatabase
 )
 
@@ -41,26 +41,26 @@ if ($LASTEXITCODE -ne 0) {
 
 $env:DATABASE_URL = $DatabaseUrl
 $env:MARKETPLACE_BIND = "127.0.0.1:3000"
-$env:RUST_LOG = $env:RUST_LOG ?? "info"
+$env:RUST_LOG = if ([string]::IsNullOrWhiteSpace($env:RUST_LOG)) { "info" } else { $env:RUST_LOG }
 
 if ($SeedDatabase) {
     Write-Host "Seeding database with current generator..." -ForegroundColor Cyan
-    cargo run --manifest-path Cargo.toml -p marketplace-server --bin populate_db
+    cargo run --release --manifest-path Cargo.toml -p marketplace-server --bin populate_db
     if ($LASTEXITCODE -ne 0) {
         throw "database seeding failed"
     }
 }
 
-Write-Host "Starting Actix server..." -ForegroundColor Cyan
+Write-Host "Starting Actix server (release)..." -ForegroundColor Cyan
 $ServerJob = Start-Job -ScriptBlock {
     Set-Location "C:/My Script/project-the-marketplace/backend"
     $env:DATABASE_URL = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
     $env:MARKETPLACE_BIND = "127.0.0.1:3000"
-    cargo run --package marketplace-server
+    cargo run --release --package marketplace-server
 }
 
 Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow
-$maxWait = 60
+$maxWait = 120
 $waited = 0
 $ready = $false
 
@@ -87,9 +87,9 @@ if (-not $ready) {
 
 Write-Host "`nRunning real HTTP benchmark..." -ForegroundColor Cyan
 $env:HTTP_BENCH_OPS = "$Ops"
-$env:HTTP_BENCH_CONCURRENCY = "$Concurrency"
+$env:HTTP_BENCH_CONCURRENCIES = $ConcurrencyLevels
 
-cargo run --manifest-path Cargo.toml -p marketplace-server --bin bench_concurrent -- "$BaseUrl" "$Ops" "$Concurrency"
+cargo run --release --manifest-path Cargo.toml -p marketplace-server --bin bench_concurrent -- "$BaseUrl" "$Ops" "$ConcurrencyLevels"
 $BenchmarkResult = $LASTEXITCODE
 
 Cleanup
