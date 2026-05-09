@@ -2034,3 +2034,17 @@ Since the tester has issues, test manually:
 - updated the database generator to match the current listing schema (product/service/property mix, current columns, related tables, and seller stats)
 - benchmark now filters usable product listings from the live DB and runs cleanly against the current dataset
 - smoke benchmark verified: listing-read 42.03 ops/s, search-heavy 4.88 ops/s, negotiation-burst 9.29 ops/s
+
+09-05-26--07-54
+- added a root-level CLI-README.md to centralize the repo's common dev/test commands
+- included the actual server, seeding, benchmark, and validation commands so contributors can use the same workflow consistently
+
+09-05-26--07-58
+- prepared the real benchmark path to hit the Actix server over HTTP instead of the direct app layer
+- updated the HTTP benchmark runner to seed optionally, boot the real server, and run concurrent GET/search traffic with buyer-searcher claims
+- documented the real benchmark command in CLI-README.md so future runs use the correct server-path benchmark
+
+09-05-26--07-59
+- fixed check.ps1 so clippy warnings fail the check instead of being reported as PASS
+- tightened the clippy command to `-- -D warnings` and removed the warning-producing auth/module layout plus benchmark generator patterns
+- verified the full check pipeline passes cleanly with zero clippy warnings

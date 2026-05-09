@@ -691,7 +691,7 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
             } else {
                 None
             },
-            seller_notes: if seed % 10 == 0 {
+            seller_notes: if seed.is_multiple_of(10) {
                 Some("Special discount available!".to_string())
             } else {
                 None

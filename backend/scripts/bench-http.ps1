@@ -1,5 +1,10 @@
-# bench-http.ps1 - Run HTTP benchmark against Actix server
-# Requires: Docker running with Postgres (docker-compose up -d)
+param(
+    [string]$DatabaseUrl = $env:DATABASE_URL,
+    [string]$BaseUrl = "http://127.0.0.1:3000",
+    [int]$Ops = 10000,
+    [int]$Concurrency = 50,
+    [switch]$SeedDatabase
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -16,7 +21,10 @@ function Cleanup {
 
 trap { Cleanup; exit 1 }
 
-# Check if Docker is running
+if ([string]::IsNullOrWhiteSpace($DatabaseUrl)) {
+    $DatabaseUrl = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
+}
+
 try {
     docker info | Out-Null
 } catch {
@@ -24,18 +32,26 @@ try {
     exit 1
 }
 
-# Start Postgres if not running
-Write-Host "Starting Postgres via docker-compose..." -ForegroundColor Cyan
+Write-Host "Starting Postgres via docker compose..." -ForegroundColor Cyan
 Set-Location "C:/My Script/project-the-marketplace/backend"
-docker-compose -p marketplace-local up -d postgres
-Start-Sleep -Seconds 3
+docker compose -p marketplace -f ../compose.postgres.yml up -d postgres
+if ($LASTEXITCODE -ne 0) {
+    throw "failed to start Postgres"
+}
 
-# Set environment variables
-$env:DATABASE_URL = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
+$env:DATABASE_URL = $DatabaseUrl
 $env:MARKETPLACE_BIND = "127.0.0.1:3000"
+$env:RUST_LOG = $env:RUST_LOG ?? "info"
 
-# Start the server in background job
-Write-Host "Starting Actix server (Phase 1 - Actix + Moka)..." -ForegroundColor Cyan
+if ($SeedDatabase) {
+    Write-Host "Seeding database with current generator..." -ForegroundColor Cyan
+    cargo run --manifest-path Cargo.toml -p marketplace-server --bin populate_db
+    if ($LASTEXITCODE -ne 0) {
+        throw "database seeding failed"
+    }
+}
+
+Write-Host "Starting Actix server..." -ForegroundColor Cyan
 $ServerJob = Start-Job -ScriptBlock {
     Set-Location "C:/My Script/project-the-marketplace/backend"
     $env:DATABASE_URL = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
@@ -43,48 +59,45 @@ $ServerJob = Start-Job -ScriptBlock {
     cargo run --package marketplace-server
 }
 
-# Wait for server to be ready
 Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow
-$maxWait = 30
+$maxWait = 60
 $waited = 0
 $ready = $false
 
 while ($waited -lt $maxWait) {
     try {
-        $response = Invoke-WebRequest -Uri "http://127.0.0.1:3000/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
+        $response = Invoke-WebRequest -Uri "$BaseUrl/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($response.StatusCode -eq 200) {
             Write-Host "Server is ready!" -ForegroundColor Green
             $ready = $true
             break
         }
     } catch {}
-    
+
     Start-Sleep -Seconds 1
     $waited++
     Write-Host "." -NoNewline
 }
 
 if (-not $ready) {
-    Write-Host "\nERROR: Server did not become ready in time." -ForegroundColor Red
+    Write-Host "`nERROR: Server did not become ready in time." -ForegroundColor Red
     Cleanup
     exit 1
 }
 
-# Run the HTTP benchmark
-Write-Host "\nRunning HTTP benchmark..." -ForegroundColor Cyan
-$env:DATABASE_URL = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
+Write-Host "`nRunning real HTTP benchmark..." -ForegroundColor Cyan
+$env:HTTP_BENCH_OPS = "$Ops"
+$env:HTTP_BENCH_CONCURRENCY = "$Concurrency"
 
-cargo run --package marketplace-server --bin http_bench -- "http://127.0.0.1:3000" 500
-
+cargo run --manifest-path Cargo.toml -p marketplace-server --bin bench_concurrent -- "$BaseUrl" "$Ops" "$Concurrency"
 $BenchmarkResult = $LASTEXITCODE
 
-# Cleanup
 Cleanup
 
 if ($BenchmarkResult -eq 0) {
-    Write-Host "\n✅ Benchmark completed!" -ForegroundColor Green
+    Write-Host "`n✅ Benchmark completed!" -ForegroundColor Green
 } else {
-    Write-Host "\n❌ Benchmark failed." -ForegroundColor Red
+    Write-Host "`n❌ Benchmark failed." -ForegroundColor Red
 }
 
 exit $BenchmarkResult

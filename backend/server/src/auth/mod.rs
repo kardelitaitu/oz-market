@@ -163,6 +163,56 @@ pub fn authorize_approve_contact_reveal(
     )
 }
 
+fn required_scope(action: Action) -> Scope {
+    match action {
+        Action::CreateListing => Scope::ListingCreate,
+        Action::GetListing => Scope::ListingRead,
+        Action::SearchListings => Scope::ListingSearch,
+        Action::OpenNegotiation => Scope::NegotiationCreate,
+        Action::GetNegotiationStatus => Scope::NegotiationRead,
+        Action::SubmitOffer => Scope::NegotiationOfferSubmit,
+        Action::RequestContactReveal => Scope::NegotiationRevealRequest,
+        Action::ApproveContactReveal => Scope::RevealApprove,
+    }
+}
+
+fn allowed_roles(action: Action) -> &'static [Role] {
+    match action {
+        Action::CreateListing => &[Role::SellerListingWriter, Role::Admin],
+        Action::GetListing => &[
+            Role::SellerListingWriter,
+            Role::SellerNegotiator,
+            Role::SellerContactRevealApprover,
+            Role::BuyerSearcher,
+            Role::BuyerNegotiator,
+            Role::Admin,
+            Role::SupportReviewer,
+        ],
+        Action::SearchListings => &[
+            Role::SellerListingWriter,
+            Role::SellerNegotiator,
+            Role::SellerContactRevealApprover,
+            Role::BuyerSearcher,
+            Role::BuyerNegotiator,
+            Role::Admin,
+            Role::SupportReviewer,
+        ],
+        Action::OpenNegotiation => &[Role::BuyerNegotiator, Role::Admin],
+        Action::GetNegotiationStatus => &[
+            Role::SellerNegotiator,
+            Role::SellerContactRevealApprover,
+            Role::BuyerNegotiator,
+            Role::Admin,
+            Role::SupportReviewer,
+        ],
+        Action::SubmitOffer => &[Role::SellerNegotiator, Role::BuyerNegotiator, Role::Admin],
+        Action::RequestContactReveal => {
+            &[Role::SellerNegotiator, Role::BuyerNegotiator, Role::Admin]
+        }
+        Action::ApproveContactReveal => &[Role::SellerContactRevealApprover, Role::Admin],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,55 +266,5 @@ mod tests {
         };
 
         assert!(authorize_approve_contact_reveal(&claims, "seller_999").is_ok());
-    }
-}
-
-fn required_scope(action: Action) -> Scope {
-    match action {
-        Action::CreateListing => Scope::ListingCreate,
-        Action::GetListing => Scope::ListingRead,
-        Action::SearchListings => Scope::ListingSearch,
-        Action::OpenNegotiation => Scope::NegotiationCreate,
-        Action::GetNegotiationStatus => Scope::NegotiationRead,
-        Action::SubmitOffer => Scope::NegotiationOfferSubmit,
-        Action::RequestContactReveal => Scope::NegotiationRevealRequest,
-        Action::ApproveContactReveal => Scope::RevealApprove,
-    }
-}
-
-fn allowed_roles(action: Action) -> &'static [Role] {
-    match action {
-        Action::CreateListing => &[Role::SellerListingWriter, Role::Admin],
-        Action::GetListing => &[
-            Role::SellerListingWriter,
-            Role::SellerNegotiator,
-            Role::SellerContactRevealApprover,
-            Role::BuyerSearcher,
-            Role::BuyerNegotiator,
-            Role::Admin,
-            Role::SupportReviewer,
-        ],
-        Action::SearchListings => &[
-            Role::SellerListingWriter,
-            Role::SellerNegotiator,
-            Role::SellerContactRevealApprover,
-            Role::BuyerSearcher,
-            Role::BuyerNegotiator,
-            Role::Admin,
-            Role::SupportReviewer,
-        ],
-        Action::OpenNegotiation => &[Role::BuyerNegotiator, Role::Admin],
-        Action::GetNegotiationStatus => &[
-            Role::SellerNegotiator,
-            Role::SellerContactRevealApprover,
-            Role::BuyerNegotiator,
-            Role::Admin,
-            Role::SupportReviewer,
-        ],
-        Action::SubmitOffer => &[Role::SellerNegotiator, Role::BuyerNegotiator, Role::Admin],
-        Action::RequestContactReveal => {
-            &[Role::SellerNegotiator, Role::BuyerNegotiator, Role::Admin]
-        }
-        Action::ApproveContactReveal => &[Role::SellerContactRevealApprover, Role::Admin],
     }
 }

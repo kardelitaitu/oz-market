@@ -148,7 +148,7 @@ async fn main() -> Result<(), sqlx::Error> {
                             "shipping_regions": ["US", "CA"],
                         })),
                         Some("Excellent condition, lightly used".to_string()),
-                        if global_idx % 10 == 0 {
+                        if global_idx.is_multiple_of(10) {
                             Some("Special discount available!".to_string())
                         } else {
                             None
@@ -183,7 +183,7 @@ async fn main() -> Result<(), sqlx::Error> {
                         None,
                         None,
                         None,
-                        Some(if global_idx % 2 == 0 {
+                        Some(if global_idx.is_multiple_of(2) {
                             "online"
                         } else {
                             "local"
@@ -224,8 +224,12 @@ async fn main() -> Result<(), sqlx::Error> {
                         None,
                         None,
                         None,
-                        Some(if global_idx % 2 == 0 { "rent" } else { "sale" }),
-                        Some(if global_idx % 3 == 0 {
+                        Some(if global_idx.is_multiple_of(2) {
+                            "rent"
+                        } else {
+                            "sale"
+                        }),
+                        Some(if global_idx.is_multiple_of(3) {
                             "house"
                         } else {
                             "apartment"

@@ -119,19 +119,17 @@ if (-not $SkipFormat -and -not $failed) {
 
 # ---- CLIPPY ----------------------------------------------------------
 if (-not $SkipClippy -and -not $failed) {
-    $cmd = "cargo clippy"
+    $cmd = "cargo clippy --workspace --all-targets -- -D warnings"
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        cargo clippy --workspace; $clippyExitCode = $LASTEXITCODE
-        $sw.Stop()
+        cargo clippy --workspace --all-targets -- -D warnings
         $elapsed = $sw.Elapsed.TotalSeconds
-        $passed = $clippyExitCode -eq 0
+        $passed = $LASTEXITCODE -eq 0
         $results.Clippy = @{ Passed = $passed; Duration = $elapsed }
         Write-StepResult $passed
         if (-not $passed) { 
-            cargo clippy --workspace
+            Write-Status "Run 'cargo clippy --workspace --all-targets -- -D warnings' to fix warnings" "Yellow"
             $failed = $true 
         }
     } catch {

@@ -3,6 +3,7 @@
 ## Phase 5 Benchmark Runner
 
 Use `run-phase5-bench.ps1` to measure search and write behavior against Postgres-backed storage.
+This is the low-level app/repo benchmark.
 
 ### Required Input
 
@@ -21,6 +22,7 @@ Use `run-phase5-bench.ps1` to measure search and write behavior against Postgres
 - Seed the database once with `populate_db` and reuse it for repeated runs.
 - The in-memory fallback is for smoke checks only.
 - Use the Postgres run before changing quota or index settings.
+- For the real Actix/HTTP benchmark, use `backend/scripts/bench-http.ps1`.
 
 ## Local Postgres Path
 
