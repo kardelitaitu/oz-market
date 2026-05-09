@@ -85,6 +85,19 @@ Archive convention:
 - [x] ~~verify reservation and reveal invariants hold under race conditions~~ (actual: concurrent open-negotiation and contact-approval tests show one winner and one conflict)
 - [x] ~~verify observability signals exist for quotas, conflicts, and errors~~ (actual: the server observability snapshot now tracks request, internal write, conflict, quota rejection, and error counts)
 
+### Phase 7: Production Hardening
+
+- [ ] implement database connection pooling for production deployment
+- [ ] add rate limiting middleware for API endpoints
+- [ ] implement comprehensive error handling and logging
+- [ ] add database migration rollback capabilities
+- [ ] implement health checks for external dependencies (AI providers, database)
+- [ ] add request/response compression for performance
+- [ ] implement graceful shutdown handling
+- [ ] add database query optimization and connection limits
+- [ ] implement circuit breaker pattern for external API calls
+- [ ] add production-ready configuration management (secrets, environment variables)
+
 ## Working Rule
 
 - update this TODO when build order changes

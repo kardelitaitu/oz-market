@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use marketplace_api_contract::{
     Category, Condition, CreateListingRequest, ListingLocation, ListingPayload,
     OpenNegotiationRequest, Price, RequestContactRevealRequest, SearchRequest, SearchSort,
+    ShippingInfo,
 };
 use marketplace_auth_core::{Claims, Role, Scope};
 use marketplace_server::app::MarketplaceApp;
@@ -29,6 +30,11 @@ type PostgresBenchmarkApp = MarketplaceApp<
     PostgresContactRevealRepository,
 >;
 
+struct PostgresHarness {
+    app: PostgresBenchmarkApp,
+    pool: PgPool,
+}
+
 type MemoryBenchmarkApp = MarketplaceApp<
     InMemoryListingRepository,
     InMemoryIdempotencyRepository,
@@ -51,7 +57,7 @@ struct BenchmarkReport {
 }
 
 enum BenchmarkHarness {
-    Postgres(PostgresBenchmarkApp),
+    Postgres(PostgresHarness),
     Memory(MemoryBenchmarkApp),
 }
 
@@ -99,6 +105,8 @@ trait BenchmarkAppFacade {
         claims: &Claims,
         reveal_id: &str,
     ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>>;
+
+    fn get_pool(&self) -> Option<&sqlx::PgPool>;
 }
 
 #[async_trait]
@@ -111,7 +119,8 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         now_rfc3339: &str,
     ) -> Result<marketplace_api_contract::CreateListingResponse, Box<dyn Error + Send + Sync>> {
         match self {
-            Self::Postgres(app) => Ok(app
+            Self::Postgres(harness) => Ok(harness
+                .app
                 .create_listing(claims, request, request_fingerprint, now_rfc3339)
                 .await?),
             Self::Memory(app) => Ok(app
@@ -127,7 +136,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
     ) -> Result<Option<marketplace_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>>
     {
         match self {
-            Self::Postgres(app) => Ok(app.get_listing(claims, listing_id).await?),
+            Self::Postgres(harness) => Ok(harness.app.get_listing(claims, listing_id).await?),
             Self::Memory(app) => Ok(app.get_listing(claims, listing_id).await?),
         }
     }
@@ -138,7 +147,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         request: &SearchRequest,
     ) -> Result<marketplace_api_contract::SearchResponse, Box<dyn Error + Send + Sync>> {
         match self {
-            Self::Postgres(app) => Ok(app.search_listings(claims, request).await?),
+            Self::Postgres(harness) => Ok(harness.app.search_listings(claims, request).await?),
             Self::Memory(app) => Ok(app.search_listings(claims, request).await?),
         }
     }
@@ -151,7 +160,8 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         now_rfc3339: &str,
     ) -> Result<marketplace_api_contract::NegotiationResponse, Box<dyn Error + Send + Sync>> {
         match self {
-            Self::Postgres(app) => Ok(app
+            Self::Postgres(harness) => Ok(harness
+                .app
                 .open_negotiation(claims, request, request_fingerprint, now_rfc3339)
                 .await?),
             Self::Memory(app) => Ok(app
@@ -169,7 +179,8 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         now_rfc3339: &str,
     ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>> {
         match self {
-            Self::Postgres(app) => Ok(app
+            Self::Postgres(harness) => Ok(harness
+                .app
                 .request_contact_reveal(
                     claims,
                     negotiation_id,
@@ -196,8 +207,18 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         reveal_id: &str,
     ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>> {
         match self {
-            Self::Postgres(app) => Ok(app.approve_contact_reveal(claims, reveal_id).await?),
+            Self::Postgres(harness) => Ok(harness
+                .app
+                .approve_contact_reveal(claims, reveal_id)
+                .await?),
             Self::Memory(app) => Ok(app.approve_contact_reveal(claims, reveal_id).await?),
+        }
+    }
+
+    fn get_pool(&self) -> Option<&sqlx::PgPool> {
+        match self {
+            Self::Postgres(harness) => Some(&harness.pool),
+            Self::Memory(_) => None,
         }
     }
 }
@@ -209,67 +230,92 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .max_connections(5)
             .connect(&database_url)
             .await?;
-        ensure_schema(&pool).await?;
-        clear_benchmark_tables(&pool).await?;
         BenchmarkHarness::Postgres(build_postgres_app(pool).await?)
     } else {
         eprintln!("DATABASE_URL is not set, using in-memory benchmark harness");
         BenchmarkHarness::Memory(build_memory_app())
     };
-    let seller_claims = benchmark_seller_claims();
     let reader_claims = benchmark_reader_claims();
     let buyer_claims = benchmark_buyer_claims();
     let approver_claims = benchmark_approver_claims();
-
-    let listing_ids = seed_listings(&harness, &seller_claims, 160).await?;
+    let target_ops = benchmark_target_ops();
     let search_request = benchmark_search_request();
     let listing_read_pattern = benchmark_listing_read_pattern();
     let search_heavy_pattern = benchmark_search_heavy_pattern();
     let negotiation_burst_pattern = benchmark_negotiation_burst_pattern();
 
+    let listing_ids = if let Some(pool) = harness.get_pool() {
+        let listing_pool_size = benchmark_listing_pool_size(target_ops);
+        load_listing_ids(pool, listing_pool_size).await?
+    } else {
+        let seller_claims = benchmark_seller_claims();
+        seed_seller_accounts(&harness, &seller_claims).await?;
+        let seed_count = benchmark_seed_count(target_ops);
+        seed_listings(&harness, &seller_claims, seed_count).await?
+    };
+
+    if let Some(pool) = harness.get_pool() {
+        clear_benchmark_transaction_tables(pool).await?;
+    }
+
+    eprintln!("Benchmark target: {target_ops} ops per profile");
+    eprintln!("Benchmark listing pool: {}", listing_ids.len());
+
+    let listing_read_report = run_profile(
+        "listing-read",
+        &harness,
+        &listing_ids,
+        &reader_claims,
+        &buyer_claims,
+        &approver_claims,
+        &search_request,
+        &listing_read_pattern,
+        rounds_for_target_ops(&listing_read_pattern, target_ops),
+        0,
+        0,
+    )
+    .await?;
+    if let Some(pool) = harness.get_pool() {
+        clear_benchmark_transaction_tables(pool).await?;
+    }
+
+    let search_heavy_report = run_profile(
+        "search-heavy",
+        &harness,
+        &listing_ids,
+        &reader_claims,
+        &buyer_claims,
+        &approver_claims,
+        &search_request,
+        &search_heavy_pattern,
+        rounds_for_target_ops(&search_heavy_pattern, target_ops),
+        10,
+        10,
+    )
+    .await?;
+    if let Some(pool) = harness.get_pool() {
+        clear_benchmark_transaction_tables(pool).await?;
+    }
+
+    let negotiation_burst_report = run_profile(
+        "negotiation-burst",
+        &harness,
+        &listing_ids,
+        &reader_claims,
+        &buyer_claims,
+        &approver_claims,
+        &search_request,
+        &negotiation_burst_pattern,
+        rounds_for_target_ops(&negotiation_burst_pattern, target_ops),
+        60,
+        60,
+    )
+    .await?;
+
     let reports = [
-        run_profile(
-            "listing-read",
-            &harness,
-            &listing_ids,
-            &reader_claims,
-            &buyer_claims,
-            &approver_claims,
-            &search_request,
-            &listing_read_pattern,
-            10,
-            0,
-            0,
-        )
-        .await?,
-        run_profile(
-            "search-heavy",
-            &harness,
-            &listing_ids,
-            &reader_claims,
-            &buyer_claims,
-            &approver_claims,
-            &search_request,
-            &search_heavy_pattern,
-            10,
-            10,
-            10,
-        )
-        .await?,
-        run_profile(
-            "negotiation-burst",
-            &harness,
-            &listing_ids,
-            &reader_claims,
-            &buyer_claims,
-            &approver_claims,
-            &search_request,
-            &negotiation_burst_pattern,
-            5,
-            60,
-            60,
-        )
-        .await?,
+        listing_read_report,
+        search_heavy_report,
+        negotiation_burst_report,
     ];
 
     println!("Phase 5 benchmark summary");
@@ -301,43 +347,25 @@ fn build_memory_app() -> MemoryBenchmarkApp {
     )
 }
 
-async fn build_postgres_app(
-    pool: PgPool,
-) -> Result<PostgresBenchmarkApp, Box<dyn Error + Send + Sync>> {
-    Ok(PostgresBenchmarkApp::new(
+async fn build_postgres_app(pool: PgPool) -> Result<PostgresHarness, Box<dyn Error + Send + Sync>> {
+    let app = PostgresBenchmarkApp::new(
         PostgresListingRepository::new(pool.clone()),
         InMemoryIdempotencyRepository::new(),
         PostgresReservationLeaseRepository::new(pool.clone()),
         PostgresContactRevealRepository::new(pool.clone()),
         std::sync::Arc::new(PostgresAuditEventRepository::new(pool.clone())),
         std::sync::Arc::new(PostgresOutboxEventRepository::new(pool.clone())),
-        std::sync::Arc::new(PostgresSellerAccountRepository::new(pool)),
-    ))
+        std::sync::Arc::new(PostgresSellerAccountRepository::new(pool.clone())),
+    );
+    Ok(PostgresHarness { app, pool })
 }
 
-async fn ensure_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
-    for statement in include_str!("../../migrations/0001_init.sql").split(';') {
-        let statement = statement.trim();
-        if statement.is_empty()
-            || statement.eq_ignore_ascii_case("BEGIN")
-            || statement.eq_ignore_ascii_case("COMMIT")
-        {
-            continue;
-        }
-        sqlx::query(statement).execute(pool).await?;
-    }
-    Ok(())
-}
-
-async fn clear_benchmark_tables(pool: &PgPool) -> Result<(), sqlx::Error> {
-    for statement in [
-        "TRUNCATE TABLE idempotency_keys, outbox_events, audit_events, contact_reveals, reservation_leases, negotiations, listings RESTART IDENTITY CASCADE",
-        "SELECT setval('listing_id_seq', 1, false)",
-        "SELECT setval('reservation_lease_id_seq', 1, false)",
-        "SELECT setval('contact_reveal_id_seq', 1, false)",
-    ] {
-        sqlx::query(statement).execute(pool).await?;
-    }
+async fn clear_benchmark_transaction_tables(pool: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "TRUNCATE TABLE idempotency_keys, outbox_events, audit_events, contact_reveals, reservation_leases, negotiations",
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -397,10 +425,13 @@ fn benchmark_approver_claims() -> Claims {
 }
 
 fn benchmark_search_request() -> SearchRequest {
+    use marketplace_api_contract::ListingType;
+
     SearchRequest {
-        query: Some("ThinkPad".to_string()),
-        category: Some(Category::Laptop),
-        condition: Some(Condition::Used),
+        query: Some("Benchmark".to_string()), // Changed to match all listing titles
+        category: Some(Category::Laptop),     // Only applies to Product listings
+        condition: Some(Condition::Used),     // Only applies to Product listings
+        listing_type: Some(ListingType::Product), // Test filtering by listing type
         sort_by: SearchSort::Relevance,
         limit: Some(20),
         ..SearchRequest::default()
@@ -447,6 +478,30 @@ fn benchmark_negotiation_burst_pattern() -> Vec<BenchmarkStep> {
     steps
 }
 
+async fn seed_seller_accounts<A: BenchmarkAppFacade + Sync>(
+    app: &A,
+    _claims: &Claims,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // For now, we'll create seller accounts manually via SQL since the app doesn't have admin endpoints yet
+    // In a real scenario, this would be done through the admin API
+    if let Some(pool) = app.get_pool() {
+        // Always create the seller account since benchmark clears all tables
+        let result = sqlx::query(r#"INSERT INTO seller_accounts (seller_account_id, owner_id, trust_level, status, display_name, seller_rating, listings_created, quota_override) VALUES ('bench-seller', 'bench-seller', 'verified', 'active', 'Benchmark Seller', 4.5, 0, 5000)"#)
+            .execute(pool)
+            .await;
+
+        if let Err(e) = result {
+            eprintln!("Warning: Failed to seed seller account: {}", e);
+            // Try alternative approach
+            eprintln!("Attempting alternative seeding...");
+            let _ = sqlx::query("INSERT INTO seller_accounts (seller_account_id, owner_id, trust_level, status, quota_override) VALUES ('bench-seller', 'bench-seller', 'verified', 'active', 5000)")
+                .execute(pool)
+                .await;
+        }
+    }
+    Ok(())
+}
+
 async fn seed_listings<A: BenchmarkAppFacade + Sync>(
     app: &A,
     claims: &Claims,
@@ -469,16 +524,111 @@ async fn seed_listings<A: BenchmarkAppFacade + Sync>(
 }
 
 fn build_listing_request(seed: usize) -> CreateListingRequest {
-    let thinkpad = !seed.is_multiple_of(5);
-    let product_name = if thinkpad {
-        format!("ThinkPad Benchmark {seed}")
-    } else {
-        format!("Latitude Benchmark {seed}")
+    use marketplace_api_contract::{
+        ListingType, PropertySubType, PropertyTransactionType, ServiceType,
     };
+
     let city = match seed % 3 {
         0 => "Osaka",
         1 => "Tokyo",
         _ => "Kyoto",
+    };
+
+    // Create different types of listings based on seed
+    let (
+        listing_type,
+        title,
+        category,
+        condition,
+        service_type,
+        hourly_rate,
+        project_rate,
+        qualifications,
+        service_radius_km,
+        property_transaction_type,
+        property_sub_type,
+        area_sqm,
+        bedrooms,
+        bathrooms,
+        year_built,
+        lot_size_sqm,
+        zoning,
+    ) = match seed % 3 {
+        0 => {
+            // Product listing (laptop)
+            let thinkpad = !seed.is_multiple_of(5);
+            let product_title = if thinkpad {
+                format!("ThinkPad Benchmark {seed}")
+            } else {
+                format!("Latitude Benchmark {seed}")
+            };
+            (
+                ListingType::Product,
+                product_title,
+                Some(Category::Laptop),
+                Some(Condition::Used),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        1 => {
+            // Service listing (tutoring)
+            (
+                ListingType::Service,
+                format!("Math Tutoring Service {seed}"),
+                None,
+                None,
+                Some(ServiceType::Local),
+                Some(25.0 + (seed % 5) as f64),
+                Some(200.0 + (seed % 10) as f64),
+                Some(vec![
+                    "Teaching License".to_string(),
+                    "Math Degree".to_string(),
+                ]),
+                Some(10 + (seed % 5) as i32),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        _ => {
+            // Property listing (apartment for rent)
+            (
+                ListingType::Property,
+                format!("Apartment for Rent {seed}"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(PropertyTransactionType::Rent),
+                Some(PropertySubType::Apartment),
+                Some(80.0 + (seed % 20) as f64),
+                Some(2 + (seed % 3) as i32),
+                Some(1 + (seed % 2) as i32),
+                Some(2010 + (seed % 15) as i32),
+                None,
+                None,
+            )
+        }
     };
 
     CreateListingRequest {
@@ -486,49 +636,81 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
         listing: ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "bench-seller".to_string(),
-            listing_type: marketplace_api_contract::ListingType::Product,
-            category: Some(Category::Laptop),
-            title: product_name,
-            condition: Some(Condition::Used),
+            listing_type,
+            category,
+            title,
+            condition,
             price: Price {
                 currency: "USD".to_string(),
-                amount: 499.0 + seed as f64,
+                amount: match listing_type {
+                    ListingType::Product => 499.0 + seed as f64,
+                    ListingType::Service => hourly_rate.unwrap_or(25.0),
+                    ListingType::Property => 1200.0 + (seed % 5 * 200) as f64,
+                },
             },
             location: ListingLocation {
                 country_code: "JP".to_string(),
                 country_name: "Japan".to_string(),
                 city: city.to_string(),
-                // Phase D: Geolocation (optional)
                 latitude: None,
                 longitude: None,
                 geolocation_opt_out: None,
             },
             picture_urls: vec!["https://example.com/item.jpg".to_string()],
-            description: format!("Benchmark listing {seed}"),
+            description: format!("Benchmark listing {seed} ({:?})", listing_type),
             attributes: Some(serde_json::json!({
-                "brand": "Lenovo",
                 "seed": seed,
+                "listing_type": format!("{:?}", listing_type),
             })),
-            // NEW: Marketplace fields
-            sku: None,
-            quantity: None,
-            shipping_info: None,
-            condition_details: None,
-            seller_notes: None,
-            // NEW: Phase 2
-            service_type: None,
-            hourly_rate: None,
-            project_rate: None,
-            qualifications: None,
-            service_radius_km: None,
-            property_transaction_type: None,
-            property_sub_type: None,
-            area_sqm: None,
-            bedrooms: None,
-            bathrooms: None,
-            year_built: None,
-            lot_size_sqm: None,
-            zoning: None,
+            // Marketplace fields
+            sku: if matches!(listing_type, ListingType::Product) {
+                Some(format!("SKU-{seed}"))
+            } else {
+                None
+            },
+            quantity: if matches!(listing_type, ListingType::Product) {
+                Some(1)
+            } else {
+                None
+            },
+            shipping_info: if matches!(listing_type, ListingType::Product) {
+                Some(ShippingInfo {
+                    local_pickup: true,
+                    shipping_available: true,
+                    shipping_cost: Some(Price {
+                        currency: "USD".to_string(),
+                        amount: 15.99,
+                    }),
+                    shipping_regions: Some(vec!["US".to_string(), "CA".to_string()]),
+                })
+            } else {
+                None
+            },
+            condition_details: if matches!(listing_type, ListingType::Product) {
+                Some("Excellent condition, lightly used".to_string())
+            } else {
+                None
+            },
+            seller_notes: if seed % 10 == 0 {
+                Some("Special discount available!".to_string())
+            } else {
+                None
+            },
+            // Service fields
+            service_type,
+            hourly_rate,
+            project_rate,
+            qualifications,
+            service_radius_km,
+            // Property fields
+            property_transaction_type,
+            property_sub_type,
+            area_sqm,
+            bedrooms,
+            bathrooms,
+            year_built,
+            lot_size_sqm,
+            zoning,
         },
     }
 }
@@ -637,4 +819,54 @@ fn next_listing_id(listing_ids: &[String], cursor: &mut usize) -> String {
     let listing_id = listing_ids[*cursor % listing_ids.len()].clone();
     *cursor += 1;
     listing_id
+}
+
+fn benchmark_target_ops() -> usize {
+    std::env::var("PHASE5_BENCH_OPS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(10_000)
+}
+
+fn benchmark_seed_count(target_ops: usize) -> usize {
+    target_ops.div_ceil(3) + 100
+}
+
+fn benchmark_listing_pool_size(target_ops: usize) -> usize {
+    benchmark_seed_count(target_ops).max(2_000)
+}
+
+async fn load_listing_ids(pool: &PgPool, limit: usize) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT l.listing_id
+         FROM listings l
+         LEFT JOIN reservation_leases rl
+           ON rl.listing_id = l.listing_id AND rl.status = 'active'
+         WHERE l.listing_type = 'product'
+           AND rl.listing_id IS NULL
+         ORDER BY l.listing_id
+         LIMIT $1",
+    )
+    .bind(limit as i64)
+    .fetch_all(pool)
+    .await?;
+
+    if rows.is_empty() {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    Ok(rows)
+}
+
+fn rounds_for_target_ops(pattern: &[BenchmarkStep], target_ops: usize) -> usize {
+    let ops_per_round: usize = pattern
+        .iter()
+        .map(|step| match step {
+            BenchmarkStep::Read | BenchmarkStep::Search | BenchmarkStep::OpenNegotiation => 1,
+            BenchmarkStep::Reveal => 3,
+        })
+        .sum();
+
+    target_ops.div_ceil(ops_per_round)
 }

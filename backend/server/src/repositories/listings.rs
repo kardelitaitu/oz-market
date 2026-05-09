@@ -816,13 +816,21 @@ impl ListingRepository for PostgresListingRepository {
             .await
             .map_err(|error| storage(error.to_string()))?;
         let listing_id = format!("lst_{next_id:06}");
+        let category = request
+            .listing
+            .category
+            .unwrap_or(marketplace_api_contract::Category::Other);
+        let condition = request
+            .listing
+            .condition
+            .unwrap_or(marketplace_api_contract::Condition::Used);
         let row = sqlx::query(
             "INSERT INTO listings (
                 listing_id, owner_id, schema_version, category, product_name, \"condition\",
                 price_currency, price_amount, country_code, country_name, city,
                 picture_urls, description, attributes, status, version, create_idempotency_key,
                 search_text, created_at, updated_at, sku, quantity, shipping_info, condition_details, seller_notes, listing_type
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now(),$17,$18,$19,$20,$22)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now(),$17,$18,$19,$20,$21,$22)
             RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\",
                 price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls,
                 description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, listing_type",
@@ -830,9 +838,9 @@ impl ListingRepository for PostgresListingRepository {
         .bind(&listing_id)
         .bind(&request.listing.owner_id)
         .bind(&request.listing.schema_version)
-        .bind(db_enum_value(&request.listing.category))
+        .bind(db_enum_value(&category))
         .bind(&request.listing.title)
-        .bind(db_enum_value(&request.listing.condition))
+        .bind(db_enum_value(&condition))
         .bind(&request.listing.price.currency)
         .bind(request.listing.price.amount)
         .bind(&request.listing.location.country_code)
