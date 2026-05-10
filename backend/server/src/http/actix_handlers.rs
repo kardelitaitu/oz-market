@@ -173,8 +173,25 @@ pub async fn search_listings(
         modified_query.listing_type = extract_listing_type_from_path(&req);
     }
 
-    // Build simple cache key
-    let cache_key = format!("search:limit:{:?}", modified_query.limit);
+    // Build cache key with meaningful search params for better cache hits
+    let listing_type_str = modified_query
+        .listing_type
+        .map(|t| format!("{:?}", t))
+        .unwrap_or_else(|| "all".to_string());
+    let sort_by_str = format!("{:?}", modified_query.sort_by);
+    let category_str = modified_query
+        .category
+        .map(|c| format!("{:?}", c))
+        .unwrap_or_else(|| "none".to_string());
+    let limit_str = modified_query
+        .limit
+        .map(|l| l.to_string())
+        .unwrap_or_else(|| "20".to_string());
+
+    let cache_key = format!(
+        "search:lt:{}:cat:{}:sort:{}:limit:{}",
+        listing_type_str, category_str, sort_by_str, limit_str
+    );
 
     // Try cache first (stores pre-serialized JSON)
     if **cache_enabled {

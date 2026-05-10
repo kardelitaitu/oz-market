@@ -110,6 +110,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(actix_web::middleware::Compress::default()) // Response compression (gzip)
             .wrap(TracingLogger::default()) // Add tracing middleware
             .app_data(app_data.clone())
             .app_data(obs_data.clone())

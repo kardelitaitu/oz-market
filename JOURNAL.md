@@ -81,3 +81,12 @@
 - All benchmark phases achieve 100% success rate
 - get_listing works at ~25K ops/s when tested standalone
 - Note: get_listing at high concurrency (500) shows degradation - appears to be benchmark client limitation, not server
+
+## Journal Entry
+
+- **API Optimization**: Added response compression (gzip) - built into actix-web middleware
+- **Search Cache Key**: Improved to include listing_type, category, sort_by for better cache hits
+- Benchmark results with optimizations:
+  - Search 100: 51,700 ops/s
+  - Search 200: 57,977 ops/s
+  - Search 500: 30,297 ops/s

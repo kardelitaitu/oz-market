@@ -1,5 +1,4 @@
-use marketplace_api_contract::*;
-use serde_json::{self, json, Value};
+use serde_json::Value;
 
 #[test]
 fn category_enum_serde_roundtrip() {
