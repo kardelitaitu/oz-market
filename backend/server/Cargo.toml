@@ -34,5 +34,13 @@ utoipa-swagger-ui = "3"
 name = "schema_test"
 path = "src/bin/schema_test.rs"
 
+[[bin]]
+name = "bench_concurrent"
+path = "src/bin/bench_concurrent.rs"
+
+[[bin]]
+name = "http_bench"
+path = "src/bin/http_bench.rs"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

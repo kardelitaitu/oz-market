@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut search_success = 0;
 
     for _ in 0..search_ops {
-        let url = format!("{}/v1/listings/search?page=1&page_size=20", base_url);
+        let url = format!("{}/v1/listings/search?query=Benchmark&limit=20", base_url);
         match client
             .get(&url)
             .header("x-marketplace-claims", &claims_header)
