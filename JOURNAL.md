@@ -109,3 +109,7 @@
   - Search 100: 51,700 ops/s
   - Search 200: 57,977 ops/s
   - Search 500: 30,297 ops/s
+
+## 2026-05-10 18:10
+
+- Tightened `check.ps1` journal guard to compare the committed journal as a line-prefix, so rewritten history fails and append-only updates pass.

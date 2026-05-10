@@ -21,18 +21,8 @@ param(
 $ErrorActionPreference = "Stop"
 $startTime = Get-Date
 
-$colors = @{
-    Green  = "`e[32m"
-    Red    = "`e[31m"
-    Yellow = "`e[33m"
-    Blue   = "`e[34m"
-    Cyan   = "`e[36m"
-    Reset  = "`e[0m"
-}
-
 function Write-Status($msg, $color = "White") {
-    $c = if ($colors[$color]) { $colors[$color] } else { "" }
-    Write-Output "$c$msg$($colors.Reset)"
+    Write-Output $msg
 }
 
 function Write-Header($title) {
@@ -45,6 +35,7 @@ $results = @{
     Format = @{ Passed = $false; Duration = 0 }
     Clippy = @{ Passed = $false; Duration = 0 }
     Tests  = @{ Passed = $false; Duration = 0 }
+    Journal = @{ Passed = $false; Duration = 0 }
 }
 
 # Check if we're in the right directory (should have backend/Cargo.toml)
@@ -68,9 +59,89 @@ function Write-StepResult($passed) {
     }
 }
 
+function Test-JournalAppendOnly {
+    param(
+        [string]$RepoRoot,
+        [string]$Path = "JOURNAL.md"
+    )
+
+    $fullPath = if ([System.IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $RepoRoot $Path }
+    $relativePath = "JOURNAL.md"
+
+    $headLines = @()
+    try {
+        $headLines = @(git -C $RepoRoot show "HEAD:$relativePath" 2>$null | ForEach-Object { $_.TrimEnd("`r") })
+    } catch {
+        return @{
+            Passed  = $false
+            Message = "Unable to read $Path from HEAD"
+        }
+    }
+
+    if ($LASTEXITCODE -ne 0 -or $headLines.Count -eq 0) {
+        return @{
+            Passed  = $false
+            Message = "Unable to read $Path from HEAD"
+        }
+    }
+
+    if (-not (Test-Path $fullPath)) {
+        return @{
+            Passed  = $false
+            Message = "$Path is missing"
+        }
+    }
+
+    $currentLines = @(Get-Content -LiteralPath $fullPath | ForEach-Object { $_.TrimEnd("`r") })
+
+    if ($currentLines.Count -lt $headLines.Count) {
+        return @{
+            Passed  = $false
+            Message = "$Path is shorter than HEAD"
+        }
+    }
+
+    for ($i = 0; $i -lt $headLines.Count; $i++) {
+        if ($currentLines[$i] -ne $headLines[$i]) {
+            return @{
+                Passed  = $false
+                Message = "$Path changed before the append-only boundary"
+            }
+        }
+    }
+
+    return @{
+        Passed  = $true
+        Message = "$Path is append-only"
+    }
+}
+
 # Change to backend directory (where Cargo.toml is)
 $originalLocation = Get-Location
+$repoRoot = $originalLocation.Path
 Set-Location "backend"
+
+# ---- JOURNAL APPEND-ONLY GUARD --------------------------------------
+$cmd = "journal append-only guard"
+Write-StepHeader $stepNum $cmd
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+try {
+    $journalPath = Join-Path $repoRoot "JOURNAL.md"
+    $journalCheck = Test-JournalAppendOnly -RepoRoot $repoRoot -Path $journalPath
+    $elapsed = $sw.Elapsed.TotalSeconds
+    $results.Journal = @{ Passed = $journalCheck.Passed; Duration = $elapsed }
+    Write-StepResult $journalCheck.Passed
+    if (-not $journalCheck.Passed) {
+        Write-Status $journalCheck.Message "Yellow"
+        $failed = $true
+    }
+} catch {
+    $elapsed = $sw.Elapsed.TotalSeconds
+    $results.Journal = @{ Passed = $false; Duration = $elapsed }
+    Write-StepResult $false
+    $failed = $true
+}
+$stepNum++
 
 # ---- BUILD -----------------------------------------------------------
 if (-not $SkipBuild) {
@@ -169,7 +240,7 @@ Set-Location $originalLocation
 $total = ((Get-Date) - $startTime).TotalSeconds
 Write-Status "CI CHECKER REPORT:" "Yellow"
 $p = 0; $f = 0
-$runOrder = @("Build", "Format", "Clippy", "Tests")
+$runOrder = @("Journal", "Build", "Format", "Clippy", "Tests")
 foreach ($name in $runOrder) {
     $r = $results.$name
     if ($r.Duration -gt 0 -or $r.Passed) {
