@@ -28,7 +28,7 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| (num_cpus * 2).max(8)); // 2x CPU cores, minimum 8
+        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(4)); // Reserve 1 thread for system stability, minimum 4
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(worker_threads)
@@ -227,7 +227,7 @@ async fn metrics_handler(pool: web::Data<sqlx::postgres::PgPool>) -> impl actix_
     let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| (num_cpus * 2).max(8));
+        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(4));
 
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
