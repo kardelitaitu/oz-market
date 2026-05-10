@@ -73,13 +73,13 @@ trait BenchmarkAppFacade {
 
     async fn get_listing(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         listing_id: &str,
     ) -> Result<Option<marketplace_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>>;
 
     async fn search_listings(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         request: &SearchRequest,
     ) -> Result<marketplace_api_contract::SearchResponse, Box<dyn Error + Send + Sync>>;
 
@@ -131,7 +131,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
 
     async fn get_listing(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         listing_id: &str,
     ) -> Result<Option<marketplace_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>>
     {
@@ -143,7 +143,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
 
     async fn search_listings(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         request: &SearchRequest,
     ) -> Result<marketplace_api_contract::SearchResponse, Box<dyn Error + Send + Sync>> {
         match self {
@@ -740,11 +740,13 @@ async fn run_profile<A: BenchmarkAppFacade + Sync>(
             match step {
                 BenchmarkStep::Read => {
                     let listing_id = next_listing_id(listing_ids, &mut listing_cursor);
-                    let _ = app.get_listing(reader_claims, &listing_id).await?;
+                    let _ = app.get_listing(Some(reader_claims), &listing_id).await?;
                     operation_count += 1;
                 }
                 BenchmarkStep::Search => {
-                    let _ = app.search_listings(reader_claims, search_request).await?;
+                    let _ = app
+                        .search_listings(Some(reader_claims), search_request)
+                        .await?;
                     operation_count += 1;
                 }
                 BenchmarkStep::OpenNegotiation => {

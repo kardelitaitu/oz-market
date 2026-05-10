@@ -84,7 +84,7 @@ where
 
     pub async fn search_listings(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         request: &SearchRequest,
     ) -> Result<SearchResponse, crate::http::handlers::HandlerError> {
         search_listings(&self.search, claims, request).await
@@ -92,7 +92,7 @@ where
 
     pub async fn get_listing(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         listing_id: &str,
     ) -> Result<Option<ListingSummary>, crate::http::handlers::HandlerError> {
         get_listing(&self.search, claims, listing_id).await
@@ -157,7 +157,7 @@ where
             crate::services::idempotency::IdempotencyDecision::FirstUse => {
                 let listing = self
                     .search
-                    .get_listing(claims, &request.listing_id)
+                    .get_listing(Some(claims), &request.listing_id)
                     .await?
                     .ok_or_else(|| {
                         RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
@@ -275,7 +275,7 @@ where
             .unwrap_or(negotiation_id);
         let listing = self
             .search
-            .get_listing(claims, listing_id)
+            .get_listing(Some(claims), listing_id)
             .await?
             .ok_or_else(|| {
                 RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
@@ -611,7 +611,7 @@ where
             )
             .into());
         }
-        let before = self.get_listing(claims, listing_id).await?;
+        let before = self.get_listing(Some(claims), listing_id).await?;
         let updated = self
             .listing_repository
             .as_ref()
@@ -1254,7 +1254,7 @@ mod tests {
 
         let response = app
             .search_listings(
-                &claims,
+                Some(&claims),
                 &SearchRequest {
                     query: Some("ThinkPad".to_string()),
                     category: Some(Category::Laptop),
@@ -1274,7 +1274,10 @@ mod tests {
 
         assert_eq!(response.items.len(), 1);
         assert_eq!(response.items[0].listing_id, created.listing_id);
-        let get = app.get_listing(&claims, &created.listing_id).await.unwrap();
+        let get = app
+            .get_listing(Some(&claims), &created.listing_id)
+            .await
+            .unwrap();
         assert!(get.is_some());
     }
 

@@ -235,7 +235,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test retrieval
     println!("\nTesting retrieval...");
     let product_listing = app
-        .get_listing(&claims, &product_response.listing_id)
+        .get_listing(Some(&claims), &product_response.listing_id)
         .await?;
     if let Some(listing) = product_listing {
         println!(
@@ -245,7 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let service_listing = app
-        .get_listing(&claims, &service_response.listing_id)
+        .get_listing(Some(&claims), &service_response.listing_id)
         .await?;
     if let Some(listing) = service_listing {
         println!(
@@ -255,7 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let property_listing = app
-        .get_listing(&claims, &property_response.listing_id)
+        .get_listing(Some(&claims), &property_response.listing_id)
         .await?;
     if let Some(listing) = property_listing {
         println!(

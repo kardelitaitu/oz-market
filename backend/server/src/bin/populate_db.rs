@@ -99,6 +99,20 @@ async fn main() -> Result<(), sqlx::Error> {
             let city_data = &cities[(seller_idx + item_idx) % cities.len()];
             let price = 100.0 + (global_idx as f64 % 2500.0);
 
+            // Base geolocation data for the city
+            let base_lat = match city_data.2 {
+                "Tokyo" => 35.6762,
+                "New York" => 40.7128,
+                "London" => 51.5074,
+                _ => 0.0,
+            };
+            let base_lon = match city_data.2 {
+                "Tokyo" => 139.6503,
+                "New York" => -74.0060,
+                "London" => -0.1278,
+                _ => 0.0,
+            };
+
             let (
                 listing_type,
                 category,
@@ -123,8 +137,13 @@ async fn main() -> Result<(), sqlx::Error> {
                 year_built,
                 lot_size_sqm,
                 zoning,
+                listing_lat,
+                listing_lon,
+                listing_opt_out,
             ) = match global_idx % 5 {
                 0 => {
+                    let lat_offset = ((global_idx % 100) as f64 - 50.0) * 0.01;
+                    let lon_offset = ((global_idx % 100) as f64 - 50.0) * 0.01;
                     let brand = brands[(seller_idx + item_idx) % brands.len()];
                     let category = product_categories[(seller_idx + item_idx) % 10];
                     let condition = conditions[(seller_idx + item_idx) % conditions.len()];
@@ -166,12 +185,33 @@ async fn main() -> Result<(), sqlx::Error> {
                         None,
                         None,
                         None,
+                        // Add geolocation for products
+                        Some(base_lat + lat_offset),
+                        Some(base_lon + lon_offset),
+                        Some(false),
                     )
                 }
                 1 | 2 => {
                     let title = format!("Math Tutoring Service {}", global_idx);
                     let description =
                         "Online and local tutoring service for mathematics.".to_string();
+
+                    // Generate geolocation for services (especially local ones)
+                    let (service_lat, service_lon, service_opt_out) =
+                        if global_idx.is_multiple_of(2) {
+                            // Online services don't need geolocation
+                            (None, None, Some(true))
+                        } else {
+                            // Local services should have geolocation
+                            let lat_offset = ((global_idx % 50) as f64 - 25.0) * 0.005;
+                            let lon_offset = ((global_idx % 50) as f64 - 25.0) * 0.005;
+                            (
+                                Some(base_lat + lat_offset),
+                                Some(base_lon + lon_offset),
+                                Some(false),
+                            )
+                        };
+
                     (
                         "service",
                         "other",
@@ -184,9 +224,9 @@ async fn main() -> Result<(), sqlx::Error> {
                         None,
                         None,
                         Some(if global_idx.is_multiple_of(2) {
-                            "online"
+                            "online".to_string()
                         } else {
-                            "local"
+                            "local".to_string()
                         }),
                         Some(25.0 + (global_idx % 15) as f64),
                         Some(200.0 + (global_idx % 50) as f64),
@@ -203,11 +243,24 @@ async fn main() -> Result<(), sqlx::Error> {
                         None,
                         None,
                         None,
+                        // Add geolocation for services
+                        service_lat,
+                        service_lon,
+                        service_opt_out,
                     )
                 }
                 _ => {
                     let title = format!("Apartment for Rent {}", global_idx);
                     let description = "Modern apartment with strong local demand.".to_string();
+
+                    // Properties should always have geolocation
+                    // Add some variation for different properties in the same city
+                    let lat_offset = ((global_idx % 100) as f64 - 50.0) * 0.002;
+                    let lon_offset = ((global_idx % 100) as f64 - 50.0) * 0.002;
+                    let property_lat = Some(base_lat + lat_offset);
+                    let property_lon = Some(base_lon + lon_offset);
+                    let property_opt_out = Some(false); // Properties should be locatable
+
                     (
                         "property",
                         "other",
@@ -225,14 +278,14 @@ async fn main() -> Result<(), sqlx::Error> {
                         None,
                         None,
                         Some(if global_idx.is_multiple_of(2) {
-                            "rent"
+                            "rent".to_string()
                         } else {
-                            "sale"
+                            "sale".to_string()
                         }),
                         Some(if global_idx.is_multiple_of(3) {
-                            "house"
+                            "house".to_string()
                         } else {
-                            "apartment"
+                            "apartment".to_string()
                         }),
                         Some(80.0 + (global_idx % 120) as f64),
                         Some(1 + (global_idx % 4) as i32),
@@ -240,6 +293,10 @@ async fn main() -> Result<(), sqlx::Error> {
                         Some(2000 + (global_idx % 20) as i32),
                         Some(50.0 + (global_idx % 250) as f64),
                         Some("residential".to_string()),
+                        // Add geolocation for properties
+                        property_lat,
+                        property_lon,
+                        property_opt_out,
                     )
                 }
             };
@@ -250,13 +307,13 @@ async fn main() -> Result<(), sqlx::Error> {
                     price_currency, price_amount, country_code, country_name, city,
                     picture_urls, description, attributes, status, version, create_idempotency_key,
                     search_text, created_at, updated_at, sku, quantity, shipping_info, condition_details,
-                    seller_notes, listing_type
+                    seller_notes, listing_type, latitude, longitude, geolocation_opt_out
                 ) VALUES (
                     $1, $2, '1.0', $3, $4, $5,
                     'USD', $6, $7, $8, $9,
                     $10, $11, $12, 'active', 1, $13,
                     $14, now(), now(), $15, $16, $17, $18,
-                    $19, $20
+                    $19, $20, $21, $22, $23
                 )"
             )
             .bind(&listing_id)
@@ -269,7 +326,7 @@ async fn main() -> Result<(), sqlx::Error> {
             .bind(city_data.1)
             .bind(city_data.2)
             .bind(serde_json::json!([format!("https://example.com/{}.jpg", listing_id)]))
-            .bind(description.clone())
+            .bind(&description)
             .bind(serde_json::json!({
                 "brand": brands[(seller_idx + item_idx) % brands.len()],
                 "model": format!("{}-{}", category, item_idx + 1),
@@ -284,20 +341,24 @@ async fn main() -> Result<(), sqlx::Error> {
             .bind(condition_details)
             .bind(seller_notes)
             .bind(listing_type)
+            .bind(listing_lat)
+            .bind(listing_lon)
+            .bind(listing_opt_out)
             .execute(&pool)
             .await?;
 
             match listing_type {
                 "service" => {
+                    let quals = qualifications.unwrap_or(vec![]);
                     sqlx::query(
                         "INSERT INTO service_listings (listing_id, service_type, hourly_rate, project_rate, qualifications, service_radius_km)
                          VALUES ($1, $2, $3, $4, $5, $6)"
                     )
                     .bind(&listing_id)
-                    .bind(service_type.expect("service_type"))
+                    .bind(service_type.unwrap_or("".to_string()))
                     .bind(hourly_rate)
                     .bind(project_rate)
-                    .bind(serde_json::json!(qualifications.expect("qualifications")))
+                    .bind(serde_json::json!(quals))
                     .bind(service_radius_km)
                     .execute(&pool)
                     .await?;
@@ -308,8 +369,8 @@ async fn main() -> Result<(), sqlx::Error> {
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
                     )
                     .bind(&listing_id)
-                    .bind(property_transaction_type.expect("property_transaction_type"))
-                    .bind(property_sub_type.expect("property_sub_type"))
+                    .bind(property_transaction_type.unwrap_or("".to_string()))
+                    .bind(property_sub_type.unwrap_or("".to_string()))
                     .bind(area_sqm)
                     .bind(bedrooms)
                     .bind(bathrooms)

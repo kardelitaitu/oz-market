@@ -59,7 +59,7 @@ impl From<RepositoryError> for HandlerError {
 
 pub async fn search_listings<R>(
     service: &SearchService<R>,
-    claims: &Claims,
+    claims: Option<&Claims>,
     request: &SearchRequest,
 ) -> Result<SearchResponse, HandlerError>
 where
@@ -70,7 +70,7 @@ where
 
 pub async fn get_listing<R>(
     service: &SearchService<R>,
-    claims: &Claims,
+    claims: Option<&Claims>,
     listing_id: &str,
 ) -> Result<Option<ListingSummary>, HandlerError>
 where

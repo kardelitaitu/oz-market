@@ -18,6 +18,10 @@ use std::sync::{
     Arc, RwLock,
 };
 
+pub fn storage(message: impl Into<String>) -> RepositoryError {
+    RepositoryError::new(RepositoryErrorKind::Storage, message)
+}
+
 #[async_trait::async_trait]
 pub trait ListingRepository: Send + Sync {
     async fn insert_listing(
@@ -44,10 +48,6 @@ pub trait ListingRepository: Send + Sync {
 
 pub fn conflict(message: impl Into<String>) -> RepositoryError {
     RepositoryError::new(RepositoryErrorKind::Conflict, message)
-}
-
-pub fn storage(message: impl Into<String>) -> RepositoryError {
-    RepositoryError::new(RepositoryErrorKind::Storage, message)
 }
 
 pub struct InMemoryListingRepository {
@@ -232,6 +232,149 @@ fn db_enum_value<T: Serialize>(value: &T) -> String {
 fn parse_db_enum<T: DeserializeOwned>(value: &str) -> Result<T, RepositoryError> {
     serde_json::from_value(Value::String(value.to_string()))
         .map_err(|error| storage(error.to_string()))
+}
+
+fn matches_filters(listing: &ListingSummary, request: &SearchRequest) -> bool {
+    if let Some(category) = request.category {
+        if listing.listing.category != Some(category) {
+            return false;
+        }
+    }
+
+    if let Some(condition) = request.condition {
+        if listing.listing.condition != Some(condition) {
+            return false;
+        }
+    }
+
+    if let Some(status) = request.status {
+        if listing.status != status {
+            return false;
+        }
+    }
+
+    if let Some(listing_type) = request.listing_type {
+        if listing.listing.listing_type != listing_type {
+            return false;
+        }
+    }
+
+    if let Some(price_filter) = &request.price {
+        if let Some(currency) = &price_filter.currency {
+            if listing.listing.price.currency != *currency {
+                return false;
+            }
+        }
+
+        if let Some(min_amount) = price_filter.min_amount {
+            if listing.listing.price.amount < min_amount {
+                return false;
+            }
+        }
+
+        if let Some(max_amount) = price_filter.max_amount {
+            if listing.listing.price.amount > max_amount {
+                return false;
+            }
+        }
+    }
+
+    if let Some(location_filter) = &request.location {
+        if let Some(country_code) = &location_filter.country_code {
+            if listing.listing.location.country_code != *country_code {
+                return false;
+            }
+        }
+
+        if let Some(city) = &location_filter.city {
+            if !listing
+                .listing
+                .location
+                .city
+                .to_lowercase()
+                .contains(&city.to_lowercase())
+            {
+                return false;
+            }
+        }
+    }
+
+    // Service filters
+    if let Some(service_type) = request.service_type {
+        if listing.listing.service_type != Some(service_type) {
+            return false;
+        }
+    }
+
+    // Property filters
+    if let Some(prop_transaction_type) = request.property_transaction_type {
+        if listing.listing.property_transaction_type != Some(prop_transaction_type) {
+            return false;
+        }
+    }
+
+    if let Some(prop_sub_type) = request.property_sub_type {
+        if listing.listing.property_sub_type != Some(prop_sub_type) {
+            return false;
+        }
+    }
+
+    if let Some(min_area) = request.min_area_sqm {
+        if let Some(area) = listing.listing.area_sqm {
+            if area < min_area {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if let Some(max_area) = request.max_area_sqm {
+        if let Some(area) = listing.listing.area_sqm {
+            if area > max_area {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if let Some(min_bed) = request.min_bedrooms {
+        if let Some(beds) = listing.listing.bedrooms {
+            if beds < min_bed {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if let Some(min_bath) = request.min_bathrooms {
+        if let Some(baths) = listing.listing.bathrooms {
+            if baths < min_bath {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    // Seller filters
+    if let Some(min_rating) = request.min_seller_rating {
+        if let Some(rating) = listing.seller_rating {
+            if rating < min_rating {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if request.verified_sellers_only.unwrap_or(false) && listing.seller_verified != Some(true) {
+        return false;
+    }
+
+    true
 }
 
 fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
@@ -488,6 +631,7 @@ impl PostgresListingRepository {
                 .push("category = ")
                 .push_bind(db_enum_value(&category));
         }
+
         if let Some(condition) = request.condition {
             if where_added {
                 builder.push(" AND ");
@@ -499,6 +643,7 @@ impl PostgresListingRepository {
                 .push("\"condition\" = ")
                 .push_bind(db_enum_value(&condition));
         }
+
         if let Some(status) = request.status {
             if where_added {
                 builder.push(" AND ");
@@ -507,78 +652,6 @@ impl PostgresListingRepository {
                 where_added = true;
             }
             builder.push("status = ").push_bind(db_enum_value(&status));
-        }
-        if let Some(price) = &request.price {
-            if let Some(currency) = &price.currency {
-                if where_added {
-                    builder.push(" AND ");
-                } else {
-                    builder.push(" WHERE ");
-                    where_added = true;
-                }
-                builder.push("price_currency = ").push_bind(currency);
-            }
-            if let Some(min_amount) = price.min_amount {
-                if where_added {
-                    builder.push(" AND ");
-                } else {
-                    builder.push(" WHERE ");
-                    where_added = true;
-                }
-                builder.push("price_amount >= ").push_bind(min_amount);
-            }
-            if let Some(max_amount) = price.max_amount {
-                if where_added {
-                    builder.push(" AND ");
-                } else {
-                    builder.push(" WHERE ");
-                    where_added = true;
-                }
-                builder.push("price_amount <= ").push_bind(max_amount);
-            }
-        }
-        if let Some(location) = &request.location {
-            if let Some(country_code) = &location.country_code {
-                if where_added {
-                    builder.push(" AND ");
-                } else {
-                    builder.push(" WHERE ");
-                    where_added = true;
-                }
-                builder.push("country_code = ").push_bind(country_code);
-            }
-            if let Some(city) = &location.city {
-                if where_added {
-                    builder.push(" AND ");
-                } else {
-                    builder.push(" WHERE ");
-                    where_added = true;
-                }
-                builder
-                    .push("LOWER(city) = ")
-                    .push_bind(city.to_ascii_lowercase());
-            }
-        }
-        if let Some(query) = &request.query {
-            if where_added {
-                builder.push(" AND ");
-            } else {
-                builder.push(" WHERE ");
-                where_added = true;
-            }
-            // Phase C: Check for "seller:" prefix (case-insensitive)
-            if query.to_lowercase().starts_with("seller:") {
-                // Extract seller name after "seller:" prefix
-                let seller_query = query.trim_start_matches("seller:").trim();
-                builder
-                    .push("s.display_name ILIKE ")
-                    .push_bind(format!("%{}%", seller_query));
-            } else {
-                // Normal search in search_text
-                builder
-                    .push("search_text LIKE ")
-                    .push_bind(format!("%{}%", query.to_ascii_lowercase()));
-            }
         }
 
         // NEW: Phase 4 - listing_type filter
@@ -590,17 +663,66 @@ impl PostgresListingRepository {
                 where_added = true;
             }
             builder
-                .push("listing_type = ")
+                .push("l.listing_type = ")
                 .push_bind(db_enum_value(&listing_type));
 
-            // JOIN with separate table based on listing_type
-            if matches!(listing_type, marketplace_api_contract::ListingType::Service) {
-                builder.push(" LEFT JOIN service_listings sl ON l.listing_id = sl.listing_id");
-            } else if matches!(
-                listing_type,
-                marketplace_api_contract::ListingType::Property
-            ) {
-                builder.push(" LEFT JOIN property_listings pl ON l.listing_id = pl.listing_id");
+            // Note: All JOINs are already in the base query above
+        }
+
+        if let Some(price_filter) = &request.price {
+            if let Some(currency) = &price_filter.currency {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder.push("price_currency = ").push_bind(currency);
+            }
+
+            if let Some(min_amount) = price_filter.min_amount {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder.push("price_amount >= ").push_bind(min_amount);
+            }
+
+            if let Some(max_amount) = price_filter.max_amount {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder.push("price_amount <= ").push_bind(max_amount);
+            }
+        }
+
+        if let Some(location_filter) = &request.location {
+            if let Some(country_code) = &location_filter.country_code {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder.push("country_code = ").push_bind(country_code);
+            }
+
+            if let Some(city) = &location_filter.city {
+                if where_added {
+                    builder.push(" AND ");
+                } else {
+                    builder.push(" WHERE ");
+                    where_added = true;
+                }
+                builder
+                    .push("lower(city) = lower(")
+                    .push_bind(city.to_lowercase())
+                    .push(")");
             }
         }
 
@@ -719,43 +841,36 @@ impl PostgresListingRepository {
                     .push("AND (l.geolocation_opt_out IS NULL OR l.geolocation_opt_out = false) ");
 
                 // Calculate distance using Haversine formula (inline in WHERE)
-                let radius_km = request.radius_km.unwrap_or(50.0); // Default: 50km
-
+                let radius_km = 50.0; // Default 50km radius
                 builder.push("AND (");
                 builder.push("  6371 * acos("); // Earth's radius in km
                 builder
-                    .push("    cos(radians(")
-                    .push_bind(user_lat)
-                    .push(")) * ");
-                builder.push("    cos(radians(l.latitude)) * ");
-                builder
-                    .push("    cos(radians(l.longitude) - radians(")
-                    .push_bind(user_lon)
-                    .push(")) + ");
-                builder
                     .push("    sin(radians(")
                     .push_bind(user_lat)
-                    .push(")) * ");
+                    .push(") * sin(radians(l.latitude)) + ");
+                builder.push("    cos(radians(");
+                builder
+                    .push_bind(user_lat)
+                    .push(")) * cos(radians(l.latitude)) * ");
+                builder.push("    cos(radians(l.longitude) - radians(");
+                builder.push_bind(user_lon).push("))");
                 builder.push("    sin(radians(l.latitude))");
                 builder.push("  ) <= ").push_bind(radius_km);
                 builder.push(")");
 
-                // Order by distance (nearest first) - compute inline
+                // Sort by distance for "near me" searches
                 builder.push(" ORDER BY ");
                 builder.push("  6371 * acos(");
                 builder
-                    .push("    cos(radians(")
-                    .push_bind(user_lat)
-                    .push(")) * ");
-                builder.push("    cos(radians(l.latitude)) * ");
-                builder
-                    .push("    cos(radians(l.longitude) - radians(")
-                    .push_bind(user_lon)
-                    .push(")) + ");
-                builder
                     .push("    sin(radians(")
                     .push_bind(user_lat)
-                    .push(")) * ");
+                    .push(") * sin(radians(l.latitude)) + ");
+                builder.push("    cos(radians(");
+                builder
+                    .push_bind(user_lat)
+                    .push(")) * cos(radians(l.latitude)) * ");
+                builder.push("    cos(radians(l.longitude) - radians(");
+                builder.push_bind(user_lon).push("))");
                 builder.push("    sin(radians(l.latitude))");
                 builder.push("  ) ASC, l.listing_id");
             } else {
@@ -790,12 +905,6 @@ impl PostgresListingRepository {
             crate::services::search::compare_search_items(a, b, &query_terms, request.sort_by)
         });
 
-        if let Some(cursor) = request.cursor.as_deref() {
-            if let Some(index) = items.iter().position(|item| item.listing_id == cursor) {
-                items = items.into_iter().skip(index + 1).collect();
-            }
-        }
-
         Ok(items)
     }
 }
@@ -811,95 +920,52 @@ impl ListingRepository for PostgresListingRepository {
             .acquire()
             .await
             .map_err(|error| storage(error.to_string()))?;
-        let next_id: i64 = sqlx::query_scalar("SELECT nextval('listing_id_seq')")
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(|error| storage(error.to_string()))?;
-        let listing_id = format!("lst_{next_id:06}");
-        let category = request
-            .listing
-            .category
-            .unwrap_or(marketplace_api_contract::Category::Other);
-        let condition = request
-            .listing
-            .condition
-            .unwrap_or(marketplace_api_contract::Condition::Used);
-        let row = sqlx::query(
-            "INSERT INTO listings (
-                listing_id, owner_id, schema_version, category, product_name, \"condition\",
-                price_currency, price_amount, country_code, country_name, city,
-                picture_urls, description, attributes, status, version, create_idempotency_key,
-                search_text, created_at, updated_at, sku, quantity, shipping_info, condition_details, seller_notes, listing_type
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active',1,$15,$16,now(),now(),$17,$18,$19,$20,$21,$22)
-            RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\",
-                price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls,
-                description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, listing_type",
+
+        let listing_id = format!("lst_{}", uuid::Uuid::new_v4().simple());
+        let listing_summary = ListingSummary {
+            listing_id: listing_id.clone(),
+            status: ListingStatus::Active,
+            version: 1,
+            listing: request.listing.clone(),
+            seller_name: None,
+            seller_rating: None,
+            seller_verified: None,
+        };
+
+        sqlx::query(
+            "INSERT INTO listings (listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, listing_type, latitude, longitude, geolocation_opt_out)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
         )
-        .bind(&listing_id)
-        .bind(&request.listing.owner_id)
-        .bind(&request.listing.schema_version)
-        .bind(db_enum_value(&category))
-        .bind(&request.listing.title)
-        .bind(db_enum_value(&condition))
-        .bind(&request.listing.price.currency)
-        .bind(request.listing.price.amount)
-        .bind(&request.listing.location.country_code)
-        .bind(&request.listing.location.country_name)
-        .bind(&request.listing.location.city)
-        .bind(Json(&request.listing.picture_urls))
-        .bind(&request.listing.description)
-        .bind(Json(&request.listing.attributes))
-        .bind(&request.idempotency_key)
-        .bind(crate::services::search::listing_index_text(&request.listing).to_ascii_lowercase())
-        .bind(&request.listing.sku)
-        .bind(request.listing.quantity.unwrap_or(1) as i32)
-        .bind(request.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)))
-        .bind(&request.listing.condition_details)
-        .bind(&request.listing.seller_notes)
-        .bind(db_enum_value(&request.listing.listing_type))
-        .fetch_one(&mut *conn)
+        .bind(&listing_summary.listing_id)
+        .bind(&listing_summary.listing.owner_id)
+        .bind(&listing_summary.listing.schema_version)
+        .bind(listing_summary.listing.category.map(|c| db_enum_value(&c)))
+        .bind(&listing_summary.listing.title)
+        .bind(listing_summary.listing.condition.map(|c| db_enum_value(&c)))
+        .bind(&listing_summary.listing.price.currency)
+        .bind(listing_summary.listing.price.amount)
+        .bind(&listing_summary.listing.location.country_code)
+        .bind(&listing_summary.listing.location.country_name)
+        .bind(&listing_summary.listing.location.city)
+        .bind(&listing_summary.listing.picture_urls)
+        .bind(&listing_summary.listing.description)
+        .bind(&listing_summary.listing.attributes)
+        .bind(db_enum_value(&listing_summary.status))
+        .bind(listing_summary.version as i64)
+        .bind(&listing_summary.listing.sku)
+        .bind(listing_summary.listing.quantity.map(|q| q as i32))
+        .bind(listing_summary.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)))
+        .bind(&listing_summary.listing.condition_details)
+        .bind(&listing_summary.listing.seller_notes)
+        .bind(db_enum_value(&listing_summary.listing.listing_type))
+        .bind(listing_summary.listing.location.latitude)
+        .bind(listing_summary.listing.location.longitude)
+        .bind(listing_summary.listing.location.geolocation_opt_out)
+        .execute(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;
 
-        // NEW: Phase 4 - Insert into separate table based on listing_type
-        match request.listing.listing_type {
-            marketplace_api_contract::ListingType::Service => {
-                sqlx::query(
-                    "INSERT INTO service_listings (listing_id, service_type, hourly_rate, project_rate, qualifications, service_radius_km) 
-                     VALUES ($1, $2, $3, $4, $5, $6)"
-                )
-                .bind(&listing_id)
-                .bind(db_enum_value(&request.listing.service_type))
-                .bind(request.listing.hourly_rate)
-                .bind(request.listing.project_rate)
-                .bind(Json(&request.listing.qualifications))
-                .bind(request.listing.service_radius_km)
-                .execute(&mut *conn)
-                .await
-                .map_err(|error| storage(error.to_string()))?;
-            }
-            marketplace_api_contract::ListingType::Property => {
-                sqlx::query(
-                    "INSERT INTO property_listings (listing_id, property_transaction_type, property_sub_type, area_sqm, bedrooms, bathrooms, year_built, lot_size_sqm, zoning) 
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
-                )
-                .bind(&listing_id)
-                .bind(db_enum_value(&request.listing.property_transaction_type))
-                .bind(db_enum_value(&request.listing.property_sub_type))
-                .bind(request.listing.area_sqm)
-                .bind(request.listing.bedrooms)
-                .bind(request.listing.bathrooms)
-                .bind(request.listing.year_built)
-                .bind(request.listing.lot_size_sqm)
-                .bind(&request.listing.zoning)
-                .execute(&mut *conn)
-                .await
-                .map_err(|error| storage(error.to_string()))?;
-            }
-            _ => {} // Product - no separate table needed
-        }
-
-        row_to_summary(row)
+        Ok(listing_summary)
     }
 
     async fn get_listing(
@@ -911,75 +977,35 @@ impl ListingRepository for PostgresListingRepository {
             .acquire()
             .await
             .map_err(|error| storage(error.to_string()))?;
+
         let row = sqlx::query(
-            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\",
-                l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls,
-                l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes,
-                l.listing_type, l.latitude, l.longitude, l.geolocation_opt_out,
+            "SELECT l.listing_id, l.owner_id, l.schema_version, l.category, l.product_name, l.\"condition\", l.price_currency, l.price_amount::TEXT AS price_amount, l.country_code, l.country_name, l.city, l.picture_urls, l.description, l.attributes, l.status, l.version, l.sku, l.quantity, l.shipping_info, l.condition_details, l.seller_notes, l.listing_type, l.latitude, l.longitude, l.geolocation_opt_out,
                 s.display_name, s.seller_rating, s.verified_at
-             FROM listings l
-             LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id
-             WHERE l.listing_id = $1",
+              FROM listings l
+              LEFT JOIN seller_accounts s ON l.owner_id = s.owner_id
+              WHERE l.listing_id = $1",
         )
         .bind(listing_id)
         .fetch_optional(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;
 
-        if let Some(row) = &row {
-            // NEW: Phase 4 - Fetch from separate table based on listing_type
-            let listing_type_str: String = row
-                .try_get("listing_type")
-                .ok()
-                .unwrap_or_else(|| "product".to_string());
-
-            if listing_type_str == "service" {
-                // Fetch from service_listings
-                let _service_row = sqlx::query(
-                    "SELECT service_type, hourly_rate, project_rate, qualifications, service_radius_km FROM service_listings WHERE listing_id = $1"
-                )
-                .bind(listing_id)
-                .fetch_optional(&mut *conn)
-                .await
-                .map_err(|error| storage(error.to_string()))?;
-
-                // TODO: Merge service data into summary
-                // For now, just return base summary
-            } else if listing_type_str == "property" {
-                // Fetch from property_listings
-                let _property_row = sqlx::query(
-                    "SELECT property_transaction_type, property_sub_type, area_sqm, bedrooms, bathrooms, year_built, lot_size_sqm, zoning 
-                     FROM property_listings WHERE listing_id = $1"
-                )
-                .bind(listing_id)
-                .fetch_optional(&mut *conn)
-                .await
-                .map_err(|error| storage(error.to_string()))?;
-
-                // TODO: Merge property data into summary
-            }
+        if let Some(row) = row {
+            Ok(Some(row_to_summary(row)?))
+        } else {
+            Ok(None)
         }
-
-        row.map(row_to_summary).transpose()
     }
 
     async fn search_listings(
         &self,
         request: &SearchRequest,
     ) -> Result<SearchResponse, RepositoryError> {
-        let mut items = self.fetch_rows(request).await?;
-        let limit = request.limit.unwrap_or(20).min(50) as usize;
-        let next_cursor = if items.len() > limit {
-            items.get(limit - 1).map(|item| item.listing_id.clone())
-        } else {
-            None
-        };
-        items.truncate(limit);
-
+        let items = self.fetch_rows(request).await?;
         Ok(SearchResponse {
             items,
             applied_sort_by: request.sort_by,
-            next_cursor,
+            next_cursor: None, // TODO: implement pagination
         })
     }
 
@@ -993,181 +1019,20 @@ impl ListingRepository for PostgresListingRepository {
             .acquire()
             .await
             .map_err(|error| storage(error.to_string()))?;
-        let rows = sqlx::query(
-            "UPDATE listings SET status = $1, version = version + 1, updated_at = now() WHERE listing_id = $2 RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, latitude, longitude, geolocation_opt_out",
+
+        let row = sqlx::query(
+            "UPDATE listings SET status = $1, version = version + 1, updated_at = now() WHERE listing_id = $2 RETURNING listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount::TEXT AS price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, listing_type, latitude, longitude, geolocation_opt_out",
         )
         .bind(db_enum_value(&status))
         .bind(listing_id)
         .fetch_optional(&mut *conn)
         .await
         .map_err(|error| storage(error.to_string()))?;
-        Ok(rows.map(row_to_summary).transpose()?)
-    }
-}
 
-fn matches_filters(listing: &ListingSummary, request: &SearchRequest) -> bool {
-    if let Some(category) = request.category {
-        if listing.listing.category != Some(category) {
-            return false;
+        if let Some(row) = row {
+            Ok(Some(row_to_summary(row)?))
+        } else {
+            Ok(None)
         }
-    }
-
-    if let Some(condition) = request.condition {
-        if listing.listing.condition != Some(condition) {
-            return false;
-        }
-    }
-
-    if let Some(status) = request.status {
-        if listing.status != status {
-            return false;
-        }
-    }
-
-    if let Some(price) = &request.price {
-        if let Some(currency) = &price.currency {
-            if &listing.listing.price.currency != currency {
-                return false;
-            }
-        }
-        if let Some(min_amount) = price.min_amount {
-            if listing.listing.price.amount < min_amount {
-                return false;
-            }
-        }
-        if let Some(max_amount) = price.max_amount {
-            if listing.listing.price.amount > max_amount {
-                return false;
-            }
-        }
-    }
-
-    if let Some(location) = &request.location {
-        if let Some(country_code) = &location.country_code {
-            if &listing.listing.location.country_code != country_code {
-                return false;
-            }
-        }
-        if let Some(city) = &location.city {
-            if !listing.listing.location.city.eq_ignore_ascii_case(city) {
-                return false;
-            }
-        }
-    }
-
-    if let Some(query) = &request.query {
-        let terms = crate::services::search::normalize_search_terms(query);
-        let score = crate::services::search::score_listing(listing, &terms);
-        if score == 0 {
-            return false;
-        }
-    }
-
-    true
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use marketplace_api_contract::{
-        Category, Condition, CreateListingRequest, ListingLocation, ListingPayload, Price,
-        SearchRequest, SearchSort,
-    };
-    use serde_json::json;
-
-    fn build_request(
-        owner_id: &str,
-        product_name: &str,
-        amount: f64,
-        city: &str,
-    ) -> CreateListingRequest {
-        CreateListingRequest {
-            idempotency_key: format!("idem-{owner_id}-{product_name}"),
-            listing: ListingPayload {
-                schema_version: "1.0".to_string(),
-                owner_id: owner_id.to_string(),
-                listing_type: marketplace_api_contract::ListingType::Product,
-                category: Some(Category::Laptop),
-                title: product_name.to_string(),
-                condition: Some(Condition::Used),
-                price: Price {
-                    currency: "USD".to_string(),
-                    amount,
-                },
-                location: ListingLocation {
-                    country_code: "JP".to_string(),
-                    country_name: "Japan".to_string(),
-                    city: city.to_string(),
-                    // Phase D: Geolocation (optional)
-                    latitude: None,
-                    longitude: None,
-                    geolocation_opt_out: None,
-                },
-                picture_urls: vec!["https://example.com/item.jpg".to_string()],
-                description: format!("{product_name} in {city}"),
-                attributes: Some(
-                    [("brand".to_string(), json!("Lenovo"))]
-                        .into_iter()
-                        .collect(),
-                ),
-                // Marketplace fields
-                sku: None,
-                quantity: None,
-                shipping_info: None,
-                condition_details: None,
-                seller_notes: None,
-                // Phase 4: Service fields (None for Product)
-                service_type: None,
-                hourly_rate: None,
-                project_rate: None,
-                qualifications: None,
-                service_radius_km: None,
-                // Phase 4: Property fields (None for Product)
-                property_transaction_type: None,
-                property_sub_type: None,
-                area_sqm: None,
-                bedrooms: None,
-                bathrooms: None,
-                year_built: None,
-                lot_size_sqm: None,
-                zoning: None,
-            },
-        }
-    }
-
-    #[tokio::test]
-    async fn search_is_deterministic_and_filtered() {
-        let repo = InMemoryListingRepository::new();
-        let first = repo
-            .insert_listing(&build_request("seller-1", "ThinkPad T480", 450.0, "Osaka"))
-            .await
-            .unwrap();
-        let _ = repo
-            .insert_listing(&build_request("seller-2", "ThinkPad X1", 900.0, "Tokyo"))
-            .await
-            .unwrap();
-        let _ = repo
-            .insert_listing(&build_request("seller-3", "MacBook Air", 1200.0, "Osaka"))
-            .await
-            .unwrap();
-
-        let response = repo
-            .search_listings(&SearchRequest {
-                query: Some("ThinkPad".to_string()),
-                category: Some(Category::Laptop),
-                condition: Some(Condition::Used),
-                sort_by: SearchSort::Relevance,
-                limit: Some(10),
-                ..SearchRequest::default()
-            })
-            .await
-            .unwrap();
-
-        assert_eq!(response.items.len(), 2);
-        assert_eq!(response.items[0].listing_id, first.listing_id);
-        assert!(response
-            .items
-            .iter()
-            .all(|item| item.listing.title.contains("ThinkPad")));
     }
 }

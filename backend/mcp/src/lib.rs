@@ -53,7 +53,7 @@ impl MarketplaceMcp {
         claims: &Claims,
         request: &SearchRequest,
     ) -> Result<SearchResponse, marketplace_server::http::handlers::HandlerError> {
-        self.app.search_listings(claims, request).await
+        self.app.search_listings(Some(claims), request).await
     }
 
     pub async fn get_listing(
@@ -61,7 +61,7 @@ impl MarketplaceMcp {
         claims: &Claims,
         listing_id: &str,
     ) -> Result<Option<ListingSummary>, marketplace_server::http::handlers::HandlerError> {
-        self.app.get_listing(claims, listing_id).await
+        self.app.get_listing(Some(claims), listing_id).await
     }
 
     pub async fn begin_create_listing(

@@ -308,7 +308,7 @@ where
                 return response;
             }
             let listing_id = path.trim_start_matches("/internal/v1/listings/");
-            match app.get_listing(&claims, listing_id).await {
+            match app.get_listing(Some(&claims), listing_id).await {
                 Ok(Some(listing)) => json_response(200, serde_json::to_value(listing).unwrap()),
                 Ok(None) => {
                     api_error_response(404, ApiErrorCode::NotFound, "listing not found", None)
@@ -454,14 +454,14 @@ where
         }
         ("GET", "/v1/listings/search") => {
             let search = search_request_from_query(&request.query);
-            match app.search_listings(&claims, &search).await {
+            match app.search_listings(Some(&claims), &search).await {
                 Ok(result) => json_response(200, serde_json::to_value(result).unwrap()),
                 Err(error) => map_handler_error(&error),
             }
         }
         ("GET", path) if path.starts_with("/v1/listings/") => {
             let listing_id = path.trim_start_matches("/v1/listings/");
-            match app.get_listing(&claims, listing_id).await {
+            match app.get_listing(Some(&claims), listing_id).await {
                 Ok(Some(listing)) => json_response(200, serde_json::to_value(listing).unwrap()),
                 Ok(None) => {
                     api_error_response(404, ApiErrorCode::NotFound, "listing not found", None)

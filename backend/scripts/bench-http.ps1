@@ -1,8 +1,8 @@
 param(
     [string]$DatabaseUrl = $env:DATABASE_URL,
     [string]$BaseUrl = "http://127.0.0.1:3000",
-    [int]$Ops = 1000,
-    [string]$ConcurrencyLevels = "1,10,50,100,250,500,1000",
+    [int]$Ops = 5000,
+    [string]$ConcurrencyLevels = "100,500,1000,2000,5000",
     [switch]$SeedDatabase
 )
 

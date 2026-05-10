@@ -75,29 +75,82 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                 "/api-docs/openapi.json",
                 web::get().to(crate::openapi::serve_openapi_json),
             )
-            // Public API v1 routes
+            // Public API v1 routes - organized by resource type
             .service(
-                web::scope("/v1")
+                // Product listings
+                web::scope("/v1/product")
                     .route(
-                        "/listings/search",
+                        "/search",
                         web::get().to(crate::http::actix_handlers::search_listings),
                     )
                     .route(
-                        "/listings/{listing_id}",
+                        "/{listing_id}",
                         web::get().to(crate::http::actix_handlers::get_listing),
                     )
                     .route(
-                        "/listings",
+                        "",
                         web::post().to(crate::http::actix_handlers::create_listing),
                     )
                     .route(
-                        "/listings/{listing_id}/reviews",
+                        "/{listing_id}/reviews",
                         web::post().to(crate::http::actix_handlers::create_review),
                     )
                     .route(
-                        "/listings/{listing_id}/reviews",
+                        "/{listing_id}/reviews",
                         web::get().to(crate::http::actix_handlers::list_reviews_for_listing),
+                    ),
+            )
+            .service(
+                // Service listings
+                web::scope("/v1/service")
+                    .route(
+                        "/search",
+                        web::get().to(crate::http::actix_handlers::search_listings),
                     )
+                    .route(
+                        "/{listing_id}",
+                        web::get().to(crate::http::actix_handlers::get_listing),
+                    )
+                    .route(
+                        "",
+                        web::post().to(crate::http::actix_handlers::create_listing),
+                    )
+                    .route(
+                        "/{listing_id}/reviews",
+                        web::post().to(crate::http::actix_handlers::create_review),
+                    )
+                    .route(
+                        "/{listing_id}/reviews",
+                        web::get().to(crate::http::actix_handlers::list_reviews_for_listing),
+                    ),
+            )
+            .service(
+                // Property listings
+                web::scope("/v1/property")
+                    .route(
+                        "/search",
+                        web::get().to(crate::http::actix_handlers::search_listings),
+                    )
+                    .route(
+                        "/{listing_id}",
+                        web::get().to(crate::http::actix_handlers::get_listing),
+                    )
+                    .route(
+                        "",
+                        web::post().to(crate::http::actix_handlers::create_listing),
+                    )
+                    .route(
+                        "/{listing_id}/reviews",
+                        web::post().to(crate::http::actix_handlers::create_review),
+                    )
+                    .route(
+                        "/{listing_id}/reviews",
+                        web::get().to(crate::http::actix_handlers::list_reviews_for_listing),
+                    ),
+            )
+            .service(
+                // Shared resources (negotiations, contact reveals)
+                web::scope("/v1")
                     .route(
                         "/negotiations",
                         web::post().to(crate::http::actix_handlers::open_negotiation),

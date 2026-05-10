@@ -117,12 +117,14 @@ pub fn authorize_create_listing(claims: &Claims, owner_id: &str) -> Result<(), A
     )
 }
 
-pub fn authorize_get_listing(claims: &Claims) -> Result<(), AuthzError> {
-    authorize(claims, Action::GetListing, OwnershipContext::None)
+pub fn authorize_get_listing(_claims: Option<&Claims>) -> Result<(), AuthzError> {
+    // Reading listings is public - no authentication required
+    Ok(())
 }
 
-pub fn authorize_search_listings(claims: &Claims) -> Result<(), AuthzError> {
-    authorize(claims, Action::SearchListings, OwnershipContext::None)
+pub fn authorize_search_listings(_claims: Option<&Claims>) -> Result<(), AuthzError> {
+    // Searching listings is public - no authentication required
+    Ok(())
 }
 
 pub fn authorize_open_negotiation(claims: &Claims, buyer_agent_id: &str) -> Result<(), AuthzError> {

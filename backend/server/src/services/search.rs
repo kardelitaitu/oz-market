@@ -23,7 +23,7 @@ where
 {
     pub async fn search_listings(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         request: &SearchRequest,
     ) -> Result<SearchResponse, SearchError> {
         crate::services::authz::authorize_search_listings(claims)?;
@@ -36,7 +36,7 @@ where
 
     pub async fn get_listing(
         &self,
-        claims: &Claims,
+        claims: Option<&Claims>,
         listing_id: &str,
     ) -> Result<Option<ListingSummary>, SearchError> {
         crate::services::authz::authorize_get_listing(claims)?;

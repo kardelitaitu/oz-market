@@ -76,6 +76,40 @@ fn extract_claims(req: &HttpRequest) -> Result<Claims, HttpResponse> {
     Err(HttpResponse::Unauthorized().json(serde_json::json!({"error": "missing claims header"})))
 }
 
+// Helper to extract Claims optionally (returns None if missing/invalid)
+fn extract_claims_optional(req: &HttpRequest) -> Option<Claims> {
+    if let Some(h) = req.headers().get("x-marketplace-claims") {
+        if let Ok(s) = h.to_str() {
+            match serde_json::from_str::<Claims>(s) {
+                Ok(claims) => return Some(claims),
+                Err(e) => {
+                    error!("Claims parse error (optional): {}", e);
+                    return None;
+                }
+            }
+        }
+    }
+    None
+}
+
+// Helper to extract listing type from URL path
+fn extract_listing_type_from_path(
+    req: &HttpRequest,
+) -> Option<marketplace_api_contract::ListingType> {
+    use marketplace_api_contract::ListingType;
+
+    let path = req.path();
+    if path.starts_with("/v1/product/") {
+        Some(ListingType::Product)
+    } else if path.starts_with("/v1/service/") {
+        Some(ListingType::Service)
+    } else if path.starts_with("/v1/property/") {
+        Some(ListingType::Property)
+    } else {
+        None
+    }
+}
+
 // --- Listing handlers ---
 
 pub async fn get_listing(
@@ -86,10 +120,8 @@ pub async fn get_listing(
     req: HttpRequest,
 ) -> impl Responder {
     let start = std::time::Instant::now();
-    let claims = match extract_claims(&req) {
-        Ok(c) => c,
-        Err(resp) => return resp,
-    };
+    // Claims are optional for get listing - public access allowed
+    let claims = extract_claims_optional(&req);
     let cache_key = listing_id.to_string();
     // Try cache first (stores pre-serialized JSON)
     if **cache_enabled {
@@ -106,7 +138,7 @@ pub async fn get_listing(
     info!("Cache miss for listing {}", cache_key);
     counter!("cache_misses_total", "type" => "listing").increment(1);
     // Fallback to app
-    match app.get_listing(&claims, &listing_id).await {
+    match app.get_listing(claims.as_ref(), &listing_id).await {
         Ok(Some(listing)) => {
             let json_string = serde_json::to_string(&listing).unwrap_or_default();
             if **cache_enabled {
@@ -132,11 +164,16 @@ pub async fn search_listings(
     req: HttpRequest,
 ) -> impl Responder {
     let start = std::time::Instant::now();
-    let claims = match extract_claims(&req) {
-        Ok(c) => c,
-        Err(resp) => return resp,
-    };
-    let cache_key = format!("{:?}", query.0);
+    // Claims are optional for search - public access allowed
+    let claims = extract_claims_optional(&req);
+
+    // Extract listing type from URL path and add to query
+    let mut modified_query = (*query).clone();
+    if modified_query.listing_type.is_none() {
+        modified_query.listing_type = extract_listing_type_from_path(&req);
+    }
+
+    let cache_key = format!("{:?}", modified_query);
     // Try cache first (stores pre-serialized JSON)
     if **cache_enabled {
         if let Some(cached_json) = search_cache.get(&cache_key).await {
@@ -152,7 +189,7 @@ pub async fn search_listings(
     info!("Cache miss for search");
     counter!("cache_misses_total", "type" => "search").increment(1);
     // Fallback to app
-    match app.search_listings(&claims, &query.0).await {
+    match app.search_listings(claims.as_ref(), &modified_query).await {
         Ok(response) => {
             let json_string = serde_json::to_string(&response).unwrap_or_default();
             if **cache_enabled {
