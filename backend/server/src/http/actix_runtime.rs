@@ -23,7 +23,20 @@ use tracing_actix_web::TracingLogger;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let runtime = tokio::runtime::Runtime::new()?;
+    // Configure tokio runtime for high concurrency performance
+    let num_cpus = num_cpus::get();
+    let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or_else(|| (num_cpus * 2).max(8)); // 2x CPU cores, minimum 8
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .thread_name("marketplace-worker")
+        .thread_stack_size(2 * 1024 * 1024) // 2MB stack
+        .enable_all()
+        .build()?;
+
     runtime.block_on(async_run())
 }
 
@@ -209,11 +222,20 @@ async fn metrics_handler(pool: web::Data<sqlx::postgres::PgPool>) -> impl actix_
     let pool_size = pool.size();
     let idle_connections = pool.num_idle();
 
+    // Runtime metrics
+    let num_cpus = num_cpus::get();
+    let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or_else(|| (num_cpus * 2).max(8));
+
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
          # HELP database_connections_idle Idle database connections\n# TYPE database_connections_idle gauge\ndatabase_connections_idle {}\n\
+         # HELP runtime_worker_threads Configured tokio worker threads\n# TYPE runtime_worker_threads gauge\nruntime_worker_threads {}\n\
+         # HELP runtime_cpu_cores Available CPU cores\n# TYPE runtime_cpu_cores gauge\nruntime_cpu_cores {}\n\
          # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n",
-        pool_size, idle_connections
+        pool_size, idle_connections, worker_threads, num_cpus
     );
 
     actix_web::HttpResponse::Ok()

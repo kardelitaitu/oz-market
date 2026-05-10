@@ -25,6 +25,7 @@ metrics = "0.22"
 metrics-exporter-prometheus = "0.12"
 uuid = "1"
 serde_yaml = "0.9"
+num_cpus = "1.16"
 
 # OpenAPI generation
 utoipa = "3"
