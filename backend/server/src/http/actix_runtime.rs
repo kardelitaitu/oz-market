@@ -60,8 +60,14 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .unwrap_or(true);
 
     // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
-    let listing_cache: Cache<String, String> = Cache::new(10_000);
-    let search_cache: Cache<String, String> = Cache::new(1_000);
+    let listing_cache: Cache<String, String> = Cache::builder()
+        .max_capacity(100_000)
+        .time_to_live(std::time::Duration::from_secs(10 * 60)) // 10 minutes TTL
+        .build();
+    let search_cache: Cache<String, String> = Cache::builder()
+        .max_capacity(50_000)
+        .time_to_live(std::time::Duration::from_secs(5 * 60)) // 5 minutes TTL
+        .build();
 
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
@@ -217,7 +223,11 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn metrics_handler(pool: web::Data<sqlx::postgres::PgPool>) -> impl actix_web::Responder {
+async fn metrics_handler(
+    pool: web::Data<sqlx::postgres::PgPool>,
+    listing_cache: web::Data<Cache<String, String>>,
+    search_cache: web::Data<Cache<String, String>>,
+) -> impl actix_web::Responder {
     // Connection pool metrics
     let pool_size = pool.size();
     let idle_connections = pool.num_idle();
@@ -229,13 +239,20 @@ async fn metrics_handler(pool: web::Data<sqlx::postgres::PgPool>) -> impl actix_
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1));
 
+    // Cache metrics
+    let listing_count = listing_cache.as_ref().entry_count();
+    let search_count = search_cache.as_ref().entry_count();
+
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
          # HELP database_connections_idle Idle database connections\n# TYPE database_connections_idle gauge\ndatabase_connections_idle {}\n\
          # HELP runtime_worker_threads Configured tokio worker threads\n# TYPE runtime_worker_threads gauge\nruntime_worker_threads {}\n\
          # HELP runtime_cpu_cores Available CPU cores\n# TYPE runtime_cpu_cores gauge\nruntime_cpu_cores {}\n\
+         # HELP cache_listing_entries Current listing cache entries\n# TYPE cache_listing_entries gauge\ncache_listing_entries {}\n\
+         # HELP cache_search_entries Current search cache entries\n# TYPE cache_search_entries gauge\ncache_search_entries {}\n\
          # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n",
-        pool_size, idle_connections, worker_threads, num_cpus
+        pool_size, idle_connections, worker_threads, num_cpus,
+        listing_count, search_count
     );
 
     actix_web::HttpResponse::Ok()
