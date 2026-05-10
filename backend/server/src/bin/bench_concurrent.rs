@@ -59,6 +59,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let max_concurrency = concurrency_levels.iter().copied().max().unwrap_or(50);
     let get_url = format!("{}/v1/listings/{}", base_url, listing_id);
+
+    // Warm listing cache first to avoid connection pool exhaustion
+    println!("Warming listing cache...");
+    let _ = measure_single_request(&client, get_url.clone(), Some(&claims_header)).await;
+    println!("Cache warmed.\n");
+
     let get_result = run_benchmark(
         &client,
         get_url,

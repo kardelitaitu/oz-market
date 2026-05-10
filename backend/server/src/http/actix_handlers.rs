@@ -391,7 +391,7 @@ pub async fn release_reservation(
         Ok(Some(_lease)) => HttpResponse::NoContent().finish(),
         Ok(None) => HttpResponse::NotFound().json(json!({
             "error_code": "NOT_FOUND",
-            "message": "reservation not found"
+            "message": "listing not found"
         })),
         Err(e) => map_handler_error(&e),
     }
