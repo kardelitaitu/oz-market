@@ -31,6 +31,25 @@
 
 ## Journal Entry
 
+- **Search API Enhancement**: Implemented 3 new features in actix_handlers.rs:
+  - `?fields=` field filtering: parse_fields_param + filter_listing_fields to return only requested fields
+  - `?include=` eager loading: returns _include meta object indicating available relations
+  - Cursor pagination: DB-level via ORDER BY + WHERE listing_id > cursor (listings.rs)
+- Cache key now includes fields and include params for proper cache segregation
+- All features compile successfully
+
+## Journal Entry
+
+- Added unit tests for search API helper functions in actix_handlers.rs:
+  - parse_fields_param: tests for single/multiple/empty fields
+  - parse_include_param: tests for single/multiple/lowercase normalization
+  - filter_listing_fields: tests for filtering, empty fields, non-object handling
+- Fixed http/mod.rs test visibility (was excluding actix_handlers in test mode)
+- Fixed pre-existing broken import in api-contract tests
+- All 70 tests pass (62 existing + 8 new)
+
+## Journal Entry
+
 - **Expanded Unit Test Coverage**
 - Added 16 tests for search service (normalize_search_terms, listing_index_text, score_listing, compare_search_items)
 - Added 9 tests for listings repository (insert, get, search with filters/sorting/pagination)

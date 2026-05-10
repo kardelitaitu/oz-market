@@ -18,6 +18,53 @@ use std::sync::Arc;
 use metrics::{counter, histogram};
 use tracing::error;
 
+use std::collections::HashSet;
+
+#[allow(dead_code)]
+fn parse_fields_param(query: &str) -> Option<HashSet<String>> {
+    let result: HashSet<String> = query
+        .split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+#[allow(dead_code)]
+fn parse_include_param(query: &str) -> Option<HashSet<String>> {
+    let result: HashSet<String> = query
+        .split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+#[allow(dead_code)]
+fn filter_listing_fields(value: &serde_json::Value, fields: &HashSet<String>) -> serde_json::Value {
+    if fields.is_empty() {
+        return value.clone();
+    }
+    if let serde_json::Value::Object(map) = value {
+        let filtered: serde_json::Map<String, serde_json::Value> = map
+            .iter()
+            .filter(|(k, _)| fields.contains(k.as_str()))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        serde_json::Value::Object(filtered)
+    } else {
+        value.clone()
+    }
+}
+
 // OpenAPI annotations
 // use utoipa::path;  // Removed - causes ambiguity with actix_web::web::Path
 
@@ -676,5 +723,82 @@ pub async fn reject_review(
             error!("Reject review error: {}", e);
             HttpResponse::InternalServerError().finish()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_fields_param_single() {
+        let result = parse_fields_param("id");
+        assert!(result.is_some());
+        let fields = result.unwrap();
+        assert!(fields.contains("id"));
+        assert_eq!(fields.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_fields_param_multiple() {
+        let result = parse_fields_param("id,title,price");
+        assert!(result.is_some());
+        let fields = result.unwrap();
+        assert!(fields.contains("id"));
+        assert!(fields.contains("title"));
+        assert!(fields.contains("price"));
+        assert_eq!(fields.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_fields_param_empty() {
+        let result = parse_fields_param("");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_include_param_single() {
+        let result = parse_include_param("seller");
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("seller"));
+    }
+
+    #[test]
+    fn test_parse_include_param_multiple() {
+        let result = parse_include_param("seller,reviews");
+        assert!(result.is_some());
+        let includes = result.unwrap();
+        assert!(includes.contains("seller"));
+        assert!(includes.contains("reviews"));
+    }
+
+    #[test]
+    fn test_filter_listing_fields_empty_returns_original() {
+        let json = serde_json::json!({"id": "1"});
+        let fields = HashSet::new();
+        let result = filter_listing_fields(&json, &fields);
+        assert_eq!(result, json);
+    }
+
+    #[test]
+    fn test_filter_listing_fields_filters() {
+        let json = serde_json::json!({"id": "1", "title": "Test", "price": 100});
+        let mut fields = HashSet::new();
+        fields.insert("id".to_string());
+        fields.insert("title".to_string());
+        let result = filter_listing_fields(&json, &fields);
+        let obj = result.as_object().unwrap();
+        assert!(obj.contains_key("id"));
+        assert!(obj.contains_key("title"));
+        assert!(!obj.contains_key("price"));
+    }
+
+    #[test]
+    fn test_filter_listing_fields_non_object() {
+        let json = serde_json::json!("string");
+        let mut fields = HashSet::new();
+        fields.insert("x".to_string());
+        let result = filter_listing_fields(&json, &fields);
+        assert_eq!(result, json);
     }
 }

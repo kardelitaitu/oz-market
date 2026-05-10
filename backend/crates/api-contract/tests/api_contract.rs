@@ -1,4 +1,4 @@
-use serde_json::Value;
+use marketplace_api_contract::*;
 
 #[test]
 fn category_enum_serde_roundtrip() {
@@ -115,7 +115,10 @@ fn full_search_request_serde_roundtrip() {
 
 #[test]
 fn search_request_optional_fields_omitted_when_none() {
-    let req = SearchRequest { query: Some("phone".into()), ..Default::default() };
+    let req = SearchRequest {
+        query: Some("phone".into()),
+        ..Default::default()
+    };
     let json = serde_json::to_value(&req).expect("serialization failed");
     assert!(json.get("category").is_none());
     assert!(json.get("price").is_none());
@@ -126,41 +129,80 @@ fn search_request_optional_fields_omitted_when_none() {
 
 #[test]
 fn listing_type_enum_serde_roundtrip() {
-    assert_eq!(serde_json::to_string(&ListingType::Product).unwrap(), "\"product\"");
-    assert_eq!(serde_json::to_string(&ListingType::Service).unwrap(), "\"service\"");
-    assert_eq!(serde_json::to_string(&ListingType::Property).unwrap(), "\"property\"");
+    assert_eq!(
+        serde_json::to_string(&ListingType::Product).unwrap(),
+        "\"product\""
+    );
+    assert_eq!(
+        serde_json::to_string(&ListingType::Service).unwrap(),
+        "\"service\""
+    );
+    assert_eq!(
+        serde_json::to_string(&ListingType::Property).unwrap(),
+        "\"property\""
+    );
 }
 
 #[test]
 fn service_type_enum_serde_roundtrip() {
-    assert_eq!(serde_json::to_string(&ServiceType::Local).unwrap(), "\"local\"");
-    assert_eq!(serde_json::to_string(&ServiceType::Online).unwrap(), "\"online\"");
+    assert_eq!(
+        serde_json::to_string(&ServiceType::Local).unwrap(),
+        "\"local\""
+    );
+    assert_eq!(
+        serde_json::to_string(&ServiceType::Online).unwrap(),
+        "\"online\""
+    );
 }
 
 #[test]
 fn property_transaction_type_enum_serde_roundtrip() {
-    assert_eq!(serde_json::to_string(&PropertyTransactionType::Rent).unwrap(), "\"rent\"");
-    assert_eq!(serde_json::to_string(&PropertyTransactionType::Sale).unwrap(), "\"sale\"");
+    assert_eq!(
+        serde_json::to_string(&PropertyTransactionType::Rent).unwrap(),
+        "\"rent\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PropertyTransactionType::Sale).unwrap(),
+        "\"sale\""
+    );
 }
 
 #[test]
 fn property_sub_type_enum_serde_roundtrip() {
-    assert_eq!(serde_json::to_string(&PropertySubType::Building).unwrap(), "\"building\"");
-    assert_eq!(serde_json::to_string(&PropertySubType::House).unwrap(), "\"house\"");
-    assert_eq!(serde_json::to_string(&PropertySubType::Apartment).unwrap(), "\"apartment\"");
-    assert_eq!(serde_json::to_string(&PropertySubType::Land).unwrap(), "\"land\"");
+    assert_eq!(
+        serde_json::to_string(&PropertySubType::Building).unwrap(),
+        "\"building\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PropertySubType::House).unwrap(),
+        "\"house\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PropertySubType::Apartment).unwrap(),
+        "\"apartment\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PropertySubType::Land).unwrap(),
+        "\"land\""
+    );
 }
 
 #[test]
 fn condition_enum_serde_roundtrip() {
     assert_eq!(serde_json::to_string(&Condition::New).unwrap(), "\"new\"");
     assert_eq!(serde_json::to_string(&Condition::Used).unwrap(), "\"used\"");
-    assert_eq!(serde_json::to_string(&Condition::Refurbished).unwrap(), "\"refurbished\"");
+    assert_eq!(
+        serde_json::to_string(&Condition::Refurbished).unwrap(),
+        "\"refurbished\""
+    );
 }
 
 #[test]
 fn price_struct_serde_roundtrip() {
-    let price = Price { currency: "USD".into(), amount: 1299.99 };
+    let price = Price {
+        currency: "USD".into(),
+        amount: 1299.99,
+    };
     let json = serde_json::to_value(&price).unwrap();
     assert_eq!(json["currency"], "USD");
     assert_eq!(json["amount"], 1299.99);
@@ -209,7 +251,10 @@ fn listing_payload_product_roundtrip() {
         category: Some(Category::Laptop),
         title: "MacBook Pro".into(),
         condition: Some(Condition::Used),
-        price: Price { currency: "USD".into(), amount: 1299.99 },
+        price: Price {
+            currency: "USD".into(),
+            amount: 1299.99,
+        },
         location: ListingLocation {
             country_code: "US".into(),
             country_name: "United States".into(),
@@ -257,7 +302,10 @@ fn listing_payload_service_roundtrip() {
         category: None,
         title: "Web Dev Consultation".into(),
         condition: None,
-        price: Price { currency: "EUR".into(), amount: 150.0 },
+        price: Price {
+            currency: "EUR".into(),
+            amount: 150.0,
+        },
         location: ListingLocation {
             country_code: "DE".into(),
             country_name: "Germany".into(),
@@ -305,7 +353,10 @@ fn listing_payload_property_roundtrip() {
         category: None,
         title: "Downtown Apartment".into(),
         condition: None,
-        price: Price { currency: "GBP".into(), amount: 1800.0 },
+        price: Price {
+            currency: "GBP".into(),
+            amount: 1800.0,
+        },
         location: ListingLocation {
             country_code: "GB".into(),
             country_name: "United Kingdom".into(),
@@ -354,7 +405,10 @@ fn create_listing_request_roundtrip() {
             category: Some(Category::Phone),
             title: "iPhone 15".into(),
             condition: Some(Condition::New),
-            price: Price { currency: "USD".into(), amount: 999.0 },
+            price: Price {
+                currency: "USD".into(),
+                amount: 999.0,
+            },
             location: ListingLocation {
                 country_code: "US".into(),
                 country_name: "United States".into(),
@@ -389,7 +443,8 @@ fn create_listing_request_roundtrip() {
     let json = serde_json::to_value(&req).expect("serialization failed");
     assert_eq!(json["idempotency_key"], "req-abc-123");
     assert_eq!(json["listing"]["title"], "iPhone 15");
-    let decoded: CreateListingRequest = serde_json::from_value(json).expect("deserialization failed");
+    let decoded: CreateListingRequest =
+        serde_json::from_value(json).expect("deserialization failed");
     assert_eq!(decoded, req);
 }
 
@@ -407,7 +462,10 @@ fn search_response_roundtrip() {
                 category: Some(Category::Laptop),
                 title: "ThinkPad X1".into(),
                 condition: Some(Condition::Refurbished),
-                price: Price { currency: "USD".into(), amount: 899.0 },
+                price: Price {
+                    currency: "USD".into(),
+                    amount: 899.0,
+                },
                 location: ListingLocation {
                     country_code: "US".into(),
                     country_name: "United States".into(),
@@ -464,7 +522,8 @@ fn open_negotiation_request_roundtrip() {
     let json = serde_json::to_value(&req).expect("serialization failed");
     assert_eq!(json["listing_id"], "list_001");
     assert_eq!(json["offer_amount"], 850.0);
-    let decoded: OpenNegotiationRequest = serde_json::from_value(json).expect("deserialization failed");
+    let decoded: OpenNegotiationRequest =
+        serde_json::from_value(json).expect("deserialization failed");
     assert_eq!(decoded, req);
 }
 
@@ -485,7 +544,8 @@ fn negotiation_response_roundtrip() {
     let json = serde_json::to_value(&resp).expect("serialization failed");
     assert_eq!(json["status"], "open");
     assert_eq!(json["reservation_lease_id"], "lease_abc");
-    let decoded: NegotiationResponse = serde_json::from_value(json).expect("deserialization failed");
+    let decoded: NegotiationResponse =
+        serde_json::from_value(json).expect("deserialization failed");
     assert_eq!(decoded, resp);
 }
 
@@ -503,7 +563,8 @@ fn contact_reveal_response_roundtrip() {
     let json = serde_json::to_value(&resp).expect("serialization failed");
     assert_eq!(json["reveal_status"], "approved");
     assert_eq!(json["revealed_phone_reference"], "+1-555-0100");
-    let decoded: ContactRevealResponse = serde_json::from_value(json).expect("deserialization failed");
+    let decoded: ContactRevealResponse =
+        serde_json::from_value(json).expect("deserialization failed");
     assert_eq!(decoded, resp);
 }
 
@@ -532,7 +593,10 @@ fn listing_payload_omits_optional_none_fields() {
         category: None,
         title: "Consulting".into(),
         condition: None,
-        price: Price { currency: "USD".into(), amount: 100.0 },
+        price: Price {
+            currency: "USD".into(),
+            amount: 100.0,
+        },
         location: ListingLocation {
             country_code: "US".into(),
             country_name: "United States".into(),
