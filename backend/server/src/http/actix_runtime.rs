@@ -204,11 +204,18 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn metrics_handler() -> impl actix_web::Responder {
-    // Simple metrics endpoint - can be extended later
-    let metrics =
-        "# HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n"
-            .to_string();
+async fn metrics_handler(pool: web::Data<sqlx::postgres::PgPool>) -> impl actix_web::Responder {
+    // Connection pool metrics
+    let pool_size = pool.size();
+    let idle_connections = pool.num_idle();
+
+    let metrics = format!(
+        "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
+         # HELP database_connections_idle Idle database connections\n# TYPE database_connections_idle gauge\ndatabase_connections_idle {}\n\
+         # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n",
+        pool_size, idle_connections
+    );
+
     actix_web::HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(metrics)
@@ -261,8 +268,13 @@ async fn build_repositories() -> Result<
             "DATABASE_URL is required for production runtime",
         )
     })?;
+    let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(100); // Increased for high concurrency performance
+
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(20) // Increased for Actix's multi-worker model
+        .max_connections(max_connections)
         .connect(&database_url)
         .await?;
     let audit_repo: Arc<dyn AuditEventRepository> =
