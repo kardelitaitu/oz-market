@@ -243,16 +243,42 @@ async fn metrics_handler(
     let listing_count = listing_cache.as_ref().entry_count();
     let search_count = search_cache.as_ref().entry_count();
 
+    // Calculate utilization percentages
+    let active_connections = pool_size.saturating_sub(idle_connections as u32);
+    let connection_utilization = if pool_size > 0 {
+        ((active_connections as f64 / pool_size as f64) * 100.0) as u32
+    } else {
+        0
+    };
+    let listing_cache_utilization = if listing_count > 0 {
+        ((listing_count as f64 / 100_000.0) * 100.0) as u32
+    } else {
+        0
+    };
+    let search_cache_utilization = if search_count > 0 {
+        ((search_count as f64 / 50_000.0) * 100.0) as u32
+    } else {
+        0
+    };
+
+    // Memory usage estimation (rough calculation)
+    let estimated_memory_mb = (listing_count * 1024 + search_count * 512) / (1024 * 1024); // Rough estimate: 1KB per listing, 512B per search
+
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
          # HELP database_connections_idle Idle database connections\n# TYPE database_connections_idle gauge\ndatabase_connections_idle {}\n\
+         # HELP database_connections_utilization_percent Connection pool utilization percentage\n# TYPE database_connections_utilization_percent gauge\ndatabase_connections_utilization_percent {}\n\
          # HELP runtime_worker_threads Configured tokio worker threads\n# TYPE runtime_worker_threads gauge\nruntime_worker_threads {}\n\
          # HELP runtime_cpu_cores Available CPU cores\n# TYPE runtime_cpu_cores gauge\nruntime_cpu_cores {}\n\
          # HELP cache_listing_entries Current listing cache entries\n# TYPE cache_listing_entries gauge\ncache_listing_entries {}\n\
+         # HELP cache_listing_utilization_percent Listing cache utilization percentage\n# TYPE cache_listing_utilization_percent gauge\ncache_listing_utilization_percent {}\n\
          # HELP cache_search_entries Current search cache entries\n# TYPE cache_search_entries gauge\ncache_search_entries {}\n\
+         # HELP cache_search_utilization_percent Search cache utilization percentage\n# TYPE cache_search_utilization_percent gauge\ncache_search_utilization_percent {}\n\
+         # HELP memory_cache_estimated_mb Estimated cache memory usage in MB\n# TYPE memory_cache_estimated_mb gauge\nmemory_cache_estimated_mb {}\n\
          # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n",
-        pool_size, idle_connections, worker_threads, num_cpus,
-        listing_count, search_count
+        pool_size, idle_connections, connection_utilization, worker_threads, num_cpus,
+        listing_count, listing_cache_utilization,
+        search_count, search_cache_utilization, estimated_memory_mb
     );
 
     actix_web::HttpResponse::Ok()
