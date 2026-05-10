@@ -191,7 +191,7 @@ pub fn authorize(claims: &Claims, action: Action, ownership: OwnershipContext) -
     }
 }
 
-fn action_to_scopes(action: Action) -> Vec<Scope> {
+pub fn action_to_scopes(action: Action) -> Vec<Scope> {
     match action {
         Action::CreateListing => vec![Scope::ListingCreate],
         Action::GetListing => vec![Scope::ListingRead],

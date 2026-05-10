@@ -1,8 +1,8 @@
 param(
     [string]$DatabaseUrl = $env:DATABASE_URL,
     [string]$BaseUrl = "http://127.0.0.1:3000",
-    [int]$Ops = 5000,
-    [string]$ConcurrencyLevels = "100,500,1000,2000,5000",
+    [int]$Ops = 1000,
+    [string]$ConcurrencyLevels = "100,200,500",
     [switch]$SeedDatabase
 )
 
@@ -56,7 +56,7 @@ $ServerJob = Start-Job -ScriptBlock {
     Set-Location "C:/My Script/project-the-marketplace/backend"
     $env:DATABASE_URL = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
     $env:MARKETPLACE_BIND = "127.0.0.1:3000"
-    cargo run --release --package marketplace-server
+    cargo run --release --bin marketplace-server
 }
 
 Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow

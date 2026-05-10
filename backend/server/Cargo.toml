@@ -43,5 +43,9 @@ path = "src/bin/bench_concurrent.rs"
 name = "http_bench"
 path = "src/bin/http_bench.rs"
 
+[[bin]]
+name = "populate_db"
+path = "src/bin/populate_db.rs"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

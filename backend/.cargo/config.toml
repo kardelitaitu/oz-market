@@ -1,0 +1,27 @@
+[build]
+# Use all available CPU cores for parallel compilation
+jobs = -1
+
+# Enable incremental compilation for faster dev builds
+incremental = true
+
+[profile.dev]
+# Use more codegen units for better parallelization in debug builds
+codegen-units = 16
+# Optimize for debug build speed (not binary size)
+opt-level = 0
+
+[profile.release]
+# Single codegen unit for maximum optimization (slower compile, faster runtime)
+codegen-units = 1
+# Enable link-time optimization for better performance
+lto = "thin"
+# Optimize for speed, not size
+opt-level = 3
+
+[profile.bench]
+inherits = "release"
+
+[profile.test]
+# Enable debug info for better error messages
+debug = true

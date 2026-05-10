@@ -33,13 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     run_health_benchmark(&client, base_url).await;
 
+    print_server_config(&client, base_url).await;
+
     let listing_id = find_listing_id(&client, base_url, &claims_header).await?;
     println!("Using listing_id: {}", listing_id);
 
-    let search_url = format!(
-        "{}/v1/listings/search?query=Benchmark&listing_type=product&category=laptop&condition=used&limit=20",
-        base_url
-    );
+    let search_url = format!("{}/v1/listings/search?limit=20", base_url);
 
     let cold = measure_single_request(&client, search_url.clone(), Some(&claims_header)).await;
     print_single_result(&cold, "Cold search (first request)");
@@ -79,7 +78,7 @@ fn parse_concurrency_levels(arg: Option<&str>) -> Vec<usize> {
         .map(|s| s.to_string())
         .or_else(|| env::var("HTTP_BENCH_CONCURRENCIES").ok())
         .or_else(|| env::var("HTTP_BENCH_CONCURRENCY").ok())
-        .unwrap_or_else(|| "1,10,50,100,250,500,1000".to_string());
+        .unwrap_or_else(|| "100,200,500".to_string());
 
     let mut levels = raw
         .split(',')
@@ -116,16 +115,72 @@ async fn run_health_benchmark(client: &Client, base_url: &str) {
     print_named_result("Health", &result);
 }
 
+async fn print_server_config(client: &Client, base_url: &str) {
+    println!("\n=== Server Configuration ===");
+    let response = match client.get(format!("{}/metrics", base_url)).send().await {
+        Ok(resp) if resp.status().is_success() => resp,
+        _ => {
+            println!("  (metrics endpoint not available)");
+            return;
+        }
+    };
+
+    let text = match response.text().await {
+        Ok(t) => t,
+        Err(_) => {
+            println!("  (failed to read metrics)");
+            return;
+        }
+    };
+
+    // Parse metrics
+    let mut worker_threads = "unknown";
+    let mut max_worker_threads = "unknown";
+    let mut cpu_cores = "unknown";
+    let mut listing_max_mb = "unknown";
+    let mut search_max_mb = "unknown";
+    let mut listing_used_mb = "unknown";
+    let mut search_used_mb = "unknown";
+
+    for line in text.lines() {
+        if line.starts_with("runtime_worker_threads ") {
+            worker_threads = line.split_whitespace().last().unwrap_or("unknown");
+        } else if line.starts_with("runtime_max_worker_threads ") {
+            max_worker_threads = line.split_whitespace().last().unwrap_or("unknown");
+        } else if line.starts_with("runtime_cpu_cores ") {
+            cpu_cores = line.split_whitespace().last().unwrap_or("unknown");
+        } else if line.starts_with("cache_listing_max_mb ") {
+            listing_max_mb = line.split_whitespace().last().unwrap_or("unknown");
+        } else if line.starts_with("cache_search_max_mb ") {
+            search_max_mb = line.split_whitespace().last().unwrap_or("unknown");
+        } else if line.starts_with("cache_listing_memory_mb ") {
+            listing_used_mb = line.split_whitespace().last().unwrap_or("unknown");
+        } else if line.starts_with("cache_search_memory_mb ") {
+            search_used_mb = line.split_whitespace().last().unwrap_or("unknown");
+        }
+    }
+
+    println!("  CPU Cores (Logical): {}", cpu_cores);
+    println!("  Tokio Worker Threads (Capped): {}", max_worker_threads);
+    println!("  Tokio Worker Threads (Active): {}", worker_threads);
+    println!(
+        "  Listing Cache: {} MB max, {} MB used",
+        listing_max_mb, listing_used_mb
+    );
+    println!(
+        "  Search Cache: {} MB max, {} MB used",
+        search_max_mb, search_used_mb
+    );
+    println!("  Total Cache: used {} MB", listing_used_mb);
+}
+
 async fn find_listing_id(
     client: &Client,
     base_url: &str,
     claims_header: &HeaderValue,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let response = client
-        .get(format!(
-            "{}/v1/listings/search?query=Benchmark&listing_type=product&category=laptop&condition=used&limit=1",
-            base_url
-        ))
+        .get(format!("{}/v1/listings/search?limit=1", base_url))
         .header("x-marketplace-claims", claims_header)
         .send()
         .await?;

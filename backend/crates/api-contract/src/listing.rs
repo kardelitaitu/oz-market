@@ -125,8 +125,10 @@ pub struct ListingPayload {
     pub schema_version: String,
     pub owner_id: String,
     pub listing_type: ListingType, // NEW: "product", "service", or "property"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<Category>, // Optional: only for products
     pub title: String,             // Used for all types (renamed from product_name)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub condition: Option<Condition>, // Optional: mainly for products
     pub price: Price,
     pub location: ListingLocation,

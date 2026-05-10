@@ -48,11 +48,26 @@ cargo run --manifest-path backend/Cargo.toml -p marketplace-server --bin populat
 
 ### Run the real HTTP benchmark
 
-#### Full Benchmark Suite (Recommended)
+#### Standard Benchmark (Recommended)
 ```powershell
-.\backend\scripts\bench-http.ps1 -Ops 1000 -ConcurrencyLevels "1,10,50,100,250,500,1000" -SeedDatabase
+.\backend\scripts\bench-http.ps1
 ```
-- **What it does**: Starts Postgres, seeds database, starts Actix server, runs comprehensive benchmarks
+- **What it does**: Starts Postgres, starts Actix server, runs benchmarks
+- **Default**: 1000 requests at concurrency levels 100, 200, 500
+- **Best for**: Standard performance validation
+
+#### Full Benchmark Suite with Database Seed
+```powershell
+.\backend\scripts\bench-http.ps1 -SeedDatabase
+```
+- **What it does**: Seeds database before running benchmarks
+- **Best for**: Fresh database state testing
+
+#### Custom Concurrency Sweep
+```powershell
+.\backend\scripts\bench-http.ps1 -Ops 1000 -ConcurrencyLevels "1,10,50,100,250,500,1000"
+```
+- **What it does**: Custom request count and concurrency levels
 - **Best for**: Complete end-to-end performance testing
 
 #### Quick Sequential Benchmark
@@ -117,8 +132,11 @@ cargo run --release --bin bench_concurrent -- "http://127.0.0.1:3000" 1000 "1,10
 - Seed once, benchmark many.
 - The real benchmark is the Actix server + HTTP path, not the direct app/repo benchmark.
 - Use lower concurrency first, then sweep higher levels to see saturation.
-- Current baseline (Phase 1 complete): release build with Actix + Moka cache
-  - Sequential search: 6,346 ops/s
-  - Concurrent search (100 threads): 46,407 ops/s (9.3x Phase 1 target)
-  - Get listing: 52,356 ops/s
-  - All benchmarks achieve 100% success rate with sub-millisecond p50 latency
+- Current baseline (after performance fixes):
+  - Health check: ~2,000 ops/s
+  - Cold search: ~16ms
+  - Warm search (100): 52,641 ops/s
+  - Warm search (200): 57,976 ops/s
+  - Warm search (500): 40,351 ops/s
+  - Get listing (cached): ~25,000 ops/s (standalone)
+  - All benchmarks achieve 100% success rate

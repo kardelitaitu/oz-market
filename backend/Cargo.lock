@@ -1571,6 +1571,7 @@ dependencies = [
  "metrics 0.22.4",
  "metrics-exporter-prometheus",
  "moka",
+ "num_cpus",
  "reqwest",
  "serde",
  "serde_json",

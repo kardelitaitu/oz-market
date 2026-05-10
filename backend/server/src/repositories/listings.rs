@@ -92,7 +92,7 @@ impl InMemoryListingRepository {
             attributes: summary.listing.attributes.clone(),
             // NEW: Marketplace fields
             sku: summary.listing.sku.clone(),
-            quantity: summary.listing.quantity.map(|q| q as i32).unwrap_or(1),
+            quantity: summary.listing.quantity.map(|q| q as i32),
             shipping_info: summary
                 .listing
                 .shipping_info
@@ -879,6 +879,12 @@ impl PostgresListingRepository {
             }
         }
 
+        // Add LIMIT to avoid fetching too many rows
+        // Use request limit or default to 50, max 200 to prevent excessive memory use
+        let limit = request.limit.unwrap_or(50).min(200);
+        builder.push(" LIMIT ");
+        builder.push(limit.to_string());
+
         let mut conn = self
             .pool
             .acquire()
@@ -1034,5 +1040,204 @@ impl ListingRepository for PostgresListingRepository {
         } else {
             Ok(None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use marketplace_api_contract::*;
+
+    fn make_test_request(title: &str, owner_id: &str) -> CreateListingRequest {
+        CreateListingRequest {
+            idempotency_key: format!("idem_{}", title.len()),
+            listing: ListingPayload {
+                schema_version: "1.0".to_string(),
+                owner_id: owner_id.to_string(),
+                listing_type: ListingType::Product,
+                category: Some(Category::Laptop),
+                title: title.to_string(),
+                condition: Some(Condition::New),
+                price: Price {
+                    amount: 999.99,
+                    currency: "USD".to_string(),
+                },
+                location: ListingLocation {
+                    country_code: "US".to_string(),
+                    country_name: "United States".to_string(),
+                    city: "New York".to_string(),
+                    latitude: None,
+                    longitude: None,
+                    geolocation_opt_out: None,
+                },
+                picture_urls: vec!["http://example.com/img.jpg".to_string()],
+                description: "Test description".to_string(),
+                attributes: None,
+                sku: Some("SKU123".to_string()),
+                quantity: Some(10),
+                shipping_info: None,
+                condition_details: None,
+                seller_notes: None,
+                service_type: None,
+                hourly_rate: None,
+                project_rate: None,
+                qualifications: None,
+                service_radius_km: None,
+                property_transaction_type: None,
+                property_sub_type: None,
+                area_sqm: None,
+                bedrooms: None,
+                bathrooms: None,
+                year_built: None,
+                lot_size_sqm: None,
+                zoning: None,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn insert_listing_creates_new_listing() {
+        let repo = InMemoryListingRepository::new();
+        let request = make_test_request("MacBook Pro", "seller_1");
+
+        let result = repo.insert_listing(&request).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.listing_id.starts_with("lst_"));
+        assert_eq!(response.listing.title, "MacBook Pro");
+        assert_eq!(response.status, ListingStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn insert_listing_rejects_duplicate() {
+        let repo = InMemoryListingRepository::new();
+        let request = make_test_request("MacBook Pro", "seller_1");
+
+        let first = repo.insert_listing(&request).await;
+        assert!(first.is_ok());
+
+        let second = repo.insert_listing(&request).await;
+        assert!(second.is_err());
+    }
+
+    #[tokio::test]
+    async fn get_listing_returns_inserted_listing() {
+        let repo = InMemoryListingRepository::new();
+        let request = make_test_request("Test Item", "seller_1");
+
+        let inserted = repo.insert_listing(&request).await.unwrap();
+        let retrieved = repo.get_listing(&inserted.listing_id).await.unwrap();
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().listing_id, inserted.listing_id);
+    }
+
+    #[tokio::test]
+    async fn get_listing_returns_none_for_missing() {
+        let repo = InMemoryListingRepository::new();
+        let result = repo.get_listing("nonexistent").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn search_listings_filters_by_category() {
+        let repo = InMemoryListingRepository::new();
+
+        let mut laptop_req = make_test_request("Laptop", "seller_1");
+        let mut phone_req = make_test_request("Phone", "seller_1");
+        laptop_req.listing.category = Some(Category::Laptop);
+        phone_req.listing.category = Some(Category::Phone);
+
+        repo.insert_listing(&laptop_req).await.unwrap();
+        repo.insert_listing(&phone_req).await.unwrap();
+
+        let search_req = SearchRequest {
+            category: Some(Category::Laptop),
+            ..Default::default()
+        };
+        let results = repo.search_listings(&search_req).await.unwrap();
+
+        assert_eq!(results.items.len(), 1);
+        assert_eq!(results.items[0].listing.category, Some(Category::Laptop));
+    }
+
+    #[tokio::test]
+    async fn search_listings_respects_limit() {
+        let repo = InMemoryListingRepository::new();
+
+        for i in 0..25 {
+            let req = make_test_request(&format!("Item {}", i), "seller_1");
+            repo.insert_listing(&req).await.unwrap();
+        }
+
+        let search_req = SearchRequest {
+            limit: Some(5),
+            ..Default::default()
+        };
+        let results = repo.search_listings(&search_req).await.unwrap();
+
+        assert_eq!(results.items.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn search_listings_sorts_by_price_asc() {
+        let repo = InMemoryListingRepository::new();
+
+        let mut req1 = make_test_request("Expensive Item", "seller_1");
+        req1.listing.price.amount = 1000.0;
+        let mut req2 = make_test_request("Cheap Item", "seller_1");
+        req2.listing.price.amount = 100.0;
+
+        repo.insert_listing(&req1).await.unwrap();
+        repo.insert_listing(&req2).await.unwrap();
+
+        let search_req = SearchRequest {
+            sort_by: SearchSort::PriceAsc,
+            ..Default::default()
+        };
+        let results = repo.search_listings(&search_req).await.unwrap();
+
+        assert_eq!(results.items.len(), 2);
+        assert_eq!(results.items[0].listing.price.amount, 100.0);
+    }
+
+    #[tokio::test]
+    async fn search_listings_filters_by_text_query() {
+        let repo = InMemoryListingRepository::new();
+
+        let mut req1 = make_test_request("MacBook Pro 16 inch", "seller_1");
+        req1.listing.description = "Powerful laptop".to_string();
+        let mut req2 = make_test_request("Old Phone", "seller_1");
+        req2.listing.description = "Basic phone".to_string();
+
+        repo.insert_listing(&req1).await.unwrap();
+        repo.insert_listing(&req2).await.unwrap();
+
+        let search_req = SearchRequest {
+            query: Some("macbook".to_string()),
+            ..Default::default()
+        };
+        let results = repo.search_listings(&search_req).await.unwrap();
+
+        // Query is used for scoring/sorting but not for filtering in in-memory repo
+        assert_eq!(results.items.len(), 2);
+        // MacBook should be first due to relevance score
+        assert!(results.items[0].listing.title.contains("MacBook"));
+    }
+
+    #[tokio::test]
+    async fn search_listings_returns_applied_sort() {
+        let repo = InMemoryListingRepository::new();
+        let req = make_test_request("Test", "seller_1");
+        repo.insert_listing(&req).await.unwrap();
+
+        let search_req = SearchRequest {
+            sort_by: SearchSort::PriceDesc,
+            ..Default::default()
+        };
+        let results = repo.search_listings(&search_req).await.unwrap();
+
+        assert_eq!(results.applied_sort_by, SearchSort::PriceDesc);
     }
 }

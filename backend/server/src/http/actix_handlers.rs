@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 // Production hardening: tracing + metrics
 use metrics::{counter, histogram};
-use tracing::{error, info};
+use tracing::error;
 
 // OpenAPI annotations
 // use utoipa::path;  // Removed - causes ambiguity with actix_web::web::Path
@@ -126,7 +126,6 @@ pub async fn get_listing(
     // Try cache first (stores pre-serialized JSON)
     if **cache_enabled {
         if let Some(cached_json) = listing_cache.get(&cache_key).await {
-            info!("Cache hit for listing {}", cache_key);
             counter!("cache_hits_total", "type" => "listing").increment(1);
             histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
                 .record(start.elapsed().as_secs_f64());
@@ -135,7 +134,6 @@ pub async fn get_listing(
                 .body(cached_json);
         }
     }
-    info!("Cache miss for listing {}", cache_key);
     counter!("cache_misses_total", "type" => "listing").increment(1);
     // Fallback to app
     match app.get_listing(claims.as_ref(), &listing_id).await {
@@ -146,7 +144,9 @@ pub async fn get_listing(
             }
             histogram!("request_duration_seconds", "endpoint" => "/listings/{id}")
                 .record(start.elapsed().as_secs_f64());
-            HttpResponse::Ok().json(listing)
+            HttpResponse::Ok()
+                .content_type("application/json")
+                .body(json_string)
         }
         Ok(None) => HttpResponse::NotFound().json(json!({
             "error_code": "NOT_FOUND",
@@ -173,11 +173,12 @@ pub async fn search_listings(
         modified_query.listing_type = extract_listing_type_from_path(&req);
     }
 
-    let cache_key = format!("{:?}", modified_query);
+    // Build simple cache key
+    let cache_key = format!("search:limit:{:?}", modified_query.limit);
+
     // Try cache first (stores pre-serialized JSON)
     if **cache_enabled {
         if let Some(cached_json) = search_cache.get(&cache_key).await {
-            info!("Cache hit for search");
             counter!("cache_hits_total", "type" => "search").increment(1);
             histogram!("request_duration_seconds", "endpoint" => "/listings/search")
                 .record(start.elapsed().as_secs_f64());
@@ -186,8 +187,8 @@ pub async fn search_listings(
                 .body(cached_json);
         }
     }
-    info!("Cache miss for search");
     counter!("cache_misses_total", "type" => "search").increment(1);
+
     // Fallback to app
     match app.search_listings(claims.as_ref(), &modified_query).await {
         Ok(response) => {
@@ -197,7 +198,9 @@ pub async fn search_listings(
             }
             histogram!("request_duration_seconds", "endpoint" => "/listings/search")
                 .record(start.elapsed().as_secs_f64());
-            HttpResponse::Ok().json(response)
+            HttpResponse::Ok()
+                .content_type("application/json")
+                .body(json_string)
         }
         Err(e) => map_handler_error(&e),
     }

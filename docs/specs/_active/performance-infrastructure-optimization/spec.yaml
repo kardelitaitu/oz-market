@@ -1,0 +1,29 @@
+version: 1
+id: performance-infrastructure-optimization
+title: Performance Infrastructure Optimization
+status: approved
+owner: spec-agent
+implementer: pending
+priority: P1
+area:
+  - backend
+  - infrastructure
+files:
+  code:
+    - backend/server/src/http/actix_runtime.rs
+    - backend/server/src/config.rs
+    - backend/server/Cargo.toml
+  docs: []
+acceptance:
+  - Benchmark throughput maintains ≥40k ops/s at 5000 concurrency
+  - P95 latency <50ms for search requests at high concurrency
+  - Database connection pool utilization <80% under load
+  - Cache hit rate ≥85% for search queries
+non_goals:
+  - Hardware infrastructure changes
+  - Database schema optimizations
+  - Frontend performance improvements
+risks:
+  - Increased memory usage from larger caches
+  - Potential database connection overhead
+  - Runtime configuration changes may affect stability

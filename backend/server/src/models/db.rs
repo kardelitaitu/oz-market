@@ -28,7 +28,7 @@ pub struct ListingRow {
     pub updated_at: String,
     // NEW: Marketplace fields
     pub sku: Option<String>,
-    pub quantity: i32,
+    pub quantity: Option<i32>,
     pub shipping_info: Option<Value>,
     pub condition_details: Option<String>,
     pub seller_notes: Option<String>,
@@ -81,11 +81,7 @@ impl ListingRow {
             attributes: self.attributes,
             // NEW: Marketplace fields
             sku: self.sku,
-            quantity: if self.quantity == 1 {
-                None
-            } else {
-                Some(self.quantity as u32)
-            },
+            quantity: self.quantity.filter(|&q| q != 1).map(|q| q as u32),
             shipping_info: self
                 .shipping_info
                 .and_then(|v| serde_json::from_value(v).ok()),

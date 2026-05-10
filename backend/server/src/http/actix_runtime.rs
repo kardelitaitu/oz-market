@@ -25,10 +25,11 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Configure tokio runtime for high concurrency performance
     let num_cpus = num_cpus::get();
+    let max_worker_threads = 8; // Cap at 8 for database-focused workload
     let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1)); // Reserve 1 thread for system stability, minimum 1
+        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(worker_threads)
@@ -59,15 +60,36 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map(|value| value != "1" && !value.eq_ignore_ascii_case("true"))
         .unwrap_or(true);
 
+    // Memory-based cache configuration (in MB) - default 16GB total split
+    let listing_cache_max_mb: u64 = std::env::var("LISTING_CACHE_MAX_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10 * 1024); // Default 10GB
+    let search_cache_max_mb: u64 = std::env::var("SEARCH_CACHE_MAX_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6 * 1024); // Default 6GB
+
     // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
+    // Memory-based capacity: weigher returns byte size, max_capacity is in bytes
     let listing_cache: Cache<String, String> = Cache::builder()
-        .max_capacity(100_000)
+        .max_capacity(listing_cache_max_mb * 1024 * 1024) // Convert MB to bytes
+        .weigher(|_key: &String, value: &String| -> u32 {
+            // Weight = value bytes (capped at u32::MAX for very large entries)
+            value.len() as u32
+        })
         .time_to_live(std::time::Duration::from_secs(10 * 60)) // 10 minutes TTL
         .build();
     let search_cache: Cache<String, String> = Cache::builder()
-        .max_capacity(50_000)
+        .max_capacity(search_cache_max_mb * 1024 * 1024) // Convert MB to bytes
+        .weigher(|_key: &String, value: &String| -> u32 { value.len() as u32 })
         .time_to_live(std::time::Duration::from_secs(5 * 60)) // 5 minutes TTL
         .build();
+
+    info!(
+        "Memory caches initialized: listing_cache={}MB, search_cache={}MB",
+        listing_cache_max_mb, search_cache_max_mb
+    );
 
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
@@ -77,6 +99,14 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let pool_data = web::Data::new(pool);
 
     info!("Starting Actix-web server on {}", bind);
+
+    // Use same worker count as tokio runtime to avoid over-subscription
+    let num_cpus = num_cpus::get();
+    let max_worker_threads = 8usize;
+    let actix_workers = std::env::var("TOKIO_WORKER_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
 
     HttpServer::new(move || {
         App::new()
@@ -168,6 +198,26 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     ),
             )
             .service(
+                // General listings (search across all types)
+                web::scope("/v1/listings")
+                    .route(
+                        "/search",
+                        web::get().to(crate::http::actix_handlers::search_listings),
+                    )
+                    .route(
+                        "",
+                        web::post().to(crate::http::actix_handlers::create_listing),
+                    )
+                    .route(
+                        "/{listing_id}",
+                        web::get().to(crate::http::actix_handlers::get_listing),
+                    )
+                    .route(
+                        "/{listing_id}/archive",
+                        web::post().to(crate::http::actix_handlers::archive_listing),
+                    ),
+            )
+            .service(
                 // Shared resources (negotiations, contact reveals)
                 web::scope("/v1")
                     .route(
@@ -217,6 +267,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .route("/health", web::get().to(health_check))
     })
     .bind(&bind)?
+    .workers(actix_workers)
     .run()
     .await?;
 
@@ -234,14 +285,29 @@ async fn metrics_handler(
 
     // Runtime metrics
     let num_cpus = num_cpus::get();
+    let max_worker_threads = 8usize; // Must match the cap in run()
     let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1));
+        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
 
     // Cache metrics
     let listing_count = listing_cache.as_ref().entry_count();
     let search_count = search_cache.as_ref().entry_count();
+    let listing_max_mb: u64 = std::env::var("LISTING_CACHE_MAX_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10 * 1024);
+    let search_max_mb: u64 = std::env::var("SEARCH_CACHE_MAX_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6 * 1024);
+    let listing_max_bytes = listing_max_mb * 1024 * 1024;
+    let search_max_bytes = search_max_mb * 1024 * 1024;
+
+    // Estimate memory usage (avg 3KB per listing, 15KB per search result)
+    let listing_memory_bytes = listing_count * 3 * 1024;
+    let search_memory_bytes = search_count * 15 * 1024;
 
     // Calculate utilization percentages
     let active_connections = pool_size.saturating_sub(idle_connections as u32);
@@ -250,35 +316,44 @@ async fn metrics_handler(
     } else {
         0
     };
-    let listing_cache_utilization = if listing_count > 0 {
-        ((listing_count as f64 / 100_000.0) * 100.0) as u32
+
+    let listing_cache_utilization = if listing_max_bytes > 0 {
+        ((listing_memory_bytes as f64 / listing_max_bytes as f64) * 100.0) as u32
     } else {
         0
     };
-    let search_cache_utilization = if search_count > 0 {
-        ((search_count as f64 / 50_000.0) * 100.0) as u32
+    let search_cache_utilization = if search_max_bytes > 0 {
+        ((search_memory_bytes as f64 / search_max_bytes as f64) * 100.0) as u32
     } else {
         0
     };
 
-    // Memory usage estimation (rough calculation)
-    let estimated_memory_mb = (listing_count * 1024 + search_count * 512) / (1024 * 1024); // Rough estimate: 1KB per listing, 512B per search
+    // Memory usage in MB
+    let listing_memory_mb = listing_memory_bytes / (1024 * 1024);
+    let search_memory_mb = search_memory_bytes / (1024 * 1024);
+    let total_cache_mb = listing_memory_mb + search_memory_mb;
 
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
          # HELP database_connections_idle Idle database connections\n# TYPE database_connections_idle gauge\ndatabase_connections_idle {}\n\
          # HELP database_connections_utilization_percent Connection pool utilization percentage\n# TYPE database_connections_utilization_percent gauge\ndatabase_connections_utilization_percent {}\n\
          # HELP runtime_worker_threads Configured tokio worker threads\n# TYPE runtime_worker_threads gauge\nruntime_worker_threads {}\n\
+         # HELP runtime_max_worker_threads Max capped tokio worker threads\n# TYPE runtime_max_worker_threads gauge\nruntime_max_worker_threads {}\n\
          # HELP runtime_cpu_cores Available CPU cores\n# TYPE runtime_cpu_cores gauge\nruntime_cpu_cores {}\n\
          # HELP cache_listing_entries Current listing cache entries\n# TYPE cache_listing_entries gauge\ncache_listing_entries {}\n\
+         # HELP cache_listing_memory_mb Current listing cache memory usage in MB\n# TYPE cache_listing_memory_mb gauge\ncache_listing_memory_mb {}\n\
+         # HELP cache_listing_max_mb Listing cache max memory limit in MB\n# TYPE cache_listing_max_mb gauge\ncache_listing_max_mb {}\n\
          # HELP cache_listing_utilization_percent Listing cache utilization percentage\n# TYPE cache_listing_utilization_percent gauge\ncache_listing_utilization_percent {}\n\
          # HELP cache_search_entries Current search cache entries\n# TYPE cache_search_entries gauge\ncache_search_entries {}\n\
+         # HELP cache_search_memory_mb Current search cache memory usage in MB\n# TYPE cache_search_memory_mb gauge\ncache_search_memory_mb {}\n\
+         # HELP cache_search_max_mb Search cache max memory limit in MB\n# TYPE cache_search_max_mb gauge\ncache_search_max_mb {}\n\
          # HELP cache_search_utilization_percent Search cache utilization percentage\n# TYPE cache_search_utilization_percent gauge\ncache_search_utilization_percent {}\n\
-         # HELP memory_cache_estimated_mb Estimated cache memory usage in MB\n# TYPE memory_cache_estimated_mb gauge\nmemory_cache_estimated_mb {}\n\
+         # HELP memory_cache_total_mb Total cache memory usage in MB\n# TYPE memory_cache_total_mb gauge\nmemory_cache_total_mb {}\n\
          # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n",
-        pool_size, idle_connections, connection_utilization, worker_threads, num_cpus,
-        listing_count, listing_cache_utilization,
-        search_count, search_cache_utilization, estimated_memory_mb
+        pool_size, idle_connections, connection_utilization, worker_threads, max_worker_threads, num_cpus,
+        listing_count, listing_memory_mb, listing_max_mb, listing_cache_utilization,
+        search_count, search_memory_mb, search_max_mb, search_cache_utilization,
+        total_cache_mb
     );
 
     actix_web::HttpResponse::Ok()
@@ -336,7 +411,7 @@ async fn build_repositories() -> Result<
     let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(100); // Increased for high concurrency performance
+        .unwrap_or(200); // Increased for high concurrency performance
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(max_connections)

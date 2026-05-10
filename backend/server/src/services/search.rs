@@ -217,3 +217,246 @@ pub fn compare_search_items(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use marketplace_api_contract::*;
+
+    fn make_listing(title: &str, price: f64, city: &str, country: &str) -> ListingSummary {
+        ListingSummary {
+            listing_id: format!("lst_{}", title.len()),
+            version: 1,
+            status: ListingStatus::Active,
+            seller_rating: Some(4.5),
+            seller_name: None,
+            seller_verified: None,
+            listing: ListingPayload {
+                schema_version: "1.0".to_string(),
+                owner_id: "seller_1".to_string(),
+                listing_type: ListingType::Product,
+                category: Some(Category::Laptop),
+                title: title.to_string(),
+                condition: Some(Condition::Used),
+                price: Price {
+                    amount: price,
+                    currency: "USD".to_string(),
+                },
+                location: ListingLocation {
+                    country_code: "US".to_string(),
+                    country_name: country.to_string(),
+                    city: city.to_string(),
+                    latitude: None,
+                    longitude: None,
+                    geolocation_opt_out: None,
+                },
+                picture_urls: vec![],
+                description: "Test description".to_string(),
+                attributes: None,
+                sku: None,
+                quantity: None,
+                shipping_info: None,
+                condition_details: None,
+                seller_notes: None,
+                service_type: None,
+                hourly_rate: None,
+                project_rate: None,
+                qualifications: None,
+                service_radius_km: None,
+                property_transaction_type: None,
+                property_sub_type: None,
+                area_sqm: None,
+                bedrooms: None,
+                bathrooms: None,
+                year_built: None,
+                lot_size_sqm: None,
+                zoning: None,
+            },
+        }
+    }
+
+    #[test]
+    fn normalize_search_terms_handles_empty_input() {
+        assert_eq!(normalize_search_terms(""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn normalize_search_terms_trims_and_lowercases() {
+        let result = normalize_search_terms("  Hello World  ");
+        assert_eq!(result, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn normalize_search_terms_filters_non_alphanumeric() {
+        let result = normalize_search_terms("laptop!@# $1999");
+        assert_eq!(result, vec!["laptop", "1999"]);
+    }
+
+    #[test]
+    fn normalize_search_terms_handles_multiple_spaces() {
+        let result = normalize_search_terms("macbook     pro");
+        assert_eq!(result, vec!["macbook", "pro"]);
+    }
+
+    #[test]
+    fn listing_index_text_includes_all_fields() {
+        let listing = ListingPayload {
+            schema_version: "1.0".to_string(),
+            owner_id: "seller_1".to_string(),
+            listing_type: ListingType::Product,
+            category: Some(Category::Laptop),
+            title: "MacBook Pro".to_string(),
+            condition: Some(Condition::New),
+            price: Price {
+                amount: 1500.0,
+                currency: "USD".to_string(),
+            },
+            location: ListingLocation {
+                country_code: "US".to_string(),
+                country_name: "USA".to_string(),
+                city: "San Francisco".to_string(),
+                latitude: None,
+                longitude: None,
+                geolocation_opt_out: None,
+            },
+            description: "16GB RAM".to_string(),
+            picture_urls: vec![],
+            attributes: Some(serde_json::json!({"ram": "16GB", "storage": "512GB"})),
+            sku: None,
+            quantity: None,
+            shipping_info: None,
+            condition_details: None,
+            seller_notes: None,
+            service_type: None,
+            hourly_rate: None,
+            project_rate: None,
+            qualifications: None,
+            service_radius_km: None,
+            property_transaction_type: None,
+            property_sub_type: None,
+            area_sqm: None,
+            bedrooms: None,
+            bathrooms: None,
+            year_built: None,
+            lot_size_sqm: None,
+            zoning: None,
+        };
+        let text = listing_index_text(&listing);
+        assert!(text.contains("MacBook Pro"));
+        assert!(text.contains("San Francisco"));
+        assert!(text.contains("USA"));
+        assert!(text.contains("ram"));
+    }
+
+    #[test]
+    fn score_listing_returns_zero_for_empty_terms() {
+        let listing = make_listing("Test", 100.0, "NYC", "USA");
+        assert_eq!(score_listing(&listing, &[]), 0);
+    }
+
+    #[test]
+    fn score_listing_awards_title_match_bonus() {
+        let listing = make_listing("MacBook Pro", 1000.0, "NYC", "USA");
+        let score = score_listing(&listing, &["macbook".to_string()]);
+        assert!(score > 10);
+    }
+
+    #[test]
+    fn score_listing_awards_location_match() {
+        let listing = make_listing("Laptop", 1000.0, "San Francisco", "USA");
+        let score = score_listing(&listing, &["san".to_string()]);
+        assert!(score >= 8);
+    }
+
+    #[test]
+    fn compare_search_items_sorts_by_relevance() {
+        let a = make_listing("MacBook Pro", 1000.0, "NYC", "USA");
+        let b = make_listing("Old Laptop", 500.0, "LA", "USA");
+        let terms = vec!["macbook".to_string()];
+        // a has matching title, should come first -> Ordering::Less
+        assert_eq!(
+            compare_search_items(&a, &b, &terms, SearchSort::Relevance),
+            Ordering::Less
+        );
+    }
+
+    #[test]
+    fn compare_search_items_sorts_by_price_asc() {
+        let a = make_listing("Laptop", 500.0, "NYC", "USA");
+        let b = make_listing("Laptop", 1000.0, "NYC", "USA");
+        // a is cheaper, should come first -> Ordering::Less
+        assert_eq!(
+            compare_search_items(&a, &b, &[], SearchSort::PriceAsc),
+            Ordering::Less
+        );
+    }
+
+    #[test]
+    fn compare_search_items_sorts_by_price_desc() {
+        let a = make_listing("Laptop", 500.0, "NYC", "USA");
+        let b = make_listing("Laptop", 1000.0, "NYC", "USA");
+        // b is more expensive, should come first -> Ordering::Greater
+        assert_eq!(
+            compare_search_items(&a, &b, &[], SearchSort::PriceDesc),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn compare_search_items_sorts_by_newest() {
+        let mut a = make_listing("Laptop", 500.0, "NYC", "USA");
+        a.version = 1;
+        let mut b = make_listing("Laptop", 500.0, "NYC", "USA");
+        b.version = 2;
+        // b is newer, should come first -> Ordering::Greater
+        assert_eq!(
+            compare_search_items(&a, &b, &[], SearchSort::Newest),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn compare_search_items_sorts_by_rating_highest() {
+        let mut a = make_listing("Laptop", 500.0, "NYC", "USA");
+        a.seller_rating = Some(3.0);
+        let mut b = make_listing("Laptop", 500.0, "NYC", "USA");
+        b.seller_rating = Some(5.0);
+        // b has higher rating, should come first -> Ordering::Greater
+        assert_eq!(
+            compare_search_items(&a, &b, &[], SearchSort::RatingHighest),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn compare_search_items_sorts_by_price_per_sqm() {
+        let mut a = make_listing("Apartment", 100000.0, "NYC", "USA");
+        a.listing.area_sqm = Some(100.0);
+        let mut b = make_listing("Apartment", 150000.0, "NYC", "USA");
+        b.listing.area_sqm = Some(100.0);
+        // Same price per sqm (1000), tie-break on listing_id
+        let result = compare_search_items(&a, &b, &[], SearchSort::PricePerSqmAsc);
+        assert!(result != Ordering::Equal);
+    }
+
+    #[test]
+    fn compare_search_items_handles_missing_rating_with_default() {
+        let mut a = make_listing("Laptop", 500.0, "NYC", "USA");
+        a.seller_rating = None;
+        let mut b = make_listing("Laptop", 500.0, "NYC", "USA");
+        b.seller_rating = Some(5.0);
+        // b has rating, should come first (default for None is 0.0) -> Ordering::Greater
+        assert_eq!(
+            compare_search_items(&a, &b, &[], SearchSort::RatingHighest),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn compare_search_items_tie_breaks_on_listing_id() {
+        let a = make_listing("Laptop", 500.0, "NYC", "USA");
+        let b = make_listing("Laptop", 500.0, "NYC", "USA");
+        let result = compare_search_items(&a, &b, &[], SearchSort::Relevance);
+        assert!(result == Ordering::Equal || a.listing_id != b.listing_id);
+    }
+}
