@@ -1,0 +1,31 @@
+version: 1
+id: 0001-unified-listings-endpoint
+title: Unified /api/listings/{id} Endpoint
+status: proposed
+owner: backend-team
+implementer: pending
+priority: P2
+area:
+  - backend
+  - api
+files:
+  code:
+    - backend/server/src/handlers/listings.rs
+    - backend/crates/api-contract/src/lib.rs
+    - backend/crates/api-contract/src/endpoints.rs
+  docs:
+    - docs/specs/openapi.yaml
+    - docs/DOCS-README.md
+    - docs/whitepaper/10-api-contract.md
+acceptance:
+  - GET /api/listings/{id} returns any listing type
+  - Response includes listing_type field
+  - Old endpoints return 301 redirect with Deprecation header
+  - 4-week gradual deprecation completes
+non_goals:
+  - Database schema changes
+  - Search index changes
+  - Other CRUD endpoint changes
+risks:
+  - External consumers may break (mitigated by redirect)
+  - Mobile client update required

@@ -68,52 +68,33 @@ function Test-JournalAppendOnly {
     $fullPath = if ([System.IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $RepoRoot $Path }
     $relativePath = "JOURNAL.md"
 
-    $headLines = @()
-    try {
-        $headLines = @(git -C $RepoRoot show "HEAD:$relativePath" 2>$null | ForEach-Object { $_.TrimEnd("`r") })
-    } catch {
-        return @{
-            Passed  = $false
-            Message = "Unable to read $Path from HEAD"
-        }
-    }
-
-    if ($LASTEXITCODE -ne 0 -or $headLines.Count -eq 0) {
-        return @{
-            Passed  = $false
-            Message = "Unable to read $Path from HEAD"
-        }
-    }
-
     if (-not (Test-Path $fullPath)) {
-        return @{
-            Passed  = $false
-            Message = "$Path is missing"
-        }
+        return @{ Passed = $false; Message = "$Path is missing" }
     }
 
-    $currentLines = @(Get-Content -LiteralPath $fullPath | ForEach-Object { $_.TrimEnd("`r") })
-
-    if ($currentLines.Count -lt $headLines.Count) {
-        return @{
-            Passed  = $false
-            Message = "$Path is shorter than HEAD"
-        }
+    # Use git diff HEAD to detect modifications to existing content.
+    # In unified-diff output, removed lines start with '-'; added lines
+    # start with '+'.  An append-only journal will have only '+' lines
+    # (the '--- a/...' header is excluded).  If any '-' lines appear,
+    # previously committed content was modified.
+    $diff = git -C $RepoRoot diff HEAD -- $relativePath 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return @{ Passed = $false; Message = "Unable to diff $Path against HEAD" }
     }
 
-    for ($i = 0; $i -lt $headLines.Count; $i++) {
-        if ($currentLines[$i] -ne $headLines[$i]) {
-            return @{
-                Passed  = $false
-                Message = "$Path changed before the append-only boundary"
-            }
-        }
+    if (-not $diff) {
+        return @{ Passed = $true; Message = "$Path is unchanged (append-only)" }
     }
 
-    return @{
-        Passed  = $true
-        Message = "$Path is append-only"
+    # Look for any line that starts with '-' but not '---' (the latter is
+    # the diff header).  This is encoding-safe because git handles the
+    # byte-level comparison.
+    $hasRemovals = $diff | Select-String "^\-" | Where-Object { $_ -notmatch "^\-\-\-" }
+    if ($hasRemovals) {
+        return @{ Passed = $false; Message = "$Path changed before the append-only boundary" }
     }
+
+    return @{ Passed = $true; Message = "$Path is append-only" }
 }
 
 # Change to backend directory (where Cargo.toml is)
