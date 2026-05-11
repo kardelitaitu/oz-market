@@ -1,8 +1,8 @@
 use crate::repositories::{ListingRepository, RepositoryError, RepositoryErrorKind};
 use marketplace_api_contract::{
-    Category, Condition, CreateListingResponse, CurrencyCode, ListingLocation, ListingPayload,
-    ListingStatus, ListingSummary, ListingType, OpenNegotiationRequest, Price, SearchRequest,
-    SearchResponse, ServiceType,
+    Category, Condition, CreateListingRequest, CreateListingResponse, CurrencyCode,
+    ListingLocation, ListingPayload, ListingStatus, ListingSummary, ListingType,
+    NegotiationResponse, OpenNegotiationRequest, Price, SearchRequest, SearchResponse, ServiceType,
 };
 use marketplace_auth_core::{Claims, Role, Scope};
 use std::sync::Arc;
@@ -442,4 +442,135 @@ pub fn support_claims() -> Claims {
         hardware_id: None,
         exp: None,
     }
+}
+
+// ---------------------------------------------------------------------------
+// MockListingRepository — configurable per-method result slots
+// ---------------------------------------------------------------------------
+
+type MockResult<T> = Arc<std::sync::Mutex<Option<Result<T, RepositoryError>>>>;
+type MockOptionResult<T> = Arc<std::sync::Mutex<Option<Result<Option<T>, RepositoryError>>>>;
+
+pub struct MockListingRepository {
+    pub insert_result: MockResult<CreateListingResponse>,
+    pub get_result: MockOptionResult<ListingSummary>,
+    pub search_result: MockResult<SearchResponse>,
+    pub update_status_result: MockOptionResult<ListingSummary>,
+}
+
+impl Default for MockListingRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MockListingRepository {
+    pub fn new() -> Self {
+        Self {
+            insert_result: Arc::new(std::sync::Mutex::new(None)),
+            get_result: Arc::new(std::sync::Mutex::new(None)),
+            search_result: Arc::new(std::sync::Mutex::new(None)),
+            update_status_result: Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
+    pub fn fail_all(&self) {
+        let msg = || RepositoryError::new(RepositoryErrorKind::Storage, "mock storage error");
+        *self.insert_result.lock().unwrap() = Some(Err(msg()));
+        *self.get_result.lock().unwrap() = Some(Err(msg()));
+        *self.search_result.lock().unwrap() = Some(Err(msg()));
+        *self.update_status_result.lock().unwrap() = Some(Err(msg()));
+    }
+}
+
+#[async_trait::async_trait]
+impl ListingRepository for MockListingRepository {
+    async fn insert_listing(
+        &self,
+        _request: &CreateListingRequest,
+    ) -> Result<CreateListingResponse, RepositoryError> {
+        self.insert_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn get_listing(
+        &self,
+        _listing_id: &str,
+    ) -> Result<Option<ListingSummary>, RepositoryError> {
+        self.get_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn search_listings(
+        &self,
+        _request: &SearchRequest,
+    ) -> Result<SearchResponse, RepositoryError> {
+        self.search_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn update_listing_status(
+        &self,
+        _listing_id: &str,
+        _status: ListingStatus,
+    ) -> Result<Option<ListingSummary>, RepositoryError> {
+        self.update_status_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Assertion helpers
+// ---------------------------------------------------------------------------
+
+pub fn assert_listing_eq(actual: &ListingSummary, expected: &ListingSummary) {
+    assert_eq!(actual.listing.title, expected.listing.title);
+    assert!(
+        (actual.listing.price.amount - expected.listing.price.amount).abs() < f64::EPSILON,
+        "price mismatch: {} vs {}",
+        actual.listing.price.amount,
+        expected.listing.price.amount
+    );
+    assert_eq!(
+        actual.listing.price.currency,
+        expected.listing.price.currency
+    );
+}
+
+pub fn assert_negotiation_state_eq(actual: &NegotiationResponse, expected: &NegotiationResponse) {
+    assert_eq!(actual.listing_id, expected.listing_id);
+    assert_eq!(actual.status, expected.status);
+}
+
+pub fn assert_json_roundtrip<T>(val: &T)
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
+{
+    let json = serde_json::to_value(val).unwrap();
+    let deserialized: T = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(&deserialized, val, "JSON roundtrip failed for {json}");
 }

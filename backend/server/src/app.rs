@@ -1598,4 +1598,81 @@ mod tests {
         assert_eq!(successes, 1);
         assert_eq!(conflicts, 1);
     }
+
+    // -----------------------------------------------------------------------
+    // Priority 4 — Service orchestration tests using MockListingRepository
+    // -----------------------------------------------------------------------
+
+    use crate::services::search::SearchError;
+    use crate::test_support::MockListingRepository;
+
+    #[tokio::test]
+    async fn mock_storage_error_from_search_propagates() {
+        let mock = MockListingRepository::new();
+        mock.fail_all();
+        let app = build_app_with_listing_repo(mock);
+
+        let result = app
+            .search_listings(Some(&claims()), &SearchRequest::default())
+            .await;
+        assert!(matches!(
+            result,
+            Err(HandlerError::Search(SearchError::Storage(
+                RepositoryError {
+                    kind: RepositoryErrorKind::Storage,
+                    ..
+                }
+            )))
+        ));
+    }
+
+    #[tokio::test]
+    async fn mock_storage_error_from_get_propagates() {
+        let mock = MockListingRepository::new();
+        mock.fail_all();
+        let app = build_app_with_listing_repo(mock);
+
+        let result = app.get_listing(Some(&claims()), "lst_1").await;
+        assert!(matches!(
+            result,
+            Err(HandlerError::Search(SearchError::Storage(
+                RepositoryError {
+                    kind: RepositoryErrorKind::Storage,
+                    ..
+                }
+            )))
+        ));
+    }
+
+    #[tokio::test]
+    async fn mock_not_found_from_get_returns_none() {
+        let mock = MockListingRepository::new();
+        mock.get_result.lock().unwrap().replace(Ok(None));
+        let app = build_app_with_listing_repo(mock);
+
+        let result = app
+            .get_listing(Some(&claims()), "lst_missing")
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    fn build_app_with_listing_repo(
+        listing_repo: MockListingRepository,
+    ) -> MarketplaceApp<
+        MockListingRepository,
+        InMemoryIdempotencyRepository,
+        InMemoryReservationLeaseRepository,
+        InMemoryContactRevealRepository,
+    > {
+        MarketplaceApp::new(
+            listing_repo,
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        )
+    }
 }

@@ -1240,4 +1240,57 @@ mod tests {
 
         assert_eq!(results.applied_sort_by, SearchSort::PriceDesc);
     }
+
+    // ------------------------------------------------------------------
+    // Priority 3.5: Concurrent access safety
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn concurrent_inserts_all_succeed() {
+        let repo = Arc::new(InMemoryListingRepository::new());
+        let mut handles = Vec::new();
+        for i in 0..20u64 {
+            let repo = Arc::clone(&repo);
+            handles.push(tokio::spawn(async move {
+                let req = make_test_request(&format!("Item {i}"), &format!("seller_{i}"));
+                repo.insert_listing(&req).await
+            }));
+        }
+        let mut successes: usize = 0;
+        for handle in handles {
+            let result = handle.await.unwrap();
+            if result.is_ok() {
+                successes += 1;
+            }
+        }
+        assert_eq!(successes, 20);
+    }
+
+    #[tokio::test]
+    async fn concurrent_insert_and_read_no_panic() {
+        let repo = Arc::new(InMemoryListingRepository::new());
+        let req = make_test_request("Concurrent", "seller_1");
+        let created = repo.insert_listing(&req).await.unwrap();
+        let listing_id = created.listing_id.clone();
+
+        let mut handles = Vec::new();
+        for _ in 0..10 {
+            let repo = Arc::clone(&repo);
+            let lid = listing_id.clone();
+            handles.push(tokio::spawn(async move {
+                let _ = repo.get_listing(&lid).await;
+                let _ = repo.search_listings(&SearchRequest::default()).await;
+            }));
+        }
+        for _ in 0..10 {
+            let repo = Arc::clone(&repo);
+            handles.push(tokio::spawn(async move {
+                let req = make_test_request("New", "seller_2");
+                let _ = repo.insert_listing(&req).await;
+            }));
+        }
+        for handle in handles {
+            assert!(handle.await.is_ok());
+        }
+    }
 }
