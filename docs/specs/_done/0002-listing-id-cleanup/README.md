@@ -26,10 +26,10 @@ risks:
 
 # Clean Test File IDs
 
-Status: `proposed`
+Status: `completed`
 
 Owner: `backend-team`
-Implementer: `pending`
+Implementer: `opencode`
 
 ## Summary
 

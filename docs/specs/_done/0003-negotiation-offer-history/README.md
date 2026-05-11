@@ -1,9 +1,9 @@
 ---
 id: 0003-negotiation-offer-history
 title: Negotiation Offer History and Finalization
-status: in_progress
+status: completed
 owner: backend-team
-implementer: pending
+implementer: opencode
 priority: P2
 area:
   - backend
@@ -43,10 +43,10 @@ risks:
 
 # Negotiation Offer History and Finalization
 
-Status: `in_progress`
+Status: `completed`
 
 Owner: `backend-team`
-Implementer: `pending`
+Implementer: `opencode`
 
 ## Summary
 
@@ -257,12 +257,12 @@ Keep the current state names unchanged for the next spec:
 
 ## Validation Checklist
 
-- [ ] `docs/specs/openapi.yaml` still matches the chosen negotiation shape
-- [ ] `offer_history` is defined before code changes start
-- [ ] `accept` and `reject` endpoints are specified before implementation
-- [ ] `cancel` remains out of scope unless explicitly approved
-- [ ] state names remain unchanged
-- [ ] reservation remains the final gate for reveal and finalization
+- [x] `docs/specs/openapi.yaml` still matches the chosen negotiation shape
+- [x] `offer_history` is defined before code changes start
+- [x] `accept` and `reject` endpoints are specified before implementation
+- [x] `cancel` remains out of scope unless explicitly approved
+- [x] state names remain unchanged
+- [x] reservation remains the final gate for reveal and finalization
 
 ## Next Steps
 

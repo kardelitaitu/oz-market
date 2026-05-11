@@ -1,7 +1,7 @@
 ---
 id: 0001-unified-listings-endpoint
-title: Unified /api/listings/{id} Endpoint
-status: in_progress
+title: Unified /v1/listings/{listing_id} Endpoint
+status: completed
 owner: backend-team
 implementer: opencode
 priority: P2
@@ -16,9 +16,9 @@ files:
   docs:
     - docs/specs/openapi.yaml
     - docs/DOCS-README.md
-    - docs/whitepaper/10-api-contract.md
+    - docs/01-whitepaper/10-api-contract.md
 acceptance:
-  - GET /api/listings/{id} returns any listing type
+  - GET /v1/listings/{listing_id} returns any listing type
   - Response includes listing_type field
   - Old endpoints return 301 redirect with Deprecation header
   - 4-week gradual deprecation completes
@@ -31,16 +31,16 @@ risks:
   - Mobile client update required
 ---
 
-# Unified /api/listings/{id} Endpoint
+# Unified /v1/listings/{listing_id} Endpoint
 
-Status: `proposed`
+Status: `completed`
 
 Owner: `backend-team`
-Implementer: `pending`
+Implementer: `opencode`
 
 ## Summary
 
-Replace three separate type-specific endpoints with a single unified listing retrieval endpoint. Consolidate `GET /api/product/{id}`, `GET /api/service/{id}`, `GET /api/property/{id}` into `GET /api/listings/{id}`.
+Replace three separate type-specific endpoints with a single unified listing retrieval endpoint. Consolidate `GET /v1/product/{listing_id}`, `GET /v1/service/{listing_id}`, `GET /v1/property/{listing_id}` into `GET /v1/listings/{listing_id}`.
 
 ## Scope
 
@@ -60,7 +60,7 @@ Replace three separate type-specific endpoints with a single unified listing ret
 
 | Decision | Value |
 |----------|-------|
-| Old URLs | 301 redirect to `/api/listings/{id}` |
+| Old URLs | 301 redirect to `/v1/listings/{listing_id}` |
 | ID format | `"id": "123"` (clean, no type prefix) |
 | Cutover | Gradual (4-week deprecation) |
 

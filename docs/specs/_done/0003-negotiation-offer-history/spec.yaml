@@ -1,9 +1,9 @@
 version: 1
 id: 0003-negotiation-offer-history
 title: Negotiation Offer History and Finalization
-status: in_progress
+status: completed
 owner: backend-team
-implementer: pending
+implementer: opencode
 priority: P2
 area:
   - backend

@@ -236,6 +236,7 @@
 
 ## 2026-05-11 20:05
 
+<<<<<<< HEAD
 - Updated `docs/specs/openapi.yaml` to include negotiation `accept`/`reject` operations, new accept/reject request schemas, and `offer_history` schema fields so API docs match implemented backend routes.
 - Added PostgreSQL negotiation integration coverage in `backend/server/tests/postgres_flows.rs` for submit-offer + accept flow and reject flow, including persisted status/final-offer/history assertions.
 - Extended test schema setup to apply migration `0013_add_negotiation_offer_history.sql`, ensuring integration tests run against the current negotiation table shape.
@@ -263,3 +264,27 @@
 - Created dedicated backend implementation commit after successful full `./check.ps1` run.
 - Included negotiation offer-history + finalization implementation set across `api-contract`, app/runtime/handlers, repository persistence, MCP wiring, checker hardening, and migration `0013_add_negotiation_offer_history.sql`.
 - Why: keep spec-lifecycle move and backend implementation separated for cleaner audit and rollback boundaries.
+=======
+- Updated docs/specs/openapi.yaml to include negotiation ccept/eject operations, new accept/reject request schemas, and offer_history schema fields so API docs match implemented backend routes.
+- Added PostgreSQL negotiation integration coverage in ackend/server/tests/postgres_flows.rs for submit-offer + accept flow and reject flow, including persisted status/final-offer/history assertions.
+- Extended test schema setup to apply migration  013_add_negotiation_offer_history.sql, ensuring integration tests run against the current negotiation table shape.
+- Locked the single-negotiation enforcement decision in  003 docs (DB uniqueness via deterministic 
+eg_{listing_id} + PK conflict) with option tradeoffs for future reopen semantics.
+- Refreshed 0003 parity report and README/plan text so active-spec documentation reflects current contract/runtime behavior and no longer marks accept/reject/history as pending.
+
+## 2026-05-11 20:43
+
+- Ran full ./check.ps1 (no skip flags).
+- Result: PASS for journal guard, active spec guard, cargo check, cargo fmt --check, cargo clippy -D warnings, and cargo test --lib.
+- Why: validated current workspace is stable before continuing implementation.
+
+## 2026-05-11 21:11
+
+- Confirmed specs in sequence:  003 then  001 then  002.
+- Updated  003 and  001 metadata/body status to completed;  003 implementer set to opencode and validation checklist marked complete.
+- Created docs/specs/_done/ and moved completed spec folders from _active to _done:
+  -  003-negotiation-offer-history
+  -  001-unified-listings-endpoint
+  -  002-listing-id-cleanup
+- Ran full ./check.ps1 after the move; all checks passed.
+>>>>>>> 27eabc5 (Archive completed specs 0003 0001 0002 to _done)

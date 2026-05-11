@@ -1,7 +1,7 @@
 version: 1
 id: 0001-unified-listings-endpoint
-title: Unified /api/listings/{id} Endpoint
-status: in_progress
+title: Unified /v1/listings/{listing_id} Endpoint
+status: completed
 owner: backend-team
 implementer: opencode
 priority: P2
@@ -16,9 +16,9 @@ files:
   docs:
     - docs/specs/openapi.yaml
     - docs/DOCS-README.md
-    - docs/whitepaper/10-api-contract.md
+    - docs/01-whitepaper/10-api-contract.md
 acceptance:
-  - GET /api/listings/{id} returns any listing type
+  - GET /v1/listings/{listing_id} returns any listing type
   - Response includes listing_type field
   - Old endpoints return 301 redirect with Deprecation header
   - 4-week gradual deprecation completes
