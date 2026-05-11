@@ -126,77 +126,32 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                 web::get().to(crate::openapi::serve_openapi_json),
             )
             // Public API v1 routes - organized by resource type
-            .service(
-                // Product listings
-                web::scope("/v1/product")
-                    .route(
-                        "/search",
-                        web::get().to(crate::http::actix_handlers::search_listings),
-                    )
-                    .route(
-                        "/{listing_id}",
-                        web::get().to(crate::http::actix_handlers::get_listing),
-                    )
-                    .route(
-                        "",
-                        web::post().to(crate::http::actix_handlers::create_listing),
-                    )
-                    .route(
-                        "/{listing_id}/reviews",
-                        web::post().to(crate::http::actix_handlers::create_review),
-                    )
-                    .route(
-                        "/{listing_id}/reviews",
-                        web::get().to(crate::http::actix_handlers::list_reviews_for_listing),
-                    ),
+            // Product listings (DEPRECATED - redirect to /v1/listings)
+            .route(
+                "/v1/product/{listing_id}",
+                web::get().to(crate::http::actix_handlers::deprecated_listing_redirect),
             )
-            .service(
-                // Service listings
-                web::scope("/v1/service")
-                    .route(
-                        "/search",
-                        web::get().to(crate::http::actix_handlers::search_listings),
-                    )
-                    .route(
-                        "/{listing_id}",
-                        web::get().to(crate::http::actix_handlers::get_listing),
-                    )
-                    .route(
-                        "",
-                        web::post().to(crate::http::actix_handlers::create_listing),
-                    )
-                    .route(
-                        "/{listing_id}/reviews",
-                        web::post().to(crate::http::actix_handlers::create_review),
-                    )
-                    .route(
-                        "/{listing_id}/reviews",
-                        web::get().to(crate::http::actix_handlers::list_reviews_for_listing),
-                    ),
+            .route(
+                "/v1/product/search",
+                web::get().to(crate::http::actix_handlers::deprecated_search_redirect),
             )
-            .service(
-                // Property listings
-                web::scope("/v1/property")
-                    .route(
-                        "/search",
-                        web::get().to(crate::http::actix_handlers::search_listings),
-                    )
-                    .route(
-                        "/{listing_id}",
-                        web::get().to(crate::http::actix_handlers::get_listing),
-                    )
-                    .route(
-                        "",
-                        web::post().to(crate::http::actix_handlers::create_listing),
-                    )
-                    .route(
-                        "/{listing_id}/reviews",
-                        web::post().to(crate::http::actix_handlers::create_review),
-                    )
-                    .route(
-                        "/{listing_id}/reviews",
-                        web::get().to(crate::http::actix_handlers::list_reviews_for_listing),
-                    ),
+            // Service listings (DEPRECATED - redirect to /v1/listings)
+            .route(
+                "/v1/service/{listing_id}",
+                web::get().to(crate::http::actix_handlers::deprecated_listing_redirect),
+            )
+            .route(
+                "/v1/service/search",
+                web::get().to(crate::http::actix_handlers::deprecated_search_redirect),
+            )
+            // Property listings (DEPRECATED - redirect to /v1/listings)
+            .route(
+                "/v1/property/{listing_id}",
+                web::get().to(crate::http::actix_handlers::deprecated_listing_redirect),
+            )
+            .route(
+                "/v1/property/search",
+                web::get().to(crate::http::actix_handlers::deprecated_search_redirect),
             )
             .service(
                 // General listings (search across all types)

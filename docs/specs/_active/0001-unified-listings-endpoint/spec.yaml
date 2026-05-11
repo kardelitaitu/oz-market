@@ -1,9 +1,9 @@
 version: 1
 id: 0001-unified-listings-endpoint
 title: Unified /api/listings/{id} Endpoint
-status: proposed
+status: in_progress
 owner: backend-team
-implementer: pending
+implementer: opencode
 priority: P2
 area:
   - backend

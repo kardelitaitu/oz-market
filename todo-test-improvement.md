@@ -25,12 +25,12 @@
 - [x] Test validation error message correctness
 
 ### 1.4 Add tests for listing status transition logic
-- [ ] Test valid transitions: Active → Sold, Active → Archived, Active → Draft
-- [ ] Test invalid transitions: Sold → Active, Archived → Sold
-- [ ] Test that transitions update version counter
-- [ ] Test that sold listings cannot be modified
-- [ ] Test archived listing behavior (read-only, hidden from search)
-- [ ] Test draft → Active transition triggers appropriate validation
+- [x] Test valid transitions: Active → Sold, Active → Archived, Active → Draft
+- [x] Test invalid transitions: Sold → Active, Archived → Sold
+- [x] Test that transitions update version counter
+- [x] Test that sold listings cannot be modified
+- [x] Test archived listing behavior (read-only, hidden from search)
+- [x] Test draft → Active transition triggers appropriate validation
 
 ### 1.5 Add tests for negotiation workflow business rules
 - [ ] Test offer price must be > 0

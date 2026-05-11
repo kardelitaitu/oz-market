@@ -203,6 +203,50 @@ pub async fn get_listing(
     }
 }
 
+const DEPRECATION_SUNSET_DATE: &str = "Sat, 01 Jun 2026 00:00:00 GMT";
+
+pub async fn deprecated_listing_redirect(
+    listing_id: web::Path<String>,
+    req: HttpRequest,
+) -> impl Responder {
+    let _path = req.path();
+    let redirect_path = format!("/v1/listings/{}", listing_id);
+    HttpResponse::MovedPermanently()
+        .insert_header(("Location", redirect_path))
+        .insert_header(("Deprecation", "true"))
+        .insert_header(("Sunset", DEPRECATION_SUNSET_DATE))
+        .insert_header((
+            "Link",
+            format!(
+                "<https://api.example.com/v1/listings/{}>; rel=\"alternate\"",
+                listing_id
+            ),
+        ))
+        .finish()
+}
+
+pub async fn deprecated_search_redirect(
+    query: web::Query<SearchRequest>,
+    req: HttpRequest,
+) -> impl Responder {
+    let _path = req.path();
+    let redirect_path = "/v1/listings/search";
+    let mut redirect_url = format!("https://api.example.com{}", redirect_path);
+    if let Some(q) = &query.query {
+        let encoded = q.replace(' ', "%20").replace('\n', "%0A");
+        redirect_url.push_str(&format!("?query={}", encoded));
+    }
+    HttpResponse::MovedPermanently()
+        .insert_header(("Location", redirect_url))
+        .insert_header(("Deprecation", "true"))
+        .insert_header(("Sunset", DEPRECATION_SUNSET_DATE))
+        .insert_header((
+            "Link",
+            "<https://api.example.com/v1/listings/search>; rel=\"alternate\"",
+        ))
+        .finish()
+}
+
 pub async fn search_listings(
     app: web::Data<ActixApp>,
     cache_enabled: web::Data<bool>,

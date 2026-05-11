@@ -125,3 +125,12 @@
 - **Task 1.3**: Created `domain/listing_validation.rs` with `validate_listing_payload()`
   - Validates price constraints, required fields, field lengths, URLs, currency codes, and listing-type-specific rules (derived from OpenAPI spec)
   - 33 unit tests covering all validation rules
+
+## 2026-05-11 09:15
+
+- **Spec 0001**: Unified /api/listings/{id} Endpoint
+  - Discovered unified endpoint already exists at `/v1/listings/{id}`
+  - Old Actix routes (`/v1/product/`, `/v1/service/`, `/v1/property/`) now redirect to unified endpoint
+  - Added deprecation handlers returning 301 with Deprecation/Sunset/Link headers
+  - Sunset date: Sat, 01 Jun 2026
+  - Removed unused `status_transitions` module reference
