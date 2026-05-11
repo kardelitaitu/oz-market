@@ -49,3 +49,4 @@ path = "src/bin/populate_db.rs"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+proptest = "1"

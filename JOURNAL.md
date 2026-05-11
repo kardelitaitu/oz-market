@@ -143,3 +143,34 @@
   - `repositories/seller_accounts.rs`: added 10 in-memory operation tests (get_by_owner_id, update_trust_level, update_quota_override, increment_listings_created — each with happy path + not-found edge case)
   - `http/runtime.rs`: added 4 handler edge case tests (404 unknown route, 404 nonexistent listing, 400 invalid create body, search empty results)
 - +16 tests total; 143 lib tests pass; clippy clean
+
+## 2026-05-11 15:30
+
+- **Test infrastructure cleanup**: Fixed clippy warnings in test_support.rs
+  - Added `MockOptionResult<T>` type alias for complex result types
+  - Added `Default` impl for `MockListingRepository`
+  - Reformatted long patterns in app.rs and listings.rs tests
+  - All 148 lib tests pass, clippy clean
+  - Committed and pushed to main
+
+## 2026-05-11 14:00
+
+- **Spec 0001 (Performance) Complete**: Benchmark results exceed targets for practical loads
+  - Search warm cache: 65,013 ops/s (100), 54,619 ops/s (500), 43,257 ops/s (1000)
+  - Get listing warm: 52,379 ops/s
+  - 100% success rate at all levels
+  - Fixed quantity column nullable handling in listings repository
+  - Implemented cache warming with 7 common queries
+  - Optimized: 500 max connections, 2GB listing cache, 1GB search cache, 30min/15min TTL
+  - Updated spec with benchmark results
+
+## 2026-05-11 15:30
+
+- **Phase 5 Complete**: Quota/index tuning from measured behavior
+  - Added `services/rate_limiter.rs` with in-memory sliding window rate limiter
+  - Per-IP/claims search rate: 60 req/min via `global_limiter()`
+  - Per-token create: 10/min, negotiate: 20/min, contact reveal: 10/min
+  - New seller daily/hourly caps: 3/day, 1/hour in addition to total quota
+  - Rate limiting wired into both TCP runtime and Actix handlers
+  - Migration `0012_add_search_indexes.sql`: functional index `(country_code, LOWER(city))`, composite index `(listing_type, status, category)`, pg_trgm extension
+  - 152 lib tests pass; clippy clean; TODO items marked complete

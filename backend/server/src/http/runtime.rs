@@ -17,6 +17,11 @@ use crate::repositories::{
     ReservationLeaseRepository,
 };
 use crate::services::idempotency::InMemoryIdempotencyRepository;
+use crate::services::rate_limiter::{
+    global_limiter, CONTACT_REVEAL_RATE_MAX, CONTACT_REVEAL_RATE_WINDOW_SECS,
+    CREATE_LISTING_RATE_MAX, CREATE_LISTING_RATE_WINDOW_SECS, OPEN_NEGOTIATION_RATE_MAX,
+    OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS,
+};
 use marketplace_api_contract::{
     ApiErrorCode, Category, Condition, CreateListingRequest, ListingStatus, OpenNegotiationRequest,
     RequestContactRevealRequest, SearchLocationFilter, SearchPriceFilter, SearchRequest,
@@ -453,6 +458,15 @@ where
             }
         }
         ("GET", "/v1/listings/search") => {
+            let search_key = format!("search:{}", claims.sub);
+            if !global_limiter().check(&search_key, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "search rate limit exceeded (60/min)",
+                    None,
+                );
+            }
             let search = search_request_from_query(&request.query);
             match app.search_listings(Some(&claims), &search).await {
                 Ok(result) => json_response(200, serde_json::to_value(result).unwrap()),
@@ -470,6 +484,19 @@ where
             }
         }
         ("POST", "/v1/listings") => {
+            let create_key = format!("create:{}", claims.sub);
+            if !global_limiter().check(
+                &create_key,
+                CREATE_LISTING_RATE_MAX,
+                CREATE_LISTING_RATE_WINDOW_SECS,
+            ) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "create listing rate limit exceeded (10/min)",
+                    None,
+                );
+            }
             match serde_json::from_slice::<CreateListingRequest>(&request.body) {
                 Ok(parsed) => {
                     let request_fingerprint = String::from_utf8_lossy(&request.body).to_string();
@@ -491,6 +518,19 @@ where
             }
         }
         ("POST", "/v1/negotiations") => {
+            let negot_key = format!("negotiate:{}", claims.sub);
+            if !global_limiter().check(
+                &negot_key,
+                OPEN_NEGOTIATION_RATE_MAX,
+                OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+            ) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "open negotiation rate limit exceeded (20/min)",
+                    None,
+                );
+            }
             match serde_json::from_slice::<OpenNegotiationRequest>(&request.body) {
                 Ok(parsed) => {
                     let request_fingerprint = String::from_utf8_lossy(&request.body).to_string();
@@ -522,6 +562,19 @@ where
             }
         }
         ("POST", path) if path.ends_with("/request-contact-reveal") => {
+            let reveal_key = format!("reveal:{}", claims.sub);
+            if !global_limiter().check(
+                &reveal_key,
+                CONTACT_REVEAL_RATE_MAX,
+                CONTACT_REVEAL_RATE_WINDOW_SECS,
+            ) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "contact reveal rate limit exceeded (10/min)",
+                    None,
+                );
+            }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
                 .trim_end_matches("/request-contact-reveal")

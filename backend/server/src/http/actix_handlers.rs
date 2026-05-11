@@ -4,6 +4,11 @@ use crate::repositories::{
     PostgresContactRevealRepository, PostgresListingRepository, PostgresReservationLeaseRepository,
 };
 use crate::services::idempotency::InMemoryIdempotencyRepository;
+use crate::services::rate_limiter::{
+    global_limiter, CONTACT_REVEAL_RATE_MAX, CONTACT_REVEAL_RATE_WINDOW_SECS,
+    CREATE_LISTING_RATE_MAX, CREATE_LISTING_RATE_WINDOW_SECS, OPEN_NEGOTIATION_RATE_MAX,
+    OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS,
+};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use marketplace_api_contract::{
     CreateListingRequest, OpenNegotiationRequest, RequestContactRevealRequest, SearchRequest,
@@ -258,6 +263,14 @@ pub async fn search_listings(
     // Claims are optional for search - public access allowed
     let claims = extract_claims_optional(&req);
 
+    if let Some(ref c) = claims {
+        let search_key = format!("search:{}", c.sub);
+        if !global_limiter().check(&search_key, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS) {
+            return HttpResponse::TooManyRequests()
+                .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "search rate limit exceeded (60/min)"}));
+        }
+    }
+
     // Extract listing type from URL path and add to query
     let mut modified_query = (*query).clone();
     if modified_query.listing_type.is_none() {
@@ -325,6 +338,15 @@ pub async fn create_listing(
         Ok(c) => c,
         Err(resp) => return resp,
     };
+    let create_key = format!("create:{}", claims.sub);
+    if !global_limiter().check(
+        &create_key,
+        CREATE_LISTING_RATE_MAX,
+        CREATE_LISTING_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "create listing rate limit exceeded (10/min)"}));
+    }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
     // Invalidate search cache on write
@@ -350,6 +372,15 @@ pub async fn open_negotiation(
         Ok(c) => c,
         Err(resp) => return resp,
     };
+    let negot_key = format!("negotiate:{}", claims.sub);
+    if !global_limiter().check(
+        &negot_key,
+        OPEN_NEGOTIATION_RATE_MAX,
+        OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "open negotiation rate limit exceeded (20/min)"}));
+    }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
     if **cache_enabled {
@@ -377,6 +408,15 @@ pub async fn request_contact_reveal(
         Ok(c) => c,
         Err(resp) => return resp,
     };
+    let reveal_key = format!("reveal:{}", claims.sub);
+    if !global_limiter().check(
+        &reveal_key,
+        CONTACT_REVEAL_RATE_MAX,
+        CONTACT_REVEAL_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "contact reveal rate limit exceeded (10/min)"}));
+    }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
     let now = crate::http::runtime::current_time_marker();
     if **cache_enabled {

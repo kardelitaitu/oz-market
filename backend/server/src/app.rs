@@ -10,6 +10,9 @@ use crate::services::audit_events::AuditEventService;
 use crate::services::contact_reveals::ContactRevealService;
 use crate::services::idempotency::IdempotencyGuard;
 use crate::services::outbox_events::OutboxEventService;
+use crate::services::rate_limiter::{
+    global_limiter, is_new_seller, NEW_SELLER_DAILY_MAX, NEW_SELLER_HOURLY_MAX,
+};
 use crate::services::reservations::ReservationLeaseService;
 use crate::services::search::SearchService;
 use marketplace_api_contract::{
@@ -317,7 +320,7 @@ where
             .await
             .map_err(crate::http::handlers::HandlerError::from)?;
 
-        if let Some(account) = seller_account {
+        if let Some(account) = &seller_account {
             let effective_quota = account
                 .quota_override
                 .unwrap_or_else(|| default_quota(&account.trust_level));
@@ -328,6 +331,28 @@ where
                         account.listings_created, effective_quota
                     ),
                 });
+            }
+
+            // Time-windowed quotas for new sellers
+            if is_new_seller(&account.trust_level) {
+                let daily_key = format!("daily:seller:{}", account.seller_account_id);
+                let hourly_key = format!("hourly:seller:{}", account.seller_account_id);
+                if !global_limiter().check(&daily_key, NEW_SELLER_DAILY_MAX as usize, 86400) {
+                    return Err(crate::http::handlers::HandlerError::QuotaExceeded {
+                        message: format!(
+                            "new seller daily limit: {} listings/day",
+                            NEW_SELLER_DAILY_MAX
+                        ),
+                    });
+                }
+                if !global_limiter().check(&hourly_key, NEW_SELLER_HOURLY_MAX as usize, 3600) {
+                    return Err(crate::http::handlers::HandlerError::QuotaExceeded {
+                        message: format!(
+                            "new seller hourly limit: {} listing/hour",
+                            NEW_SELLER_HOURLY_MAX
+                        ),
+                    });
+                }
             }
         }
 

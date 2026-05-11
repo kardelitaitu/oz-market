@@ -74,8 +74,8 @@ Archive convention:
 - [x] ~~run search-heavy benchmark~~ (actual: executed via `phase5_bench`, in-memory fallback because `DATABASE_URL` was unset)
 - [x] ~~run negotiation-burst benchmark~~ (actual: executed via `phase5_bench`, in-memory fallback because `DATABASE_URL` was unset)
 - [x] ~~rerun `phase5_bench` against Postgres-backed storage with `backend/server/scripts/run-phase5-bench.ps1`~~ (DONE: 321/77/85 ops/sec for listing-read/search-heavy/negotiation-burst)
-- [ ] adjust quotas from measured behavior for new seller daily/hourly limits, per-token create writes, and per-IP search pressure
-- [ ] adjust indexes from measured behavior for `idx_listings_search_text`, `idx_listings_category_status`, and `idx_listings_location`
+- [x] adjust quotas from measured behavior for new seller daily/hourly limits, per-token create writes, and per-IP search pressure
+- [x] adjust indexes from measured behavior for `idx_listings_search_text`, `idx_listings_category_status`, and `idx_listings_location`
 
 ### Phase 6: Final Readiness Checks
 
