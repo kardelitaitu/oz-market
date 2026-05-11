@@ -1,9 +1,9 @@
 version: 1
 id: 0002-listing-id-cleanup
 title: Clean Test File IDs (Remove Type Prefixes)
-status: proposed
+status: completed
 owner: backend-team
-implementer: pending
+implementer: opencode
 priority: P2
 area:
   - backend
