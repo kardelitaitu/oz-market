@@ -33,16 +33,16 @@
 - [x] Test draft → Active transition triggers appropriate validation
 
 ### 1.5 Add tests for negotiation workflow business rules
-- [ ] Test offer price must be > 0
-- [ ] Test offer expiration (past dates rejected, future dates accepted)
-- [ ] Test counter-offer rules (must be between previous offer and asking price)
-- [ ] Test acceptance requires active listing status
-- [ ] Test rejection rules (can only reject open offers)
-- [ ] Test negotiation cannot be opened on sold/archived listings
-- [ ] Test concurrent negotiation limits per buyer-seller pair
+- [x] Test offer price must be > 0 (in `domain/negotiation.rs`)
+- [x] Test offer expiration (past dates rejected, future dates accepted) (in `domain/negotiation.rs`)
+- [x] Test counter-offer rules (must be between previous offer and asking price) (in `domain/negotiation.rs`)
+- [x] Test acceptance requires active listing status (in `domain/negotiation.rs`)
+- [x] Test rejection rules (can only reject open offers) (in `domain/negotiation.rs`)
+- [x] Test negotiation cannot be opened on sold/archived listings (in `domain/negotiation.rs`)
+- [x] Test concurrent negotiation limits per buyer-seller pair (in `domain/negotiation.rs`)
 
 ### 1.6 Add tests for user permission business rules
-- [ ] Test seller can CRUD own listings
+- [ ] Test seller can CRUD own listings (`domain/tests/permissions.rs` is an empty shell)
 - [ ] Test seller cannot modify other sellers' listings
 - [ ] Test buyer can search but not create listings
 - [ ] Test admin can perform all operations on any listing
@@ -50,10 +50,10 @@
 - [ ] Test permission escalation boundary (listing create → negotiate flow)
 
 ### 1.7 Create assertion helpers for complex domain object comparisons
-- [ ] Implement `assert_listing_eq(actual, expected)` ignoring timestamps
-- [ ] Implement `assert_negotiation_state_eq(actual, expected)` for state machines
-- [ ] Define `assert_json_roundtrip<T>(val)` for common serde checks
-- [ ] Share helpers via `backend/server/src/test_support.rs`
+- [x] Implement `assert_listing_eq(actual, expected)` ignoring timestamps (in `test_support.rs`)
+- [x] Implement `assert_negotiation_state_eq(actual, expected)` for state machines (in `test_support.rs`)
+- [x] Define `assert_json_roundtrip<T>(val)` for common serde checks (in `test_support.rs`)
+- [x] Share helpers via `backend/server/src/test_support.rs` (done)
 
 ---
 
@@ -145,8 +145,8 @@
 - [ ] Test configurable timeout propagation
 
 ### 3.5 Test concurrent access safety in repository implementations
-- [ ] Test concurrent insertions produce no ID collisions
-- [ ] Test concurrent reads while write is in progress
+- [x] Test concurrent insertions produce no ID collisions (in `repositories/listings.rs`)
+- [x] Test concurrent reads while write is in progress (in `repositories/listings.rs`)
 - [ ] Test concurrent status updates on same listing
 - [ ] Test in-memory repo handles thread contention
 
@@ -168,7 +168,7 @@
 ## Priority 4: Service Layer Orchestration Tests
 
 ### 4.1 Create mock implementations for repository dependencies in service tests
-- [ ] Extract `MockListingRepository` with configurable responses
+- [x] Extract `MockListingRepository` with configurable responses (in `test_support.rs`)
 - [ ] Implement `MockNegotiationRepository` for negotiation service tests
 - [ ] Implement `MockAuditEventRepository` for event tests
 - [ ] Add expectation/assertion helpers to verify mock interactions
@@ -219,7 +219,7 @@
 ## Priority 5: Property-Based Testing Introduction
 
 ### 5.1 Add proptest or quickcheck crate to dev dependencies
-- [ ] Add `proptest = "1"` to `backend/server/Cargo.toml` under `[dev-dependencies]`
+- [x] Add `proptest = "1"` to `backend/server/Cargo.toml` under `[dev-dependencies]` (done)
 - [ ] Add `proptest-derive` if deriving strategies for domain types
 - [ ] Configure proptest settings (cases, timeout) for CI environment
 - [ ] Add proptest-specific module in test infrastructure

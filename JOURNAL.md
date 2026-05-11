@@ -1,4 +1,4 @@
-## 2026-05-10 11:23
+﻿## 2026-05-10 11:23
 
 - Fixed compilation errors in populate_db.rs:
   - Added missing geolocation fields to all match arms (products, services, properties)
@@ -236,7 +236,6 @@
 
 ## 2026-05-11 20:05
 
-<<<<<<< HEAD
 - Updated `docs/specs/openapi.yaml` to include negotiation `accept`/`reject` operations, new accept/reject request schemas, and `offer_history` schema fields so API docs match implemented backend routes.
 - Added PostgreSQL negotiation integration coverage in `backend/server/tests/postgres_flows.rs` for submit-offer + accept flow and reject flow, including persisted status/final-offer/history assertions.
 - Extended test schema setup to apply migration `0013_add_negotiation_offer_history.sql`, ensuring integration tests run against the current negotiation table shape.
@@ -264,11 +263,10 @@
 - Created dedicated backend implementation commit after successful full `./check.ps1` run.
 - Included negotiation offer-history + finalization implementation set across `api-contract`, app/runtime/handlers, repository persistence, MCP wiring, checker hardening, and migration `0013_add_negotiation_offer_history.sql`.
 - Why: keep spec-lifecycle move and backend implementation separated for cleaner audit and rollback boundaries.
-=======
-- Updated docs/specs/openapi.yaml to include negotiation ccept/eject operations, new accept/reject request schemas, and offer_history schema fields so API docs match implemented backend routes.
-- Added PostgreSQL negotiation integration coverage in ackend/server/tests/postgres_flows.rs for submit-offer + accept flow and reject flow, including persisted status/final-offer/history assertions.
-- Extended test schema setup to apply migration  013_add_negotiation_offer_history.sql, ensuring integration tests run against the current negotiation table shape.
-- Locked the single-negotiation enforcement decision in  003 docs (DB uniqueness via deterministic 
+- Updated docs/specs/openapi.yaml to include negotiation ccept/eject operations, new accept/reject request schemas, and offer_history schema fields so API docs match implemented backend routes.
+- Added PostgreSQL negotiation integration coverage in ackend/server/tests/postgres_flows.rs for submit-offer + accept flow and reject flow, including persisted status/final-offer/history assertions.
+- Extended test schema setup to apply migration 013_add_negotiation_offer_history.sql, ensuring integration tests run against the current negotiation table shape.
+- Locked the single-negotiation enforcement decision in 003 docs (DB uniqueness via deterministic 
 eg_{listing_id} + PK conflict) with option tradeoffs for future reopen semantics.
 - Refreshed 0003 parity report and README/plan text so active-spec documentation reflects current contract/runtime behavior and no longer marks accept/reject/history as pending.
 
@@ -280,11 +278,28 @@ eg_{listing_id} + PK conflict) with option tradeoffs for future reopen semantics
 
 ## 2026-05-11 21:11
 
-- Confirmed specs in sequence:  003 then  001 then  002.
-- Updated  003 and  001 metadata/body status to completed;  003 implementer set to opencode and validation checklist marked complete.
+- Confirmed specs in sequence: 003 then 001 then 002.
+- Updated 003 and 001 metadata/body status to completed; 003 implementer set to opencode and validation checklist marked complete.
 - Created docs/specs/_done/ and moved completed spec folders from _active to _done:
-  -  003-negotiation-offer-history
-  -  001-unified-listings-endpoint
-  -  002-listing-id-cleanup
+  - 003-negotiation-offer-history
+  - 001-unified-listings-endpoint
+  - 002-listing-id-cleanup
 - Ran full ./check.ps1 after the move; all checks passed.
->>>>>>> 27eabc5 (Archive completed specs 0003 0001 0002 to _done)
+
+## 2026-05-11 21:15
+
+- Created dedicated backend implementation commit after successful full ./check.ps1 run.
+- Included negotiation offer-history + finalization implementation set across api-contract, app/runtime/handlers, repository persistence, MCP wiring, checker hardening, and migration 013_add_negotiation_offer_history.sql.
+- Why: keep spec-lifecycle move and backend implementation separated for cleaner audit and rollback boundaries.
+
+## 2026-05-11 21:21
+
+- Performed governance cleanup after spec archival commits.
+- Recovered legacy _active artifacts and archived them under _done instead of leaving destructive deletions:
+  - performance-infrastructure-optimization/
+  - TESTING-IMPROVEMENT-PROPOSAL.md
+- Updated performance infrastructure archive README status to completed and implementer to opencode for metadata consistency.
+- Moved test-planning docs out of repo root into docs/testing/ to keep root compact:
+  - BACKEND-TEST-IMPROVEMENT.md -> docs/testing/BACKEND-TEST-IMPROVEMENT.md
+  - 	odo-test-improvement.md -> docs/testing/todo-test-improvement.md
+- Removed generated coverage raw artifact ackend/build_rs_cov.profraw and added *.profraw to .gitignore to prevent future accidental tracking.
