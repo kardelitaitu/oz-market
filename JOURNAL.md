@@ -134,3 +134,12 @@
   - Added deprecation handlers returning 301 with Deprecation/Sunset/Link headers
   - Sunset date: Sat, 01 Jun 2026
   - Removed unused `status_transitions` module reference
+
+## 2026-05-11 11:00
+
+- **Phase 3.3 complete**: Created `docs/TESTING.md` with test organization, naming conventions, data builder patterns, coverage philosophy, and adding-tests checklist
+- **Phase 3.4 complete**: Filled critical coverage gaps:
+  - `services/contact_reveals.rs`: added 2 error path tests (approve nonexistent → NotFound, get missing → None)
+  - `repositories/seller_accounts.rs`: added 10 in-memory operation tests (get_by_owner_id, update_trust_level, update_quota_override, increment_listings_created — each with happy path + not-found edge case)
+  - `http/runtime.rs`: added 4 handler edge case tests (404 unknown route, 404 nonexistent listing, 400 invalid create body, search empty results)
+- +16 tests total; 143 lib tests pass; clippy clean

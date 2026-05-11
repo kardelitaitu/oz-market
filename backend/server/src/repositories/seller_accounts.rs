@@ -273,3 +273,114 @@ impl SellerAccountRepository for PostgresSellerAccountRepository {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_account(id: &str, owner: &str) -> SellerAccountRow {
+        SellerAccountRow {
+            seller_account_id: id.to_string(),
+            owner_id: owner.to_string(),
+            display_name: Some(owner.to_string()),
+            trust_level: "basic".to_string(),
+            seller_rating: Some(4.5),
+            quota_override: None,
+            listings_created: 5,
+            status: "active".to_string(),
+            hardware_fingerprint: None,
+            verified_at: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn get_by_owner_id_found() {
+        let repo = InMemorySellerAccountRepository::new();
+        repo.add_account(sample_account("sa_1", "owner-1"));
+        let result = repo.get_by_owner_id("owner-1").await.unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().seller_account_id, "sa_1");
+    }
+
+    #[tokio::test]
+    async fn get_by_owner_id_not_found_returns_none() {
+        let repo = InMemorySellerAccountRepository::new();
+        let result = repo.get_by_owner_id("nonexistent").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_trust_level_updates() {
+        let repo = InMemorySellerAccountRepository::new();
+        repo.add_account(sample_account("sa_1", "owner-1"));
+        let updated = repo.update_trust_level("sa_1", "premium").await.unwrap();
+        assert_eq!(updated.unwrap().trust_level, "premium");
+    }
+
+    #[tokio::test]
+    async fn update_trust_level_not_found_returns_none() {
+        let repo = InMemorySellerAccountRepository::new();
+        let result = repo
+            .update_trust_level("sa_nonexistent", "premium")
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_quota_override_sets_quota() {
+        let repo = InMemorySellerAccountRepository::new();
+        repo.add_account(sample_account("sa_1", "owner-1"));
+        let updated = repo.update_quota_override("sa_1", Some(100)).await.unwrap();
+        assert_eq!(updated.unwrap().quota_override, Some(100));
+    }
+
+    #[tokio::test]
+    async fn update_quota_override_clears_quota() {
+        let repo = InMemorySellerAccountRepository::new();
+        let mut account = sample_account("sa_1", "owner-1");
+        account.quota_override = Some(50);
+        repo.add_account(account);
+        let updated = repo.update_quota_override("sa_1", None).await.unwrap();
+        assert_eq!(updated.unwrap().quota_override, None);
+    }
+
+    #[tokio::test]
+    async fn update_quota_override_not_found_returns_none() {
+        let repo = InMemorySellerAccountRepository::new();
+        let result = repo
+            .update_quota_override("sa_nonexistent", Some(100))
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn increment_listings_created_increments() {
+        let repo = InMemorySellerAccountRepository::new();
+        repo.add_account(sample_account("sa_1", "owner-1"));
+        let updated = repo.increment_listings_created("sa_1").await.unwrap();
+        assert_eq!(updated.unwrap().listings_created, 6);
+    }
+
+    #[tokio::test]
+    async fn increment_listings_created_twice() {
+        let repo = InMemorySellerAccountRepository::new();
+        repo.add_account(sample_account("sa_1", "owner-1"));
+        repo.increment_listings_created("sa_1").await.unwrap();
+        let updated = repo.increment_listings_created("sa_1").await.unwrap();
+        assert_eq!(updated.unwrap().listings_created, 7);
+    }
+
+    #[tokio::test]
+    async fn increment_listings_created_not_found_returns_none() {
+        let repo = InMemorySellerAccountRepository::new();
+        let result = repo
+            .increment_listings_created("sa_nonexistent")
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+}

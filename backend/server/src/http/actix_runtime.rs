@@ -60,30 +60,25 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map(|value| value != "1" && !value.eq_ignore_ascii_case("true"))
         .unwrap_or(true);
 
-    // Memory-based cache configuration (in MB) - default 16GB total split
+    // Memory-based cache configuration (in MB) - large for high hit rate
     let listing_cache_max_mb: u64 = std::env::var("LISTING_CACHE_MAX_MB")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(10 * 1024); // Default 10GB
+        .unwrap_or(2 * 1024); // Default 2GB
     let search_cache_max_mb: u64 = std::env::var("SEARCH_CACHE_MAX_MB")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(6 * 1024); // Default 6GB
+        .unwrap_or(1024); // Default 1GB
 
     // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
-    // Memory-based capacity: weigher returns byte size, max_capacity is in bytes
+    // Simple entry-based cache with large capacity
     let listing_cache: Cache<String, String> = Cache::builder()
         .max_capacity(listing_cache_max_mb * 1024 * 1024) // Convert MB to bytes
-        .weigher(|_key: &String, value: &String| -> u32 {
-            // Weight = value bytes (capped at u32::MAX for very large entries)
-            value.len() as u32
-        })
-        .time_to_live(std::time::Duration::from_secs(10 * 60)) // 10 minutes TTL
+        .time_to_live(std::time::Duration::from_secs(30 * 60)) // 30 minutes TTL
         .build();
     let search_cache: Cache<String, String> = Cache::builder()
         .max_capacity(search_cache_max_mb * 1024 * 1024) // Convert MB to bytes
-        .weigher(|_key: &String, value: &String| -> u32 { value.len() as u32 })
-        .time_to_live(std::time::Duration::from_secs(5 * 60)) // 5 minutes TTL
+        .time_to_live(std::time::Duration::from_secs(15 * 60)) // 15 minutes TTL
         .build();
 
     info!(
@@ -100,13 +95,12 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     info!("Starting Actix-web server on {}", bind);
 
-    // Use same worker count as tokio runtime to avoid over-subscription
+    // Use more workers for high concurrency
     let num_cpus = num_cpus::get();
-    let max_worker_threads = 8usize;
-    let actix_workers = std::env::var("TOKIO_WORKER_THREADS")
+    let actix_workers = std::env::var("ACTIX_WORKERS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
+        .unwrap_or_else(|| (num_cpus * 4).clamp(16, 64));
 
     HttpServer::new(move || {
         App::new()

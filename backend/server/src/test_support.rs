@@ -1,8 +1,11 @@
+use crate::repositories::{ListingRepository, RepositoryError, RepositoryErrorKind};
 use marketplace_api_contract::{
-    Category, Condition, CurrencyCode, ListingLocation, ListingPayload, ListingType,
-    OpenNegotiationRequest, Price, ServiceType,
+    Category, Condition, CreateListingResponse, CurrencyCode, ListingLocation, ListingPayload,
+    ListingStatus, ListingSummary, ListingType, OpenNegotiationRequest, Price, SearchRequest,
+    SearchResponse, ServiceType,
 };
 use marketplace_auth_core::{Claims, Role, Scope};
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Default factory helpers

@@ -1297,6 +1297,103 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runtime_returns_404_for_unknown_route() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &http_request("GET", "/v1/nonexistent", Some(&claims()), None),
+        )
+        .await;
+
+        assert!(response.contains("\"code\":\"not_found\""));
+        assert!(response.contains("\"message\":\"route not found\""));
+    }
+
+    #[tokio::test]
+    async fn runtime_returns_404_for_nonexistent_listing() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &http_request("GET", "/v1/listings/lst_nonexistent", Some(&claims()), None),
+        )
+        .await;
+
+        assert!(response.contains("\"code\":\"not_found\""));
+        assert!(response.contains("\"message\":\"listing not found\""));
+    }
+
+    #[tokio::test]
+    async fn runtime_returns_400_for_invalid_create_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &http_request(
+                "POST",
+                "/v1/listings",
+                Some(&claims()),
+                Some("this is not valid json"),
+            ),
+        )
+        .await;
+
+        assert!(response.contains("\"code\":\"invalid_field\""));
+        assert!(response.contains("\"message\":\"invalid create listing body\""));
+    }
+
+    #[tokio::test]
+    async fn runtime_search_returns_empty_results() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &http_request(
+                "GET",
+                "/v1/listings/search?query=nonexistent",
+                Some(&claims()),
+                None,
+            ),
+        )
+        .await;
+
+        assert!(response.contains("\"items\":[]"));
+    }
+
+    #[tokio::test]
     async fn runtime_allows_admin_internal_archive() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap().to_string();
