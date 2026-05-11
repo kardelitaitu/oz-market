@@ -1,0 +1,41 @@
+version: 1
+id: 0003-negotiation-offer-history
+title: Negotiation Offer History and Finalization
+status: in_progress
+owner: backend-team
+implementer: pending
+priority: P2
+area:
+  - backend
+  - api
+  - mcp
+  - mobile
+files:
+  code:
+    - backend/server/src/app.rs
+    - backend/server/src/http/runtime.rs
+    - backend/server/src/repositories/negotiations.rs
+    - backend/server/src/repositories/reservations.rs
+    - backend/crates/api-contract/src/negotiation.rs
+  docs:
+    - docs/specs/openapi.yaml
+    - docs/01-whitepaper/09-concurrency-and-reservations.md
+    - docs/01-whitepaper/10-api-contract.md
+    - docs/01-whitepaper/14-state-machines.md
+    - docs/01-whitepaper/21-auth-scopes-and-claims.md
+acceptance:
+  - negotiation responses expose richer offer history
+  - offer submission updates the negotiation row atomically
+  - accept and reject are explicit API actions
+  - reservation remains the finalization gate
+  - HTTP, MCP, and mobile share the same payload shapes and idempotency behavior
+  - current negotiation state names remain unchanged
+non_goals:
+  - payment settlement
+  - cancel semantics unless later approved
+  - state renaming
+  - replacing the reservation lease model
+risks:
+  - extra schema and service work
+  - more endpoint surface
+  - migration work if offer history is modeled too narrowly

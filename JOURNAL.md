@@ -174,3 +174,92 @@
   - Rate limiting wired into both TCP runtime and Actix handlers
   - Migration `0012_add_search_indexes.sql`: functional index `(country_code, LOWER(city))`, composite index `(listing_type, status, category)`, pg_trgm extension
   - 152 lib tests pass; clippy clean; TODO items marked complete
+## 2026-05-11 14:52
+
+- Reworked `NEGOTIATION-DESIGN.md` into a brainstorm doc so it stays aligned with the current contract while leaving room for a later negotiation spec.
+
+## 2026-05-11 15:01
+
+- Locked the negotiation brainstorm toward richer offer history, negotiation-led offer tracking, and explicit accept/reject actions for the next spec direction.
+
+## 2026-05-11 15:05
+
+- Promoted the negotiation brainstorm into an active spec under `docs/specs/_active/NEGOTIATION-OFFER-HISTORY.md` with richer offer history and explicit finalization actions.
+
+## 2026-05-11 15:37
+
+- Moved the negotiation work into a full active spec bundle under `docs/specs/_active/0003-negotiation-offer-history/` with baseline, plan, decisions, validation, and metadata files.
+
+## 2026-05-11 15:41
+
+- Clarified the negotiation spec baseline so contract surface and runtime implementation are separated cleanly.
+
+## 2026-05-11 18:09
+
+- Locked `0003-negotiation-offer-history` to an append-only negotiation history schema with explicit `accept` and `reject` actions.
+
+## 2026-05-11 18:35
+
+- Reviewed and normalized active spec strategy governance under `docs/specs/_active/0001-unified-listings-endpoint`, `0002-listing-id-cleanup`, and `0003-negotiation-offer-history`.
+- Aligned status/implementer metadata between frontmatter/spec YAML and README body text so workflow state is consistent and auditable.
+- Fixed broken 0001 contract-doc references from `docs/whitepaper/10-api-contract.md` to `docs/01-whitepaper/10-api-contract.md`.
+- Replaced placeholder governance docs with concrete quality rules, validation checklists, implementation notes, and internal API outlines to enforce shared-service logic, contract parity, authz/idempotency guardrails, and safer rollout checks.
+
+## 2026-05-11 18:50
+
+- Executed an `_active` spec lint pass for legacy `docs/whitepaper/...` references, placeholder governance text, and README metadata/body consistency.
+- Replaced remaining placeholder `ci-commands.md` and `decisions.md` files for specs `0001`, `0002`, and `0003` with concrete checks and decision logs.
+- Added an automated `active spec governance guard` to `check.ps1` so CI now blocks legacy doc paths, placeholder governance text, and status/implementer drift in `_active` specs.
+- Re-ran guard-only checks (`./check.ps1 -SkipBuild -SkipFormat -SkipClippy -SkipTests`) and confirmed pass.
+- Recorded OpenAPI parity outcomes in active spec decisions docs to keep contract drift visible before backend implementation PRs.
+
+## 2026-05-11 19:05
+
+- Normalized `0001-unified-listings-endpoint` wording from mixed `/api/...` and `/v1/...` forms to consistent `/v1/...` paths with explicit `{listing_id}` naming across README, spec metadata, plan, baseline, and internal API outline.
+- Added machine-readable parity artifacts (`parity-report.md`) for active specs `0001`, `0002`, and `0003` to document contract alignment status in a repeatable JSON snapshot format.
+- Ran full `./check.ps1` (no skip flags); all guards and Rust checks passed (journal guard, active spec guard, cargo check, fmt, clippy, tests).
+
+## 2026-05-11 19:20
+
+- Started implementation for active negotiation spec (`0003`) across contract, repository, app, HTTP runtime, and MCP wrapper layers.
+- Added negotiation offer history persistence (`offer_history` JSONB migration `0013_add_negotiation_offer_history.sql`) and new submit/accept/reject flows.
+- Fixed concurrent open-negotiation behavior to enforce single-winner conflict semantics in both in-memory and Postgres negotiation repositories.
+- Updated race-condition test to keep both concurrent requests authorized so it validates repository conflict behavior.
+- Validated implementation with `cargo test --lib` (152 passed).
+
+## 2026-05-11 19:45
+
+- Hardened `check.ps1` journal guard to avoid CRLF warning crashes and keep append-only validation reliable in local PowerShell runs.
+- Fixed `api-contract` test initialization for `NegotiationResponse` by adding `offer_history` so all targets compile under clippy/test.
+- Added a targeted `#[allow(clippy::too_many_arguments)]` on `MarketplaceApp::new` after introducing the negotiation repository dependency, preserving constructor compatibility across runtimes/tests.
+- Re-ran full `./check.ps1` (no skip flags): journal guard, active spec governance, cargo check, fmt, clippy, and tests all pass.
+
+## 2026-05-11 20:05
+
+- Updated `docs/specs/openapi.yaml` to include negotiation `accept`/`reject` operations, new accept/reject request schemas, and `offer_history` schema fields so API docs match implemented backend routes.
+- Added PostgreSQL negotiation integration coverage in `backend/server/tests/postgres_flows.rs` for submit-offer + accept flow and reject flow, including persisted status/final-offer/history assertions.
+- Extended test schema setup to apply migration `0013_add_negotiation_offer_history.sql`, ensuring integration tests run against the current negotiation table shape.
+- Locked the single-negotiation enforcement decision in `0003` docs (DB uniqueness via deterministic `neg_{listing_id}` + PK conflict) with option tradeoffs for future reopen semantics.
+- Refreshed `0003` parity report and README/plan text so active-spec documentation reflects current contract/runtime behavior and no longer marks accept/reject/history as pending.
+
+## 2026-05-11 20:43
+
+- Ran full `./check.ps1` (no skip flags).
+- Result: PASS for journal guard, active spec guard, cargo check, cargo fmt --check, cargo clippy -D warnings, and cargo test --lib.
+- Why: validated current workspace is stable before continuing implementation.
+
+## 2026-05-11 21:11
+
+- Confirmed specs in sequence: `0003` then `0001` then `0002`.
+- Updated `0003` and `0001` metadata/body status to `completed`; `0003` implementer set to `opencode` and validation checklist marked complete.
+- Created `docs/specs/_done/` and moved completed spec folders from `_active` to `_done`:
+  - `0003-negotiation-offer-history`
+  - `0001-unified-listings-endpoint`
+  - `0002-listing-id-cleanup`
+- Ran full `./check.ps1` after the move; all checks passed.
+
+## 2026-05-11 21:15
+
+- Created dedicated backend implementation commit after successful full `./check.ps1` run.
+- Included negotiation offer-history + finalization implementation set across `api-contract`, app/runtime/handlers, repository persistence, MCP wiring, checker hardening, and migration `0013_add_negotiation_offer_history.sql`.
+- Why: keep spec-lifecycle move and backend implementation separated for cleaner audit and rollback boundaries.

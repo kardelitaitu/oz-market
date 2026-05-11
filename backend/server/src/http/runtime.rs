@@ -7,6 +7,8 @@ use crate::repositories::contact_reveals::PostgresContactRevealRepository;
 #[cfg(not(test))]
 use crate::repositories::listings::PostgresListingRepository;
 #[cfg(not(test))]
+use crate::repositories::negotiations::PostgresNegotiationRepository;
+#[cfg(not(test))]
 use crate::repositories::outbox_events::PostgresOutboxEventRepository;
 #[cfg(not(test))]
 use crate::repositories::reservations::PostgresReservationLeaseRepository;
@@ -23,9 +25,9 @@ use crate::services::rate_limiter::{
     OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS,
 };
 use marketplace_api_contract::{
-    ApiErrorCode, Category, Condition, CreateListingRequest, ListingStatus, OpenNegotiationRequest,
-    RequestContactRevealRequest, SearchLocationFilter, SearchPriceFilter, SearchRequest,
-    SearchSort,
+    AcceptNegotiationRequest, ApiErrorCode, Category, Condition, CreateListingRequest,
+    ListingStatus, OpenNegotiationRequest, RejectNegotiationRequest, RequestContactRevealRequest,
+    SearchLocationFilter, SearchPriceFilter, SearchRequest, SearchSort, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role};
 use std::collections::HashMap;
@@ -110,6 +112,7 @@ fn build_runtime_app(
         InMemoryIdempotencyRepository::new(),
         PostgresReservationLeaseRepository::new(pool.clone()),
         PostgresContactRevealRepository::new(pool.clone()),
+        Arc::new(PostgresNegotiationRepository::new(pool.clone())),
         audit_repo,
         outbox_repo,
         Arc::new(PostgresSellerAccountRepository::new(pool)),
@@ -559,6 +562,132 @@ where
             match app.get_negotiation_status(&claims, negotiation_id).await {
                 Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
                 Err(error) => map_handler_error(&error),
+            }
+        }
+        ("POST", path) if path.ends_with("/offers") => {
+            let negot_key = format!("negotiate:{}", claims.sub);
+            if !global_limiter().check(
+                &negot_key,
+                OPEN_NEGOTIATION_RATE_MAX,
+                OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+            ) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "offer submit rate limit exceeded (20/min)",
+                    None,
+                );
+            }
+            let negotiation_id = path
+                .trim_start_matches("/v1/negotiations/")
+                .trim_end_matches("/offers")
+                .trim_end_matches('/');
+            match serde_json::from_slice::<SubmitOfferRequest>(&request.body) {
+                Ok(parsed) => {
+                    let request_fingerprint = String::from_utf8_lossy(&request.body).to_string();
+                    let now = current_time_marker();
+                    match app
+                        .submit_offer(&claims, negotiation_id, &parsed, &request_fingerprint, &now)
+                        .await
+                    {
+                        Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                        Err(error) => map_handler_error(&error),
+                    }
+                }
+                Err(error) => api_error_response(
+                    400,
+                    ApiErrorCode::InvalidField,
+                    "invalid submit offer body",
+                    Some(error.to_string()),
+                ),
+            }
+        }
+        ("POST", path) if path.ends_with("/accept") => {
+            let negot_key = format!("negotiate:{}", claims.sub);
+            if !global_limiter().check(
+                &negot_key,
+                OPEN_NEGOTIATION_RATE_MAX,
+                OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+            ) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "accept rate limit exceeded (20/min)",
+                    None,
+                );
+            }
+            let negotiation_id = path
+                .trim_start_matches("/v1/negotiations/")
+                .trim_end_matches("/accept")
+                .trim_end_matches('/');
+            match serde_json::from_slice::<AcceptNegotiationRequest>(&request.body) {
+                Ok(parsed) => {
+                    let request_fingerprint = String::from_utf8_lossy(&request.body).to_string();
+                    let now = current_time_marker();
+                    match app
+                        .accept_negotiation(
+                            &claims,
+                            negotiation_id,
+                            &parsed,
+                            &request_fingerprint,
+                            &now,
+                        )
+                        .await
+                    {
+                        Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                        Err(error) => map_handler_error(&error),
+                    }
+                }
+                Err(error) => api_error_response(
+                    400,
+                    ApiErrorCode::InvalidField,
+                    "invalid accept negotiation body",
+                    Some(error.to_string()),
+                ),
+            }
+        }
+        ("POST", path) if path.ends_with("/reject") => {
+            let negot_key = format!("negotiate:{}", claims.sub);
+            if !global_limiter().check(
+                &negot_key,
+                OPEN_NEGOTIATION_RATE_MAX,
+                OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+            ) {
+                return api_error_response(
+                    429,
+                    ApiErrorCode::RateLimited,
+                    "reject rate limit exceeded (20/min)",
+                    None,
+                );
+            }
+            let negotiation_id = path
+                .trim_start_matches("/v1/negotiations/")
+                .trim_end_matches("/reject")
+                .trim_end_matches('/');
+            match serde_json::from_slice::<RejectNegotiationRequest>(&request.body) {
+                Ok(parsed) => {
+                    let request_fingerprint = String::from_utf8_lossy(&request.body).to_string();
+                    let now = current_time_marker();
+                    match app
+                        .reject_negotiation(
+                            &claims,
+                            negotiation_id,
+                            &parsed,
+                            &request_fingerprint,
+                            &now,
+                        )
+                        .await
+                    {
+                        Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                        Err(error) => map_handler_error(&error),
+                    }
+                }
+                Err(error) => api_error_response(
+                    400,
+                    ApiErrorCode::InvalidField,
+                    "invalid reject negotiation body",
+                    Some(error.to_string()),
+                ),
             }
         }
         ("POST", path) if path.ends_with("/request-contact-reveal") => {
@@ -1133,6 +1262,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             crate::repositories::reservations::InMemoryReservationLeaseRepository::new(),
             crate::repositories::contact_reveals::InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             Arc::new(InMemoryAuditEventRepository::new()),
             Arc::new(InMemoryOutboxEventRepository::new()),
             Arc::new(crate::repositories::seller_accounts::InMemorySellerAccountRepository::new()),

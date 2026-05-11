@@ -363,6 +363,86 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /negotiations/{negotiation_id}/accept:
+    post:
+      tags: [negotiations]
+      summary: Accept negotiation
+      description: >
+        Accept and close the negotiation with the latest offer amount as final.
+        The caller must be an authorized negotiation participant.
+      operationId: acceptNegotiation
+      x-required-scopes: [negotiation:offer:submit]
+      x-allowed-roles: [seller_negotiator, buyer_negotiator, admin]
+      x-ownership-rule: caller must match the authorized seller or buyer side for the negotiation
+      x-audit-required: true
+      x-idempotency-required: true
+      parameters:
+        - $ref: '#/components/parameters/NegotiationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptNegotiationRequest'
+      responses:
+        '200':
+          description: Negotiation accepted and closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /negotiations/{negotiation_id}/reject:
+    post:
+      tags: [negotiations]
+      summary: Reject negotiation
+      description: >
+        Reject and cancel the negotiation without exposing contact data.
+        The caller must be an authorized negotiation participant.
+      operationId: rejectNegotiation
+      x-required-scopes: [negotiation:offer:submit]
+      x-allowed-roles: [seller_negotiator, buyer_negotiator, admin]
+      x-ownership-rule: caller must match the authorized seller or buyer side for the negotiation
+      x-audit-required: true
+      x-idempotency-required: true
+      parameters:
+        - $ref: '#/components/parameters/NegotiationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectNegotiationRequest'
+      responses:
+        '200':
+          description: Negotiation rejected and cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /negotiations/{negotiation_id}/request-contact-reveal:
     post:
       tags: [contact-reveals]
@@ -1107,6 +1187,28 @@ components:
         offer_currency: USD
         offer_amount: 440
         idempotency_key: offer-001
+    AcceptNegotiationRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotency_key]
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+      example:
+        idempotency_key: accept-001
+    RejectNegotiationRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotency_key]
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+      example:
+        idempotency_key: reject-001
     RequestContactRevealRequest:
       type: object
       additionalProperties: false
@@ -1128,6 +1230,7 @@ components:
         - status
         - offer_currency
         - latest_offer_amount
+        - offer_history
         - version
         - updated_at
       properties:
@@ -1155,6 +1258,10 @@ components:
             - number
             - 'null'
           exclusiveMinimum: 0
+        offer_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/NegotiationHistoryEntry'
         version:
           type: integer
           minimum: 1
@@ -1170,8 +1277,63 @@ components:
         latest_offer_amount: 430
         reservation_lease_id: null
         final_offer_amount: null
+        offer_history:
+          - entry_id: neg_123-offer-1
+            entry_type: offer
+            offer_currency: USD
+            offer_amount: 430
+            actor_subject: buyer-1
+            actor_role: buyer_negotiator
+            idempotency_key: offer-001
+            resulting_status: reserved
+            created_at: '2026-05-04T00:00:00Z'
         version: 1
         updated_at: '2026-05-04T00:00:00Z'
+    NegotiationHistoryEntryType:
+      type: string
+      enum: [offer, accept, reject]
+    NegotiationHistoryEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - entry_id
+        - entry_type
+        - offer_currency
+        - offer_amount
+        - actor_subject
+        - actor_role
+        - idempotency_key
+        - resulting_status
+        - created_at
+      properties:
+        entry_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        entry_type:
+          $ref: '#/components/schemas/NegotiationHistoryEntryType'
+        offer_currency:
+          $ref: '#/components/schemas/CurrencyCode'
+        offer_amount:
+          type: number
+          exclusiveMinimum: 0
+        actor_subject:
+          type: string
+          minLength: 1
+          maxLength: 128
+        actor_role:
+          type: string
+          minLength: 1
+          maxLength: 64
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        resulting_status:
+          $ref: '#/components/schemas/NegotiationStatus'
+        created_at:
+          type: string
+          format: date-time
     ContactRevealResponse:
       type: object
       additionalProperties: false

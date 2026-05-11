@@ -11,7 +11,8 @@ use crate::services::rate_limiter::{
 };
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use marketplace_api_contract::{
-    CreateListingRequest, OpenNegotiationRequest, RequestContactRevealRequest, SearchRequest,
+    AcceptNegotiationRequest, CreateListingRequest, OpenNegotiationRequest,
+    RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role};
 use moka::future::Cache;
@@ -395,6 +396,126 @@ pub async fn open_negotiation(
     }
 }
 
+pub async fn get_negotiation_status(
+    app: web::Data<ActixApp>,
+    req: HttpRequest,
+    negotiation_id: web::Path<String>,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    match app.get_negotiation_status(&claims, &negotiation_id).await {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(e) => map_handler_error(&e),
+    }
+}
+
+pub async fn submit_offer(
+    app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
+    search_cache: web::Data<Cache<String, String>>,
+    req: HttpRequest,
+    negotiation_id: web::Path<String>,
+    body: web::Json<SubmitOfferRequest>,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    let negot_key = format!("negotiate:{}", claims.sub);
+    if !global_limiter().check(
+        &negot_key,
+        OPEN_NEGOTIATION_RATE_MAX,
+        OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "offer submit rate limit exceeded (20/min)"}));
+    }
+    let fingerprint = serde_json::to_string(&body).unwrap_or_default();
+    let now = crate::http::runtime::current_time_marker();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
+    match app
+        .submit_offer(&claims, &negotiation_id, &body, &fingerprint, &now)
+        .await
+    {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(e) => map_handler_error(&e),
+    }
+}
+
+pub async fn accept_negotiation(
+    app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
+    search_cache: web::Data<Cache<String, String>>,
+    req: HttpRequest,
+    negotiation_id: web::Path<String>,
+    body: web::Json<AcceptNegotiationRequest>,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    let negot_key = format!("negotiate:{}", claims.sub);
+    if !global_limiter().check(
+        &negot_key,
+        OPEN_NEGOTIATION_RATE_MAX,
+        OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "accept rate limit exceeded (20/min)"}));
+    }
+    let fingerprint = serde_json::to_string(&body).unwrap_or_default();
+    let now = crate::http::runtime::current_time_marker();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
+    match app
+        .accept_negotiation(&claims, &negotiation_id, &body, &fingerprint, &now)
+        .await
+    {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(e) => map_handler_error(&e),
+    }
+}
+
+pub async fn reject_negotiation(
+    app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
+    search_cache: web::Data<Cache<String, String>>,
+    req: HttpRequest,
+    negotiation_id: web::Path<String>,
+    body: web::Json<RejectNegotiationRequest>,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    let negot_key = format!("negotiate:{}", claims.sub);
+    if !global_limiter().check(
+        &negot_key,
+        OPEN_NEGOTIATION_RATE_MAX,
+        OPEN_NEGOTIATION_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "reject rate limit exceeded (20/min)"}));
+    }
+    let fingerprint = serde_json::to_string(&body).unwrap_or_default();
+    let now = crate::http::runtime::current_time_marker();
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
+    match app
+        .reject_negotiation(&claims, &negotiation_id, &body, &fingerprint, &now)
+        .await
+    {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(e) => map_handler_error(&e),
+    }
+}
+
 // --- Contact reveal handlers ---
 
 pub async fn request_contact_reveal(
@@ -402,6 +523,7 @@ pub async fn request_contact_reveal(
     cache_enabled: web::Data<bool>,
     search_cache: web::Data<Cache<String, String>>,
     req: HttpRequest,
+    negotiation_id: web::Path<String>,
     body: web::Json<RequestContactRevealRequest>,
 ) -> impl Responder {
     let claims = match extract_claims(&req) {
@@ -423,10 +545,30 @@ pub async fn request_contact_reveal(
         search_cache.invalidate_all();
     }
     match app
-        .request_contact_reveal(&claims, "", &body, &fingerprint, &now)
+        .request_contact_reveal(&claims, &negotiation_id, &body, &fingerprint, &now)
         .await
     {
         Ok(response) => HttpResponse::Accepted().json(response),
+        Err(e) => map_handler_error(&e),
+    }
+}
+
+pub async fn approve_contact_reveal(
+    app: web::Data<ActixApp>,
+    cache_enabled: web::Data<bool>,
+    search_cache: web::Data<Cache<String, String>>,
+    req: HttpRequest,
+    reveal_id: web::Path<String>,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+    if **cache_enabled {
+        search_cache.invalidate_all();
+    }
+    match app.approve_contact_reveal(&claims, &reveal_id).await {
+        Ok(response) => HttpResponse::Ok().json(response),
         Err(e) => map_handler_error(&e),
     }
 }

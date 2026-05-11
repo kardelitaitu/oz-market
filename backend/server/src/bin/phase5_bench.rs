@@ -12,6 +12,9 @@ use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepo
 use marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository;
 use marketplace_server::repositories::listings::InMemoryListingRepository;
 use marketplace_server::repositories::listings::PostgresListingRepository;
+use marketplace_server::repositories::negotiations::{
+    InMemoryNegotiationRepository, PostgresNegotiationRepository,
+};
 use marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository;
 use marketplace_server::repositories::outbox_events::PostgresOutboxEventRepository;
 use marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository;
@@ -341,6 +344,7 @@ fn build_memory_app() -> MemoryBenchmarkApp {
         InMemoryIdempotencyRepository::new(),
         InMemoryReservationLeaseRepository::new(),
         InMemoryContactRevealRepository::new(),
+        std::sync::Arc::new(InMemoryNegotiationRepository::new()),
         std::sync::Arc::new(InMemoryAuditEventRepository::new()),
         std::sync::Arc::new(InMemoryOutboxEventRepository::new()),
         std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -353,6 +357,7 @@ async fn build_postgres_app(pool: PgPool) -> Result<PostgresHarness, Box<dyn Err
         InMemoryIdempotencyRepository::new(),
         PostgresReservationLeaseRepository::new(pool.clone()),
         PostgresContactRevealRepository::new(pool.clone()),
+        std::sync::Arc::new(PostgresNegotiationRepository::new(pool.clone())),
         std::sync::Arc::new(PostgresAuditEventRepository::new(pool.clone())),
         std::sync::Arc::new(PostgresOutboxEventRepository::new(pool.clone())),
         std::sync::Arc::new(PostgresSellerAccountRepository::new(pool.clone())),

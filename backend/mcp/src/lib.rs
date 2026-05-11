@@ -4,9 +4,10 @@
 //! with the marketplace via standardized tools.
 
 use marketplace_api_contract::{
-    Category, Condition, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
-    ListingSummary, NegotiationResponse, OpenNegotiationRequest, RequestContactRevealRequest,
-    SearchRequest, SearchResponse,
+    AcceptNegotiationRequest, Category, Condition, ContactRevealResponse, CreateListingRequest,
+    CreateListingResponse, ListingSummary, NegotiationResponse, OpenNegotiationRequest,
+    RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest, SearchResponse,
+    SubmitOfferRequest,
 };
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
@@ -24,6 +25,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
         marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository::new(),
         marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository::new(),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::InMemoryNegotiationRepository::new(),
+        ),
         std::sync::Arc::new(
             marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
         ),
@@ -125,6 +129,63 @@ impl MarketplaceMcp {
     ) -> Result<NegotiationResponse, marketplace_server::http::handlers::HandlerError> {
         self.app
             .get_negotiation_status(claims, negotiation_id)
+            .await
+    }
+
+    pub async fn submit_offer(
+        &self,
+        claims: &Claims,
+        negotiation_id: &str,
+        request: &SubmitOfferRequest,
+        request_fingerprint: &str,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, marketplace_server::http::handlers::HandlerError> {
+        self.app
+            .submit_offer(
+                claims,
+                negotiation_id,
+                request,
+                request_fingerprint,
+                now_rfc3339,
+            )
+            .await
+    }
+
+    pub async fn accept_negotiation(
+        &self,
+        claims: &Claims,
+        negotiation_id: &str,
+        request: &AcceptNegotiationRequest,
+        request_fingerprint: &str,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, marketplace_server::http::handlers::HandlerError> {
+        self.app
+            .accept_negotiation(
+                claims,
+                negotiation_id,
+                request,
+                request_fingerprint,
+                now_rfc3339,
+            )
+            .await
+    }
+
+    pub async fn reject_negotiation(
+        &self,
+        claims: &Claims,
+        negotiation_id: &str,
+        request: &RejectNegotiationRequest,
+        request_fingerprint: &str,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, marketplace_server::http::handlers::HandlerError> {
+        self.app
+            .reject_negotiation(
+                claims,
+                negotiation_id,
+                request,
+                request_fingerprint,
+                now_rfc3339,
+            )
             .await
     }
 
@@ -312,6 +373,7 @@ mod tests {
     use marketplace_server::repositories::audit_events::InMemoryAuditEventRepository;
     use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository;
     use marketplace_server::repositories::listings::InMemoryListingRepository;
+    use marketplace_server::repositories::negotiations::InMemoryNegotiationRepository;
     use marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository;
     use marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository;
     use marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository;
@@ -327,6 +389,7 @@ mod tests {
             idempotency_repo,
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
             Arc::new(InMemoryAuditEventRepository::new()),
             Arc::new(InMemoryOutboxEventRepository::new()),
             Arc::new(InMemorySellerAccountRepository::new()),
@@ -375,6 +438,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
             audit_repo.clone(),
             outbox_repo.clone(),
             Arc::new(InMemorySellerAccountRepository::new()),

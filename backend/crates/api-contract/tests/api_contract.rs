@@ -538,6 +538,7 @@ fn negotiation_response_roundtrip() {
         latest_offer_amount: 850.0,
         reservation_lease_id: Some("lease_abc".into()),
         final_offer_amount: None,
+        offer_history: vec![],
         version: 1,
         updated_at: "2026-05-10T12:00:00Z".into(),
     };

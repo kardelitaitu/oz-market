@@ -6,6 +6,7 @@ use marketplace_server::app::MarketplaceApp;
 use marketplace_server::repositories::audit_events::InMemoryAuditEventRepository;
 use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository;
 use marketplace_server::repositories::listings::InMemoryListingRepository;
+use marketplace_server::repositories::negotiations::InMemoryNegotiationRepository;
 use marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository;
 use marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository;
 use marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository;
@@ -27,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         InMemoryIdempotencyRepository::new(),
         InMemoryReservationLeaseRepository::new(),
         InMemoryContactRevealRepository::new(),
+        std::sync::Arc::new(InMemoryNegotiationRepository::new()),
         std::sync::Arc::new(InMemoryAuditEventRepository::new()),
         std::sync::Arc::new(InMemoryOutboxEventRepository::new()),
         std::sync::Arc::new(InMemorySellerAccountRepository::new()),

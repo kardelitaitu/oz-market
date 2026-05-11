@@ -40,8 +40,39 @@ pub struct SubmitOfferRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AcceptNegotiationRequest {
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RejectNegotiationRequest {
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RequestContactRevealRequest {
     pub idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NegotiationHistoryEntryType {
+    Offer,
+    Accept,
+    Reject,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NegotiationHistoryEntry {
+    pub entry_id: String,
+    pub entry_type: NegotiationHistoryEntryType,
+    pub offer_currency: CurrencyCode,
+    pub offer_amount: f64,
+    pub actor_subject: String,
+    pub actor_role: String,
+    pub idempotency_key: String,
+    pub resulting_status: NegotiationStatus,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,6 +87,8 @@ pub struct NegotiationResponse {
     pub reservation_lease_id: Option<ResourceId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_offer_amount: Option<f64>,
+    #[serde(default)]
+    pub offer_history: Vec<NegotiationHistoryEntry>,
     pub version: u64,
     pub updated_at: String,
 }

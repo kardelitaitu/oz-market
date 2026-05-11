@@ -36,6 +36,7 @@ $results = @{
     Clippy = @{ Passed = $false; Duration = 0 }
     Tests  = @{ Passed = $false; Duration = 0 }
     Journal = @{ Passed = $false; Duration = 0 }
+    ActiveSpecs = @{ Passed = $false; Duration = 0 }
 }
 
 # Check if we're in the right directory (should have backend/Cargo.toml)
@@ -72,12 +73,9 @@ function Test-JournalAppendOnly {
         return @{ Passed = $false; Message = "$Path is missing" }
     }
 
-    # Use git diff HEAD to detect modifications to existing content.
-    # In unified-diff output, removed lines start with '-'; added lines
-    # start with '+'.  An append-only journal will have only '+' lines
-    # (the '--- a/...' header is excluded).  If any '-' lines appear,
-    # previously committed content was modified.
-    $diff = git -C $RepoRoot diff HEAD -- $relativePath 2>$null
+    # Compare against HEAD via unified diff. Any removed line (excluding diff
+    # headers) means history was rewritten before the append-only boundary.
+    $diff = git -c core.safecrlf=false -C $RepoRoot diff --no-color HEAD -- $relativePath 2>$null
     if ($LASTEXITCODE -ne 0) {
         return @{ Passed = $false; Message = "Unable to diff $Path against HEAD" }
     }
@@ -86,15 +84,63 @@ function Test-JournalAppendOnly {
         return @{ Passed = $true; Message = "$Path is unchanged (append-only)" }
     }
 
-    # Look for any line that starts with '-' but not '---' (the latter is
-    # the diff header).  This is encoding-safe because git handles the
-    # byte-level comparison.
     $hasRemovals = $diff | Select-String "^\-" | Where-Object { $_ -notmatch "^\-\-\-" }
     if ($hasRemovals) {
         return @{ Passed = $false; Message = "$Path changed before the append-only boundary" }
     }
 
     return @{ Passed = $true; Message = "$Path is append-only" }
+}
+
+function Test-ActiveSpecGovernance {
+    param(
+        [string]$RepoRoot
+    )
+
+    $activeRoot = Join-Path $RepoRoot "docs/specs/_active"
+    if (-not (Test-Path $activeRoot)) {
+        return @{ Passed = $false; Message = "docs/specs/_active is missing" }
+    }
+
+    $issues = New-Object System.Collections.Generic.List[string]
+    $files = Get-ChildItem -Path $activeRoot -Recurse -File -Include *.md,*.yaml,*.yml
+
+    foreach ($file in $files) {
+        $content = Get-Content -Path $file.FullName -Raw
+        $relative = $file.FullName.Substring($RepoRoot.Length + 1).Replace('\', '/')
+        $lines = $content -split "`r?`n"
+
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($lines[$i] -match "docs/whitepaper/") {
+                $issues.Add("${relative}:$($i + 1) uses legacy docs/whitepaper path")
+            }
+            if ($lines[$i] -match "Implementation details to be defined during active development\\.") {
+                $issues.Add("${relative}:$($i + 1) contains placeholder governance text")
+            }
+        }
+
+        if ($file.Name -ieq "README.md") {
+            $frontmatterStatus = [regex]::Match($content, "(?m)^status:\\s*(.+)$").Groups[1].Value.Trim()
+            $bodyStatus = [regex]::Match($content, '(?m)^Status:\s*`([^`]+)`').Groups[1].Value.Trim()
+            if ($frontmatterStatus -and $bodyStatus -and $frontmatterStatus -ne $bodyStatus) {
+                $issues.Add("$relative has status mismatch (frontmatter=$frontmatterStatus, body=$bodyStatus)")
+            }
+
+            $frontmatterImplementer = [regex]::Match($content, "(?m)^implementer:\\s*(.+)$").Groups[1].Value.Trim()
+            $bodyImplementer = [regex]::Match($content, '(?m)^Implementer:\s*`([^`]+)`').Groups[1].Value.Trim()
+            if ($frontmatterImplementer -and $bodyImplementer -and $frontmatterImplementer -ne $bodyImplementer) {
+                $issues.Add("$relative has implementer mismatch (frontmatter=$frontmatterImplementer, body=$bodyImplementer)")
+            }
+        }
+    }
+
+    if ($issues.Count -gt 0) {
+        $preview = ($issues | Select-Object -First 10) -join "; "
+        $suffix = if ($issues.Count -gt 10) { " (and $($issues.Count - 10) more)" } else { "" }
+        return @{ Passed = $false; Message = "Active spec governance failed: $preview$suffix" }
+    }
+
+    return @{ Passed = $true; Message = "Active spec governance checks passed" }
 }
 
 # Change to backend directory (where Cargo.toml is)
@@ -119,6 +165,28 @@ try {
 } catch {
     $elapsed = $sw.Elapsed.TotalSeconds
     $results.Journal = @{ Passed = $false; Duration = $elapsed }
+    Write-StepResult $false
+    Write-Status "Journal guard error: $($_.Exception.Message)" "Yellow"
+    $failed = $true
+}
+$stepNum++
+
+# ---- ACTIVE SPEC GOVERNANCE GUARD ------------------------------------
+$cmd = "active spec governance guard"
+Write-StepHeader $stepNum $cmd
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+try {
+    $activeSpecCheck = Test-ActiveSpecGovernance -RepoRoot $repoRoot
+    $elapsed = $sw.Elapsed.TotalSeconds
+    $results.ActiveSpecs = @{ Passed = $activeSpecCheck.Passed; Duration = $elapsed }
+    Write-StepResult $activeSpecCheck.Passed
+    if (-not $activeSpecCheck.Passed) {
+        Write-Status $activeSpecCheck.Message "Yellow"
+        $failed = $true
+    }
+} catch {
+    $elapsed = $sw.Elapsed.TotalSeconds
+    $results.ActiveSpecs = @{ Passed = $false; Duration = $elapsed }
     Write-StepResult $false
     $failed = $true
 }
@@ -221,7 +289,7 @@ Set-Location $originalLocation
 $total = ((Get-Date) - $startTime).TotalSeconds
 Write-Status "CI CHECKER REPORT:" "Yellow"
 $p = 0; $f = 0
-$runOrder = @("Journal", "Build", "Format", "Clippy", "Tests")
+$runOrder = @("Journal", "ActiveSpecs", "Build", "Format", "Clippy", "Tests")
 foreach ($name in $runOrder) {
     $r = $results.$name
     if ($r.Duration -gt 0 -or $r.Passed) {

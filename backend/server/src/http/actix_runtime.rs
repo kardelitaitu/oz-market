@@ -3,6 +3,7 @@ use crate::observability::ServerObservability;
 use crate::repositories::audit_events::PostgresAuditEventRepository;
 use crate::repositories::contact_reveals::PostgresContactRevealRepository;
 use crate::repositories::listings::PostgresListingRepository;
+use crate::repositories::negotiations::PostgresNegotiationRepository;
 use crate::repositories::outbox_events::PostgresOutboxEventRepository;
 use crate::repositories::reservations::PostgresReservationLeaseRepository;
 use crate::repositories::seller_accounts::PostgresSellerAccountRepository;
@@ -175,8 +176,28 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                         web::post().to(crate::http::actix_handlers::open_negotiation),
                     )
                     .route(
-                        "/contact-reveals",
+                        "/negotiations/{negotiation_id}",
+                        web::get().to(crate::http::actix_handlers::get_negotiation_status),
+                    )
+                    .route(
+                        "/negotiations/{negotiation_id}/offers",
+                        web::post().to(crate::http::actix_handlers::submit_offer),
+                    )
+                    .route(
+                        "/negotiations/{negotiation_id}/accept",
+                        web::post().to(crate::http::actix_handlers::accept_negotiation),
+                    )
+                    .route(
+                        "/negotiations/{negotiation_id}/reject",
+                        web::post().to(crate::http::actix_handlers::reject_negotiation),
+                    )
+                    .route(
+                        "/negotiations/{negotiation_id}/request-contact-reveal",
                         web::post().to(crate::http::actix_handlers::request_contact_reveal),
+                    )
+                    .route(
+                        "/contact-reveals/{reveal_id}/approve",
+                        web::post().to(crate::http::actix_handlers::approve_contact_reveal),
                     ),
             )
             // Internal API v1 routes (admin/support)
@@ -390,6 +411,7 @@ fn build_app(
     let idempotency_repository = InMemoryIdempotencyRepository::new();
     let reservation_repository = PostgresReservationLeaseRepository::new(pool.clone());
     let contact_reveal_repository = PostgresContactRevealRepository::new(pool.clone());
+    let negotiation_repository = Arc::new(PostgresNegotiationRepository::new(pool.clone()));
     let seller_account_repository: Arc<dyn SellerAccountRepository> =
         Arc::new(PostgresSellerAccountRepository::new(pool.clone()));
 
@@ -398,6 +420,7 @@ fn build_app(
         idempotency_repository,
         reservation_repository,
         contact_reveal_repository,
+        negotiation_repository,
         audit_repo,
         outbox_repo,
         seller_account_repository,

@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE negotiations
+ADD COLUMN IF NOT EXISTS offer_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+COMMIT;

@@ -3,8 +3,9 @@ use crate::http::handlers::{
 };
 use crate::models::db::SellerAccountRow;
 use crate::repositories::{
-    AuditEventRepository, IdempotencyKeyRepository, ListingRepository, OutboxEventRepository,
-    RepositoryError, RepositoryErrorKind, ReservationLeaseRepository, SellerAccountRepository,
+    negotiations::NegotiationRepository, AuditEventRepository, IdempotencyKeyRepository,
+    ListingRepository, OutboxEventRepository, RepositoryError, RepositoryErrorKind,
+    ReservationLeaseRepository, SellerAccountRepository,
 };
 use crate::services::audit_events::AuditEventService;
 use crate::services::contact_reveals::ContactRevealService;
@@ -16,9 +17,10 @@ use crate::services::rate_limiter::{
 use crate::services::reservations::ReservationLeaseService;
 use crate::services::search::SearchService;
 use marketplace_api_contract::{
-    ContactRevealResponse, CreateListingRequest, CreateListingResponse, ListingStatus,
-    ListingSummary, NegotiationResponse, NegotiationStatus, OpenNegotiationRequest,
-    RequestContactRevealRequest, SearchRequest, SearchResponse,
+    AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
+    ListingStatus, ListingSummary, NegotiationHistoryEntry, NegotiationHistoryEntryType,
+    NegotiationResponse, NegotiationStatus, OpenNegotiationRequest, RejectNegotiationRequest,
+    RequestContactRevealRequest, SearchRequest, SearchResponse, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role};
 use serde_json::json;
@@ -48,6 +50,7 @@ pub struct MarketplaceApp<LR, IR, RR, CR> {
     idempotency: IdempotencyGuard<IR>,
     reservations: ReservationLeaseService<RR>,
     contact_reveals: ContactRevealService<CR>,
+    negotiations: Arc<dyn NegotiationRepository>,
     audit_events: AuditEventService,
     outbox_events: OutboxEventService,
     seller_accounts: Arc<dyn SellerAccountRepository>,
@@ -60,11 +63,13 @@ where
     RR: ReservationLeaseRepository + Send + Sync,
     CR: crate::repositories::ContactRevealRepository + Send + Sync,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         listing_repository: LR,
         idempotency_repository: IR,
         reservation_repository: RR,
         contact_reveal_repository: CR,
+        negotiation_repository: Arc<dyn NegotiationRepository>,
         audit_event_repository: Arc<dyn AuditEventRepository>,
         outbox_event_repository: Arc<dyn OutboxEventRepository>,
         seller_account_repository: Arc<dyn SellerAccountRepository>,
@@ -79,6 +84,7 @@ where
             idempotency: IdempotencyGuard::new(idempotency_repository),
             reservations: ReservationLeaseService::new(reservation_repository),
             contact_reveals: ContactRevealService::new(contact_reveal_repository),
+            negotiations: negotiation_repository,
             audit_events: AuditEventService::new(audit_event_repository),
             outbox_events: OutboxEventService::new(outbox_event_repository),
             seller_accounts: seller_account_repository,
@@ -148,6 +154,7 @@ where
         request_fingerprint: &str,
         now_rfc3339: &str,
     ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+        crate::services::authz::authorize_open_negotiation(claims, &request.buyer_agent_id)?;
         let attempt = crate::services::idempotency::IdempotencyAttempt {
             actor_subject: &claims.sub,
             operation: crate::services::idempotency::IdempotencyOperation::OpenNegotiation,
@@ -195,8 +202,9 @@ where
                     }
                 };
 
+                let negotiation_id = format!("neg_{}", request.listing_id);
                 let response = NegotiationResponse {
-                    negotiation_id: format!("neg_{}", request.listing_id),
+                    negotiation_id: negotiation_id.clone(),
                     listing_id: request.listing_id.clone(),
                     buyer_agent_id: request.buyer_agent_id.clone(),
                     status: NegotiationStatus::Reserved,
@@ -204,9 +212,23 @@ where
                     latest_offer_amount: request.offer_amount,
                     reservation_lease_id: Some(reservation.lease_id.clone()),
                     final_offer_amount: None,
+                    offer_history: vec![NegotiationHistoryEntry {
+                        entry_id: format!("{negotiation_id}-offer-1"),
+                        entry_type: NegotiationHistoryEntryType::Offer,
+                        offer_currency: request.offer_currency.clone(),
+                        offer_amount: request.offer_amount,
+                        actor_subject: claims.sub.clone(),
+                        actor_role: primary_role_label(claims),
+                        idempotency_key: request.idempotency_key.clone(),
+                        resulting_status: NegotiationStatus::Reserved,
+                        created_at: now_rfc3339.to_string(),
+                    }],
                     version: 1,
                     updated_at: now_rfc3339.to_string(),
                 };
+                self.negotiations
+                    .upsert_open_negotiation(&response, &request.idempotency_key, now_rfc3339)
+                    .await?;
 
                 self.idempotency
                     .commit_success(&attempt, json!(response))
@@ -273,6 +295,16 @@ where
         claims: &Claims,
         negotiation_id: &str,
     ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+        let from_store = self.negotiations.get_negotiation(negotiation_id).await?;
+        if let Some(mut response) = from_store {
+            let reservation = self
+                .reservations
+                .get_active_by_listing(&response.listing_id)
+                .await?;
+            response.reservation_lease_id = reservation.map(|lease| lease.lease_id);
+            return Ok(response);
+        }
+
         let listing_id = negotiation_id
             .strip_prefix("neg_")
             .unwrap_or(negotiation_id);
@@ -298,9 +330,380 @@ where
             latest_offer_amount: listing.listing.price.amount,
             reservation_lease_id: reservation.map(|lease| lease.lease_id),
             final_offer_amount: None,
+            offer_history: vec![],
             version: listing.version,
             updated_at: now_marker(),
         })
+    }
+
+    pub async fn submit_offer(
+        &self,
+        claims: &Claims,
+        negotiation_id: &str,
+        request: &SubmitOfferRequest,
+        request_fingerprint: &str,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+        let current = self
+            .negotiations
+            .get_negotiation(negotiation_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
+            })?;
+
+        let listing = self
+            .search
+            .get_listing(Some(claims), &current.listing_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
+            })?;
+
+        crate::services::authz::authorize(
+            claims,
+            marketplace_auth_core::Action::SubmitOffer,
+            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+                seller_account_id: listing.listing.owner_id.clone(),
+                buyer_agent_id: current.buyer_agent_id.clone(),
+            },
+        )?;
+
+        let attempt = crate::services::idempotency::IdempotencyAttempt {
+            actor_subject: &claims.sub,
+            operation: crate::services::idempotency::IdempotencyOperation::SubmitOffer,
+            idempotency_key: &request.idempotency_key,
+            request_fingerprint,
+            ttl_seconds: 24 * 60 * 60,
+        };
+
+        match self.idempotency.begin(&attempt, now_rfc3339).await? {
+            crate::services::idempotency::IdempotencyDecision::FirstUse => {
+                let response = self
+                    .negotiations
+                    .submit_offer(
+                        negotiation_id,
+                        request,
+                        &claims.sub,
+                        &primary_role_label(claims),
+                        now_rfc3339,
+                    )
+                    .await?;
+                self.idempotency
+                    .commit_success(&attempt, json!(response))
+                    .await?;
+                self.record_audit_event(
+                    "negotiation",
+                    negotiation_id,
+                    "submit_offer",
+                    claims,
+                    Some(&request.idempotency_key),
+                    json!({
+                        "request": request,
+                        "response": &response,
+                    }),
+                    now_rfc3339,
+                )
+                .await?;
+                self.record_outbox_event(
+                    "negotiation.offer_submitted",
+                    "negotiation",
+                    negotiation_id,
+                    json!({
+                        "negotiation_id": negotiation_id,
+                        "status": response.status,
+                        "latest_offer_amount": response.latest_offer_amount,
+                    }),
+                    now_rfc3339,
+                )
+                .await?;
+                Ok(response)
+            }
+            crate::services::idempotency::IdempotencyDecision::ReplayAccepted {
+                response_payload,
+            } => {
+                let payload = response_payload.ok_or_else(|| {
+                    crate::services::idempotency::IdempotencyError::new(
+                        crate::services::idempotency::IdempotencyErrorKind::Conflict,
+                        "replayed submit offer missing stored response payload",
+                    )
+                })?;
+                serde_json::from_value::<NegotiationResponse>(payload)
+                    .map_err(|error| {
+                        crate::services::idempotency::IdempotencyError::new(
+                            crate::services::idempotency::IdempotencyErrorKind::Storage,
+                            error.to_string(),
+                        )
+                    })
+                    .map_err(crate::http::handlers::HandlerError::from)
+            }
+            crate::services::idempotency::IdempotencyDecision::InFlight => {
+                Err(crate::services::idempotency::IdempotencyError::new(
+                    crate::services::idempotency::IdempotencyErrorKind::Conflict,
+                    "idempotency key is still in flight",
+                )
+                .into())
+            }
+        }
+    }
+
+    pub async fn accept_negotiation(
+        &self,
+        claims: &Claims,
+        negotiation_id: &str,
+        request: &AcceptNegotiationRequest,
+        request_fingerprint: &str,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+        let current = self
+            .negotiations
+            .get_negotiation(negotiation_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
+            })?;
+        let listing = self
+            .search
+            .get_listing(Some(claims), &current.listing_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
+            })?;
+
+        crate::services::authz::authorize(
+            claims,
+            marketplace_auth_core::Action::SubmitOffer,
+            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+                seller_account_id: listing.listing.owner_id.clone(),
+                buyer_agent_id: current.buyer_agent_id.clone(),
+            },
+        )?;
+
+        if listing.status != ListingStatus::Active {
+            return Err(RepositoryError::new(
+                RepositoryErrorKind::Conflict,
+                "listing is not active",
+            )
+            .into());
+        }
+
+        let reservation = self
+            .reservations
+            .get_active_by_listing(&current.listing_id)
+            .await?;
+        if reservation.is_none() {
+            return Err(RepositoryError::new(
+                RepositoryErrorKind::Conflict,
+                "reservation required before accept",
+            )
+            .into());
+        }
+
+        let attempt = crate::services::idempotency::IdempotencyAttempt {
+            actor_subject: &claims.sub,
+            operation: crate::services::idempotency::IdempotencyOperation::SubmitOffer,
+            idempotency_key: &request.idempotency_key,
+            request_fingerprint,
+            ttl_seconds: 24 * 60 * 60,
+        };
+        match self.idempotency.begin(&attempt, now_rfc3339).await? {
+            crate::services::idempotency::IdempotencyDecision::FirstUse => {
+                let response = self
+                    .negotiations
+                    .accept_negotiation(
+                        negotiation_id,
+                        request,
+                        &claims.sub,
+                        &primary_role_label(claims),
+                        now_rfc3339,
+                    )
+                    .await?;
+                self.idempotency
+                    .commit_success(&attempt, json!(response))
+                    .await?;
+                self.record_audit_event(
+                    "negotiation",
+                    negotiation_id,
+                    "accept_negotiation",
+                    claims,
+                    Some(&request.idempotency_key),
+                    json!({
+                        "response": &response,
+                    }),
+                    now_rfc3339,
+                )
+                .await?;
+                self.record_outbox_event(
+                    "negotiation.accepted",
+                    "negotiation",
+                    negotiation_id,
+                    json!({
+                        "negotiation_id": negotiation_id,
+                        "status": response.status,
+                        "final_offer_amount": response.final_offer_amount,
+                    }),
+                    now_rfc3339,
+                )
+                .await?;
+                Ok(response)
+            }
+            crate::services::idempotency::IdempotencyDecision::ReplayAccepted {
+                response_payload,
+            } => {
+                let payload = response_payload.ok_or_else(|| {
+                    crate::services::idempotency::IdempotencyError::new(
+                        crate::services::idempotency::IdempotencyErrorKind::Conflict,
+                        "replayed accept negotiation missing stored response payload",
+                    )
+                })?;
+                serde_json::from_value::<NegotiationResponse>(payload)
+                    .map_err(|error| {
+                        crate::services::idempotency::IdempotencyError::new(
+                            crate::services::idempotency::IdempotencyErrorKind::Storage,
+                            error.to_string(),
+                        )
+                    })
+                    .map_err(crate::http::handlers::HandlerError::from)
+            }
+            crate::services::idempotency::IdempotencyDecision::InFlight => {
+                Err(crate::services::idempotency::IdempotencyError::new(
+                    crate::services::idempotency::IdempotencyErrorKind::Conflict,
+                    "idempotency key is still in flight",
+                )
+                .into())
+            }
+        }
+    }
+
+    pub async fn reject_negotiation(
+        &self,
+        claims: &Claims,
+        negotiation_id: &str,
+        request: &RejectNegotiationRequest,
+        request_fingerprint: &str,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+        let current = self
+            .negotiations
+            .get_negotiation(negotiation_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
+            })?;
+        let listing = self
+            .search
+            .get_listing(Some(claims), &current.listing_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
+            })?;
+
+        crate::services::authz::authorize(
+            claims,
+            marketplace_auth_core::Action::SubmitOffer,
+            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+                seller_account_id: listing.listing.owner_id.clone(),
+                buyer_agent_id: current.buyer_agent_id.clone(),
+            },
+        )?;
+
+        match current.status {
+            NegotiationStatus::Open
+            | NegotiationStatus::Countered
+            | NegotiationStatus::NearClose => {}
+            _ => {
+                return Err(RepositoryError::new(
+                    RepositoryErrorKind::Conflict,
+                    "negotiation cannot be rejected in current state",
+                )
+                .into())
+            }
+        }
+
+        let attempt = crate::services::idempotency::IdempotencyAttempt {
+            actor_subject: &claims.sub,
+            operation: crate::services::idempotency::IdempotencyOperation::SubmitOffer,
+            idempotency_key: &request.idempotency_key,
+            request_fingerprint,
+            ttl_seconds: 24 * 60 * 60,
+        };
+
+        match self.idempotency.begin(&attempt, now_rfc3339).await? {
+            crate::services::idempotency::IdempotencyDecision::FirstUse => {
+                let response = self
+                    .negotiations
+                    .reject_negotiation(
+                        negotiation_id,
+                        request,
+                        &claims.sub,
+                        &primary_role_label(claims),
+                        now_rfc3339,
+                    )
+                    .await?;
+                if let Some(active) = self
+                    .reservations
+                    .get_active_by_listing(&response.listing_id)
+                    .await?
+                {
+                    let _ = self
+                        .reservations
+                        .release(&active.lease_id, now_rfc3339)
+                        .await?;
+                }
+                self.idempotency
+                    .commit_success(&attempt, json!(response))
+                    .await?;
+                self.record_audit_event(
+                    "negotiation",
+                    negotiation_id,
+                    "reject_negotiation",
+                    claims,
+                    Some(&request.idempotency_key),
+                    json!({
+                        "response": &response,
+                    }),
+                    now_rfc3339,
+                )
+                .await?;
+                self.record_outbox_event(
+                    "negotiation.rejected",
+                    "negotiation",
+                    negotiation_id,
+                    json!({
+                        "negotiation_id": negotiation_id,
+                        "status": response.status,
+                    }),
+                    now_rfc3339,
+                )
+                .await?;
+                Ok(response)
+            }
+            crate::services::idempotency::IdempotencyDecision::ReplayAccepted {
+                response_payload,
+            } => {
+                let payload = response_payload.ok_or_else(|| {
+                    crate::services::idempotency::IdempotencyError::new(
+                        crate::services::idempotency::IdempotencyErrorKind::Conflict,
+                        "replayed reject negotiation missing stored response payload",
+                    )
+                })?;
+                serde_json::from_value::<NegotiationResponse>(payload)
+                    .map_err(|error| {
+                        crate::services::idempotency::IdempotencyError::new(
+                            crate::services::idempotency::IdempotencyErrorKind::Storage,
+                            error.to_string(),
+                        )
+                    })
+                    .map_err(crate::http::handlers::HandlerError::from)
+            }
+            crate::services::idempotency::IdempotencyDecision::InFlight => {
+                Err(crate::services::idempotency::IdempotencyError::new(
+                    crate::services::idempotency::IdempotencyErrorKind::Conflict,
+                    "idempotency key is still in flight",
+                )
+                .into())
+            }
+        }
     }
 
     pub async fn create_listing(
@@ -814,6 +1217,14 @@ fn now_marker() -> String {
     now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+fn primary_role_label(claims: &Claims) -> String {
+    claims
+        .roles
+        .first()
+        .map(|role| format!("{role:?}"))
+        .unwrap_or_else(|| "Unknown".to_string())
+}
+
 fn reservation_lease_snapshot(lease: &crate::models::db::ReservationLeaseRow) -> serde_json::Value {
     json!({
         "lease_id": lease.lease_id.clone(),
@@ -969,6 +1380,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo.clone(),
             outbox_repo.clone(),
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1064,6 +1476,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1102,6 +1515,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1137,6 +1551,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo.clone(),
             outbox_repo,
             Arc::new(InMemorySellerAccountRepository::new()),
@@ -1196,6 +1611,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             Arc::new(InMemorySellerAccountRepository::new()),
@@ -1225,6 +1641,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             Arc::new(InMemorySellerAccountRepository::new()),
@@ -1264,6 +1681,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1315,6 +1733,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo.clone(),
             outbox_repo.clone(),
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1346,6 +1765,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo.clone(),
             outbox_repo.clone(),
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1391,6 +1811,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo.clone(),
             outbox_repo.clone(),
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1459,6 +1880,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1483,7 +1905,7 @@ mod tests {
         };
         let second_request = OpenNegotiationRequest {
             listing_id: listing.listing_id.clone(),
-            buyer_agent_id: "buyer-2".to_string(),
+            buyer_agent_id: "buyer-1".to_string(),
             offer_currency: "USD".to_string(),
             offer_amount: 441.0,
             idempotency_key: "idem-open-race-2".to_string(),
@@ -1544,6 +1966,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             audit_repo,
             outbox_repo,
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
@@ -1695,6 +2118,7 @@ mod tests {
             InMemoryIdempotencyRepository::new(),
             InMemoryReservationLeaseRepository::new(),
             InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
             Arc::new(InMemoryAuditEventRepository::new()),
             Arc::new(InMemoryOutboxEventRepository::new()),
             Arc::new(InMemorySellerAccountRepository::new()),
