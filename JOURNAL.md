@@ -1,4 +1,4 @@
-## Journal Entry
+## 2026-05-10 11:23
 
 - Fixed compilation errors in populate_db.rs:
   - Added missing geolocation fields to all match arms (products, services, properties)
@@ -7,7 +7,7 @@
 - Database now populated with 1000 sellers, 100,000 listings (mixed products/services/properties), and 100,000 reviews
 - All listing types include realistic geolocation coordinates for testing location-based features
 
-## Journal Entry
+## 2026-05-10 11:40
 
 - Resolved clippy warnings: fixed type mismatches in app.rs and listings.rs, removed unnecessary casts
 - Updated bench-http.ps1 defaults to 5000 operations at concurrency levels 100,500,1000,2000,5000
@@ -15,21 +15,21 @@
 - All CI checks passed: build, format, clippy, tests
 - Committed and pushed changes to remote repository
 
-## Journal Entry
+## 2026-05-10 11:40
 
 - **Phase 1 Complete**: Performance Infrastructure Optimization
 - Increased database connection pool from 20 to 100 connections (configurable via DATABASE_MAX_CONNECTIONS env var)
 - Added basic connection pool metrics to /metrics endpoint (total connections, idle connections)
 - Changes validated with cargo check and committed to repository
 
-## Journal Entry
+## 2026-05-10 11:43
 
 - **Phase 2 Complete**: Async Runtime Optimization
 - Implemented custom tokio runtime with adaptive worker threads (num_cpus - 1 for stability, minimum 1)
 - Added TOKIO_WORKER_THREADS environment variable for configuration
 - Enhanced metrics with runtime information (worker threads, CPU cores)
 
-## Journal Entry
+## 2026-05-10 16:21
 
 - **Search API Enhancement**: Implemented 3 new features in actix_handlers.rs:
   - `?fields=` field filtering: parse_fields_param + filter_listing_fields to return only requested fields
@@ -38,7 +38,7 @@
 - Cache key now includes fields and include params for proper cache segregation
 - All features compile successfully
 
-## Journal Entry
+## 2026-05-10 16:21
 
 - Added unit tests for search API helper functions in actix_handlers.rs:
   - parse_fields_param: tests for single/multiple/empty fields
@@ -48,7 +48,7 @@
 - Fixed pre-existing broken import in api-contract tests
 - All 70 tests pass (62 existing + 8 new)
 
-## Journal Entry
+## 2026-05-10 15:31
 
 - **Expanded Unit Test Coverage**
 - Added 16 tests for search service (normalize_search_terms, listing_index_text, score_listing, compare_search_items)
@@ -59,7 +59,7 @@
 - Supports low-resource deployments (2-thread VPS and up)
 - Changes validated with cargo check and committed to repository
 
-## Journal Entry
+## 2026-05-10 11:50
 
 - **Phase 3 Complete**: Enhanced Caching Implementation
 - Increased listing cache from 10,000 to 100,000 entries with 10-minute TTL
@@ -68,7 +68,7 @@
 - Implemented TTL-based cache eviction policies for automatic cleanup
 - Changes validated with cargo check and committed to repository
 
-## Journal Entry
+## 2026-05-10 11:55
 
 - **Phase 4 Complete**: Monitoring and Observability
 - Added utilization percentages for database connections and caches
@@ -78,7 +78,7 @@
 - Performance infrastructure optimization project complete
 - Expected performance improvement: 6.8k → 40k+ ops/s at 5000 concurrency
 
-## Journal Entry
+## 2026-05-10 15:31
 
 - **Performance Fix**: Search endpoint was extremely slow (~100 ops/s) due to missing SQL LIMIT clause
 - Root cause: fetch_rows() was fetching ALL matching rows (potentially 100K) and sorting in memory
@@ -89,7 +89,7 @@
   - 500 concurrency now hits 100% success rate (was ~77%)
 - Also fixed double JSON serialization in search handler (serialize once, use for both cache and response)
 
-## Journal Entry
+## 2026-05-10 15:42
 
 - **Performance Optimization**: Full benchmark sweep shows massive improvements
 - Fixed double JSON serialization in get_listing handler (same issue as search)
@@ -101,7 +101,7 @@
 - get_listing works at ~25K ops/s when tested standalone
 - Note: get_listing at high concurrency (500) shows degradation - appears to be benchmark client limitation, not server
 
-## Journal Entry
+## 2026-05-10 15:42
 
 - **API Optimization**: Added response compression (gzip) - built into actix-web middleware
 - **Search Cache Key**: Improved to include listing_type, category, sort_by for better cache hits
@@ -113,3 +113,15 @@
 ## 2026-05-10 18:10
 
 - Tightened `check.ps1` journal guard to compare the committed journal as a line-prefix, so rewritten history fails and append-only updates pass.
+
+## 2026-05-11 06:30
+
+- **Task 1.1**: Created domain test directory structure
+  - `backend/server/src/domain/tests/` with `mod.rs`, `listings.rs`, `negotiation.rs`, `permissions.rs`
+  - Added `#[cfg(test)] mod tests;` to `domain/mod.rs`
+- **Task 1.2**: Implemented test data builders in `test_support.rs`
+  - `TestListingBuilder`, `TestUserBuilder`, `TestNegotiationBuilder`
+  - `make_listing()` and `make_user()` factory functions
+- **Task 1.3**: Created `domain/listing_validation.rs` with `validate_listing_payload()`
+  - Validates price constraints, required fields, field lengths, URLs, currency codes, and listing-type-specific rules (derived from OpenAPI spec)
+  - 33 unit tests covering all validation rules

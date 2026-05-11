@@ -3,26 +3,26 @@
 ## Priority 1: Domain Logic Test Suite (Most Critical)
 
 ### 1.1 Create domain test directory structure
-- [ ] Create `backend/server/src/domain/tests/` directory with `mod.rs`
-- [ ] Add `mod tests;` to `backend/server/src/domain/mod.rs`
-- [ ] Create sub-module files: `listings.rs`, `negotiation.rs`, `permissions.rs`
-- [ ] Add `serde_json` to dev-dependencies if needed for test support
+- [x] Create `backend/server/src/domain/tests/` directory with `mod.rs`
+- [x] Add `mod tests;` to `backend/server/src/domain/mod.rs`
+- [x] Create sub-module files: `listings.rs`, `negotiation.rs`, `permissions.rs`
+- [x] Add `serde_json` to dev-dependencies if needed for test support
 
 ### 1.2 Implement test data builders for domain objects
-- [ ] Define `TestListingBuilder` struct with builder pattern methods
-- [ ] Implement `TestUserBuilder` for claims/actor contexts
-- [ ] Implement `TestNegotiationBuilder` for offer states
-- [ ] Add default helper factory functions (`make_listing()`, `make_user()`)
-- [ ] Ensure builders produce valid defaults that can be selectively overridden
+- [x] Define `TestListingBuilder` struct with builder pattern methods
+- [x] Implement `TestUserBuilder` for claims/actor contexts
+- [x] Implement `TestNegotiationBuilder` for offer states
+- [x] Add default helper factory functions (`make_listing()`, `make_user()`)
+- [x] Ensure builders produce valid defaults that can be selectively overridden
 
 ### 1.3 Add tests for listing validation rules
-- [ ] Test price constraints (min > 0, max reasonable bounds)
-- [ ] Test required field validation (title, category, price, owner_id)
-- [ ] Test field length constraints (title max length, description max length)
-- [ ] Test URL validation for picture_urls entries
-- [ ] Test currency code validation (ISO 4217 compliance)
-- [ ] Test listing_type-specific validation (product vs service vs property)
-- [ ] Test validation error message correctness
+- [x] Test price constraints (min > 0, max reasonable bounds)
+- [x] Test required field validation (title, category, price, owner_id)
+- [x] Test field length constraints (title max length, description max length)
+- [x] Test URL validation for picture_urls entries
+- [x] Test currency code validation (ISO 4217 compliance)
+- [x] Test listing_type-specific validation (product vs service vs property)
+- [x] Test validation error message correctness
 
 ### 1.4 Add tests for listing status transition logic
 - [ ] Test valid transitions: Active → Sold, Active → Archived, Active → Draft
