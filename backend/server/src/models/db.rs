@@ -40,6 +40,151 @@ pub struct ListingRow {
     pub listing_type: String, // "product", "service", or "property"
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use marketplace_api_contract::{ListingType, Price};
+
+    #[test]
+    fn test_listing_row_into_payload_product() {
+        let row = ListingRow {
+            listing_id: "lst_123".to_string(),
+            owner_id: "owner_456".to_string(),
+            schema_version: "1.0".to_string(),
+            category: Category::Laptop,
+            product_name: "Test Laptop".to_string(),
+            item_condition: Condition::New,
+            price_currency: "USD".to_string(),
+            price_amount: 1000.0,
+            country_code: "US".to_string(),
+            country_name: "United States".to_string(),
+            city: "New York".to_string(),
+            picture_urls: vec!["url1".to_string()],
+            description: "A test laptop".to_string(),
+            attributes: None,
+            status: ListingStatus::Active,
+            version: 1,
+            create_idempotency_key: "key".to_string(),
+            search_text: "laptop".to_string(),
+            created_at: "2023-01-01T00:00:00Z".to_string(),
+            updated_at: "2023-01-01T00:00:00Z".to_string(),
+            sku: Some("SKU123".to_string()),
+            quantity: Some(5),
+            shipping_info: None,
+            condition_details: Some("Brand new".to_string()),
+            seller_notes: Some("Great item".to_string()),
+            latitude: Some(40.7128),
+            longitude: Some(-74.0060),
+            geolocation_opt_out: Some(false),
+            listing_type: "product".to_string(),
+        };
+
+        let payload = row.into_payload();
+        assert_eq!(payload.listing_type, ListingType::Product);
+        assert_eq!(payload.category, Some(Category::Laptop));
+        assert_eq!(payload.condition, Some(Condition::New));
+        assert_eq!(
+            payload.price,
+            Price {
+                currency: "USD".to_string(),
+                amount: 1000.0
+            }
+        );
+        assert_eq!(payload.title, "Test Laptop");
+        assert_eq!(payload.sku, Some("SKU123".to_string()));
+        assert_eq!(payload.quantity, Some(5));
+    }
+
+    #[test]
+    fn test_listing_row_into_payload_service() {
+        let row = ListingRow {
+            listing_id: "lst_124".to_string(),
+            owner_id: "owner_457".to_string(),
+            schema_version: "1.0".to_string(),
+            category: Category::Laptop, // Ignored for service
+            product_name: "Cleaning Service".to_string(),
+            item_condition: Condition::New, // Ignored
+            price_currency: "USD".to_string(),
+            price_amount: 50.0,
+            country_code: "US".to_string(),
+            country_name: "United States".to_string(),
+            city: "New York".to_string(),
+            picture_urls: vec![],
+            description: "Cleaning service".to_string(),
+            attributes: None,
+            status: ListingStatus::Active,
+            version: 1,
+            create_idempotency_key: "key".to_string(),
+            search_text: "cleaning".to_string(),
+            created_at: "2023-01-01T00:00:00Z".to_string(),
+            updated_at: "2023-01-01T00:00:00Z".to_string(),
+            sku: None,
+            quantity: None,
+            shipping_info: None,
+            condition_details: None,
+            seller_notes: None,
+            latitude: None,
+            longitude: None,
+            geolocation_opt_out: None,
+            listing_type: "service".to_string(),
+        };
+
+        let payload = row.into_payload();
+        assert_eq!(payload.listing_type, ListingType::Service);
+        assert!(payload.category.is_none());
+        assert!(payload.condition.is_none());
+        assert_eq!(
+            payload.price,
+            Price {
+                currency: "USD".to_string(),
+                amount: 50.0
+            }
+        );
+        assert_eq!(payload.title, "Cleaning Service");
+    }
+
+    #[test]
+    fn test_listing_row_into_payload_default_product() {
+        let row = ListingRow {
+            listing_id: "lst_126".to_string(),
+            owner_id: "owner_459".to_string(),
+            schema_version: "1.0".to_string(),
+            category: Category::Laptop,
+            product_name: "Default Product".to_string(),
+            item_condition: Condition::New,
+            price_currency: "USD".to_string(),
+            price_amount: 100.0,
+            country_code: "US".to_string(),
+            country_name: "United States".to_string(),
+            city: "New York".to_string(),
+            picture_urls: vec![],
+            description: "Default".to_string(),
+            attributes: None,
+            status: ListingStatus::Active,
+            version: 1,
+            create_idempotency_key: "key".to_string(),
+            search_text: "product".to_string(),
+            created_at: "2023-01-01T00:00:00Z".to_string(),
+            updated_at: "2023-01-01T00:00:00Z".to_string(),
+            sku: None,
+            quantity: Some(1), // Should be filtered out
+            shipping_info: Some(serde_json::json!({"method": "standard"})),
+            condition_details: None,
+            seller_notes: None,
+            latitude: None,
+            longitude: None,
+            geolocation_opt_out: None,
+            listing_type: "unknown".to_string(), // Should default to Product
+        };
+
+        let payload = row.into_payload();
+        assert_eq!(payload.listing_type, ListingType::Product);
+        assert_eq!(payload.category, Some(Category::Laptop));
+        assert_eq!(payload.condition, Some(Condition::New));
+        assert!(payload.quantity.is_none()); // Filtered out since 1
+    }
+}
+
 impl ListingRow {
     pub fn into_payload(self) -> ListingPayload {
         // Convert listing_type string to enum

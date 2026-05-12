@@ -12,3 +12,15 @@ pub trait AgentCredentialRepository: Send + Sync {
 pub fn not_found(message: impl Into<String>) -> RepositoryError {
     RepositoryError::new(RepositoryErrorKind::NotFound, message)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_not_found_error() {
+        let error = not_found("agent not found");
+        assert_eq!(error.kind, RepositoryErrorKind::NotFound);
+        assert_eq!(error.message, "agent not found");
+    }
+}

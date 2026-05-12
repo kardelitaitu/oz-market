@@ -12,6 +12,8 @@ pub enum IdempotencyOperation {
     CreateListing,
     OpenNegotiation,
     SubmitOffer,
+    AcceptNegotiation,
+    RejectNegotiation,
     RequestContactReveal,
     ApproveContactReveal,
 }
@@ -22,6 +24,8 @@ impl IdempotencyOperation {
             Self::CreateListing => "create_listing",
             Self::OpenNegotiation => "open_negotiation",
             Self::SubmitOffer => "submit_offer",
+            Self::AcceptNegotiation => "accept_negotiation",
+            Self::RejectNegotiation => "reject_negotiation",
             Self::RequestContactReveal => "request_contact_reveal",
             Self::ApproveContactReveal => "approve_contact_reveal",
         }

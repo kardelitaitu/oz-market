@@ -329,3 +329,142 @@ impl ReviewRepository for PostgresReviewRepository {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_in_memory_create_review_success() {
+        let repo = InMemoryReviewRepository::new();
+        let result = repo
+            .create_review(
+                "rev_123",
+                "lst_456",
+                "seller_789",
+                "buyer_101",
+                5,
+                "Great product",
+                Some("Highly recommend"),
+            )
+            .await;
+        assert!(result.is_ok());
+        let review = result.unwrap();
+        assert_eq!(review.review_id, "rev_123");
+        assert_eq!(review.rating, 5);
+        assert_eq!(review.status, "pending");
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_reviews_for_listing() {
+        let repo = InMemoryReviewRepository::new();
+        repo.create_review(
+            "rev_123",
+            "lst_456",
+            "seller_789",
+            "buyer_101",
+            5,
+            "Great",
+            None,
+        )
+        .await
+        .unwrap();
+        repo.create_review(
+            "rev_124",
+            "lst_789",
+            "seller_999",
+            "buyer_102",
+            4,
+            "Good",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let result = repo.get_reviews_for_listing("lst_456").await;
+        assert!(result.is_ok());
+        let reviews = result.unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].review_id, "rev_123");
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_reviews_for_seller() {
+        let repo = InMemoryReviewRepository::new();
+        repo.create_review(
+            "rev_123",
+            "lst_456",
+            "seller_789",
+            "buyer_101",
+            5,
+            "Great",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let result = repo.get_reviews_for_seller("seller_789").await;
+        assert!(result.is_ok());
+        let reviews = result.unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].seller_account_id, "seller_789");
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_update_review_status() {
+        let repo = InMemoryReviewRepository::new();
+        repo.create_review(
+            "rev_123",
+            "lst_456",
+            "seller_789",
+            "buyer_101",
+            5,
+            "Great",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let result = repo.update_review_status("rev_123", "approved").await;
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+        assert!(updated.is_some());
+        assert_eq!(updated.unwrap().status, "approved");
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_update_review_status_not_found() {
+        let repo = InMemoryReviewRepository::new();
+        let result = repo.update_review_status("nonexistent", "approved").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_by_id_found() {
+        let repo = InMemoryReviewRepository::new();
+        repo.create_review(
+            "rev_123",
+            "lst_456",
+            "seller_789",
+            "buyer_101",
+            5,
+            "Great",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let result = repo.get_by_id("rev_123").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_by_id_not_found() {
+        let repo = InMemoryReviewRepository::new();
+        let result = repo.get_by_id("nonexistent").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+}

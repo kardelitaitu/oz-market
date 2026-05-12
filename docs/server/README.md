@@ -19,7 +19,7 @@ The server is **production-ready** with:
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| **Performance** | **42,000+ ops/s** | 8.2× target! (5,000 ops/s) |
+| **Performance** | **57,000+ ops/s** | 11.4× target (5,000 ops/s) in benchmark-safe modes |
 | **Tracing + Metrics** | ✅ | tracing-actix-web, metrics-exporter-prometheus |
 | **Health Checks** | ✅ | Deep DB connectivity check |
 | **AI Prompt Cache** | ✅ | Moka-based (docs/server/ai-cache.md) |
@@ -138,7 +138,7 @@ The MCP server uses **stdio transport** and delegates to the same `MarketplaceAp
 
 ## Performance Benchmarks
 
-**Achieved**: **42,000+ ops/s** average (8.2× above 5,000 target!)
+**Achieved**: **57,000+ ops/s** peak search throughput (11.4× above 5,000 target)
 
 | Benchmark | Ops/Sec | vs Target (5k) |
 |-----------|---------|------------------|
@@ -150,6 +150,26 @@ The MCP server uses **stdio transport** and delegates to the same `MarketplaceAp
 | `seller:` prefix search | **27,803** | **5.5×** ✅ |
 | `near_me=true` (no coords) | **43,752** | **8.7×** ✅ |
 | Get Listing (cached) | **48,473** | **9.7×** ✅ |
+
+### HTTP Bench Baseline (2026-05-12)
+
+`bench_concurrent` now supports explicit claims modes:
+
+- `public`: no auth claims header (raw transport + query throughput)
+- `rotating`: authenticated requests with rotating `sub` to avoid single-bucket rate limiting
+- `fixed`: authenticated requests with single fixed `sub` (expected to hit search rate limit)
+
+| Mode | Search 100 | Search 200 | Search 500 | Notes |
+|------|------------|------------|------------|-------|
+| `public` | 57,733 ops/s | 57,350 ops/s | 51,569 ops/s | 0% `429` |
+| `rotating` | 57,418 ops/s | 59,140 ops/s | 47,946 ops/s | 0% `429` |
+| `fixed` (2k requests) | 1,765 ops/s | 0 ops/s | 0 ops/s | 97-100% `429` rate-limited |
+
+Baseline artifacts:
+
+- `docs/testing/benchmarks/http-bench-concurrent-public-2026-05-12.txt`
+- `docs/testing/benchmarks/http-bench-concurrent-rotating-2026-05-12.txt`
+- `docs/testing/benchmarks/http-bench-concurrent-fixed-2026-05-12.txt`
 
 **Test Environment**:
 - 100,160 listings (100 per seller average)
@@ -203,7 +223,7 @@ The server includes:
 | Run server | `./target/release/marketplace-server` |
 | View API docs | `http://localhost:3003/docs` |
 | Get OpenAPI JSON | `curl http://localhost:3003/api-docs/openapi.json` |
-| Run benchmarks | `./target/release/bench_concurrent "http://..." 5000 50` |
+| Run benchmarks | `./target/release/bench_concurrent "http://..." 5000 "100,200,500" "rotating"` |
 | Check health | `curl http://localhost:3003/health` |
 | View metrics | `curl http://localhost:3003/metrics` |
 

@@ -295,45 +295,37 @@ where
         claims: &Claims,
         negotiation_id: &str,
     ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
-        let from_store = self.negotiations.get_negotiation(negotiation_id).await?;
-        if let Some(mut response) = from_store {
-            let reservation = self
-                .reservations
-                .get_active_by_listing(&response.listing_id)
-                .await?;
-            response.reservation_lease_id = reservation.map(|lease| lease.lease_id);
-            return Ok(response);
-        }
+        let mut response = self
+            .negotiations
+            .get_negotiation(negotiation_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
+            })?;
 
-        let listing_id = negotiation_id
-            .strip_prefix("neg_")
-            .unwrap_or(negotiation_id);
         let listing = self
             .search
-            .get_listing(Some(claims), listing_id)
+            .get_listing(Some(claims), &response.listing_id)
             .await?
             .ok_or_else(|| {
                 RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
             })?;
-        let reservation = self.reservations.get_active_by_listing(listing_id).await?;
-        let status = if reservation.is_some() {
-            NegotiationStatus::Reserved
-        } else {
-            NegotiationStatus::Open
-        };
-        Ok(NegotiationResponse {
-            negotiation_id: negotiation_id.to_string(),
-            listing_id: listing.listing_id,
-            buyer_agent_id: claims.buyer_agent_id.clone().unwrap_or_default(),
-            status,
-            offer_currency: listing.listing.price.currency,
-            latest_offer_amount: listing.listing.price.amount,
-            reservation_lease_id: reservation.map(|lease| lease.lease_id),
-            final_offer_amount: None,
-            offer_history: vec![],
-            version: listing.version,
-            updated_at: now_marker(),
-        })
+
+        crate::services::authz::authorize(
+            claims,
+            marketplace_auth_core::Action::GetNegotiationStatus,
+            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+                seller_account_id: listing.listing.owner_id.clone(),
+                buyer_agent_id: response.buyer_agent_id.clone(),
+            },
+        )?;
+
+        let reservation = self
+            .reservations
+            .get_active_by_listing(&response.listing_id)
+            .await?;
+        response.reservation_lease_id = reservation.map(|lease| lease.lease_id);
+        Ok(response)
     }
 
     pub async fn submit_offer(
@@ -344,6 +336,14 @@ where
         request_fingerprint: &str,
         now_rfc3339: &str,
     ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+        if !request.offer_amount.is_finite() || request.offer_amount <= 0.0 {
+            return Err(RepositoryError::new(
+                RepositoryErrorKind::Validation,
+                "offer_amount must be a positive finite number",
+            )
+            .into());
+        }
+
         let current = self
             .negotiations
             .get_negotiation(negotiation_id)
@@ -351,6 +351,20 @@ where
             .ok_or_else(|| {
                 RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
             })?;
+
+        match current.status {
+            NegotiationStatus::Open
+            | NegotiationStatus::Countered
+            | NegotiationStatus::NearClose
+            | NegotiationStatus::Reserved => {}
+            _ => {
+                return Err(RepositoryError::new(
+                    RepositoryErrorKind::Conflict,
+                    "negotiation cannot accept new offers in current state",
+                )
+                .into())
+            }
+        }
 
         let listing = self
             .search
@@ -479,6 +493,20 @@ where
             },
         )?;
 
+        match current.status {
+            NegotiationStatus::Open
+            | NegotiationStatus::Countered
+            | NegotiationStatus::NearClose
+            | NegotiationStatus::Reserved => {}
+            _ => {
+                return Err(RepositoryError::new(
+                    RepositoryErrorKind::Conflict,
+                    "negotiation cannot be accepted in current state",
+                )
+                .into())
+            }
+        }
+
         if listing.status != ListingStatus::Active {
             return Err(RepositoryError::new(
                 RepositoryErrorKind::Conflict,
@@ -501,7 +529,7 @@ where
 
         let attempt = crate::services::idempotency::IdempotencyAttempt {
             actor_subject: &claims.sub,
-            operation: crate::services::idempotency::IdempotencyOperation::SubmitOffer,
+            operation: crate::services::idempotency::IdempotencyOperation::AcceptNegotiation,
             idempotency_key: &request.idempotency_key,
             request_fingerprint,
             ttl_seconds: 24 * 60 * 60,
@@ -610,7 +638,8 @@ where
         match current.status {
             NegotiationStatus::Open
             | NegotiationStatus::Countered
-            | NegotiationStatus::NearClose => {}
+            | NegotiationStatus::NearClose
+            | NegotiationStatus::Reserved => {}
             _ => {
                 return Err(RepositoryError::new(
                     RepositoryErrorKind::Conflict,
@@ -622,7 +651,7 @@ where
 
         let attempt = crate::services::idempotency::IdempotencyAttempt {
             actor_subject: &claims.sub,
-            operation: crate::services::idempotency::IdempotencyOperation::SubmitOffer,
+            operation: crate::services::idempotency::IdempotencyOperation::RejectNegotiation,
             idempotency_key: &request.idempotency_key,
             request_fingerprint,
             ttl_seconds: 24 * 60 * 60,
@@ -1251,11 +1280,12 @@ mod tests {
     use crate::repositories::{ListingRepository, RepositoryError, RepositoryErrorKind};
     use crate::services::idempotency::InMemoryIdempotencyRepository;
     use marketplace_api_contract::{
-        Category, Condition, ContactRevealStatus, CreateListingRequest, ListingLocation,
-        ListingPayload, ListingStatus, ListingSummary, OpenNegotiationRequest, Price,
-        RequestContactRevealRequest, SearchRequest, SearchResponse, SearchSort,
+        AcceptNegotiationRequest, Category, Condition, ContactRevealStatus, CreateListingRequest,
+        ListingLocation, ListingPayload, ListingStatus, ListingSummary, OpenNegotiationRequest,
+        Price, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
+        SearchResponse, SearchSort, SubmitOfferRequest,
     };
-    use marketplace_auth_core::Claims;
+    use marketplace_auth_core::{Claims, Role, Scope};
     use serde_json::json;
 
     struct SoldListingRepository;
@@ -1311,6 +1341,19 @@ mod tests {
 
     fn claims() -> Claims {
         crate::test_support::seller_claims()
+    }
+
+    fn negotiator_claims() -> Claims {
+        let mut claims = claims();
+        if !claims
+            .scopes
+            .contains(&marketplace_auth_core::Scope::NegotiationOfferSubmit)
+        {
+            claims
+                .scopes
+                .push(marketplace_auth_core::Scope::NegotiationOfferSubmit);
+        }
+        claims
     }
 
     fn admin_claims() -> Claims {
@@ -2045,6 +2088,254 @@ mod tests {
         let successes = results.iter().filter(|result| result.is_ok()).count();
         assert_eq!(successes, 1);
         assert_eq!(conflicts, 1);
+    }
+
+    #[tokio::test]
+    async fn shared_app_negotiation_lifecycle_from_reserved_to_closed() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let claims = negotiator_claims();
+        let listing = app
+            .create_listing(
+                &claims,
+                &create_request(),
+                "fp-create-lifecycle",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+
+        let opened = app
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: listing.listing_id.clone(),
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-lifecycle".to_string(),
+                },
+                "fp-open-lifecycle",
+                "2026-05-04T00:00:01Z",
+            )
+            .await
+            .unwrap();
+        assert_eq!(opened.status, NegotiationStatus::Reserved);
+
+        let submitted = app
+            .submit_offer(
+                &claims,
+                &opened.negotiation_id,
+                &SubmitOfferRequest {
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 430.0,
+                    idempotency_key: "idem-offer-lifecycle".to_string(),
+                },
+                "fp-offer-lifecycle",
+                "2026-05-04T00:00:02Z",
+            )
+            .await
+            .unwrap();
+        assert_eq!(submitted.status, NegotiationStatus::Countered);
+        assert_eq!(submitted.latest_offer_amount, 430.0);
+        assert_eq!(submitted.offer_history.len(), 2);
+
+        let accepted = app
+            .accept_negotiation(
+                &claims,
+                &opened.negotiation_id,
+                &AcceptNegotiationRequest {
+                    idempotency_key: "idem-accept-lifecycle".to_string(),
+                },
+                "fp-accept-lifecycle",
+                "2026-05-04T00:00:03Z",
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted.status, NegotiationStatus::Closed);
+        assert_eq!(accepted.final_offer_amount, Some(430.0));
+        assert_eq!(accepted.offer_history.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn shared_app_submit_offer_rejects_invalid_amount() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let claims = negotiator_claims();
+        let listing = app
+            .create_listing(
+                &claims,
+                &create_request(),
+                "fp-create-invalid-offer",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let opened = app
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: listing.listing_id,
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-invalid-offer".to_string(),
+                },
+                "fp-open-invalid-offer",
+                "2026-05-04T00:00:01Z",
+            )
+            .await
+            .unwrap();
+
+        let result = app
+            .submit_offer(
+                &claims,
+                &opened.negotiation_id,
+                &SubmitOfferRequest {
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 0.0,
+                    idempotency_key: "idem-offer-invalid".to_string(),
+                },
+                "fp-offer-invalid",
+                "2026-05-04T00:00:02Z",
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(HandlerError::Repository(RepositoryError {
+                kind: RepositoryErrorKind::Validation,
+                ..
+            }))
+        ));
+    }
+
+    #[tokio::test]
+    async fn shared_app_reject_reserved_negotiation_releases_reservation() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let claims = negotiator_claims();
+        let listing = app
+            .create_listing(
+                &claims,
+                &create_request(),
+                "fp-create-reject-reserved",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let opened = app
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: listing.listing_id,
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-reject-reserved".to_string(),
+                },
+                "fp-open-reject-reserved",
+                "2026-05-04T00:00:01Z",
+            )
+            .await
+            .unwrap();
+
+        let rejected = app
+            .reject_negotiation(
+                &claims,
+                &opened.negotiation_id,
+                &RejectNegotiationRequest {
+                    idempotency_key: "idem-reject-reserved".to_string(),
+                },
+                "fp-reject-reserved",
+                "2026-05-04T00:00:02Z",
+            )
+            .await
+            .unwrap();
+        assert_eq!(rejected.status, NegotiationStatus::Cancelled);
+
+        let refreshed = app
+            .get_negotiation_status(&claims, &opened.negotiation_id)
+            .await
+            .unwrap();
+        assert!(refreshed.reservation_lease_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn shared_app_blocks_get_negotiation_status_for_unrelated_buyer() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let claims = negotiator_claims();
+        let listing = app
+            .create_listing(
+                &claims,
+                &create_request(),
+                "fp-create-status-authz",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let opened = app
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: listing.listing_id,
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-status-authz".to_string(),
+                },
+                "fp-open-status-authz",
+                "2026-05-04T00:00:01Z",
+            )
+            .await
+            .unwrap();
+
+        let outsider = Claims {
+            sub: "sub-outsider".to_string(),
+            roles: vec![Role::BuyerNegotiator],
+            scopes: vec![Scope::NegotiationRead],
+            seller_account_id: None,
+            buyer_agent_id: Some("buyer-2".to_string()),
+            hardware_id: None,
+            exp: None,
+        };
+        let result = app
+            .get_negotiation_status(&outsider, &opened.negotiation_id)
+            .await;
+        assert!(matches!(result, Err(HandlerError::Authz(_))));
     }
 
     // -----------------------------------------------------------------------

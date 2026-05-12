@@ -79,6 +79,23 @@ Use the repo-local Postgres container when you want to run backend benchmarks or
 2. run `backend/server/scripts/run-local-postgres-dev.ps1` to do both the benchmark and the Postgres tests
 3. use `backend/server/scripts/run-phase5-bench-local.ps1` or `backend/server/scripts/run-postgres-tests-local.ps1` when you want to run one step only
 
+## Benchmark Baseline (2026-05-12)
+
+Latest HTTP benchmark baseline (`bench_concurrent`) against local Postgres:
+
+| Mode | Search 100 | Search 200 | Search 500 | 429 Rate (search) |
+|---|---:|---:|---:|---:|
+| `public` | 57,733 ops/s | 57,350 ops/s | 51,569 ops/s | 0% |
+| `rotating` | 57,418 ops/s | 59,140 ops/s | 47,946 ops/s | 0% |
+| `fixed` (2k diagnostic) | 1,765 ops/s | 0 ops/s | 0 ops/s | 97-100% |
+
+Artifacts:
+
+- `docs/testing/benchmarks/http-bench-baseline-2026-05-12.md`
+- `docs/testing/benchmarks/http-bench-concurrent-public-2026-05-12.txt`
+- `docs/testing/benchmarks/http-bench-concurrent-rotating-2026-05-12.txt`
+- `docs/testing/benchmarks/http-bench-concurrent-fixed-2026-05-12.txt`
+
 ## LICENSE
 
 *Permission is granted to use, copy, modify, and distribute this software* 

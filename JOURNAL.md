@@ -303,3 +303,60 @@ eg_{listing_id} + PK conflict) with option tradeoffs for future reopen semantics
   - BACKEND-TEST-IMPROVEMENT.md -> docs/testing/BACKEND-TEST-IMPROVEMENT.md
   - 	odo-test-improvement.md -> docs/testing/todo-test-improvement.md
 - Removed generated coverage raw artifact ackend/build_rs_cov.profraw and added *.profraw to .gitignore to prevent future accidental tracking.
+
+## 2026-05-12 10:35
+
+- Upgraded `backend/server/src/bin/bench_concurrent.rs` with explicit claims modes: `public`, `fixed`, and `rotating` (default `rotating`) to prevent apples-to-oranges benchmark runs.
+- Added explicit `429` and `other_failures` reporting in benchmark summaries and search sweep rows so rate-limit drops are immediately visible.
+- Captured fresh HTTP baseline artifacts for `public` and `rotating` modes under `docs/testing/benchmarks/` and added a compact baseline report: `http-bench-baseline-2026-05-12.md`.
+- Updated `docs/server/README.md` benchmark documentation and quick reference command to include claims mode and current baseline behavior.
+- Why: the previous single-`sub` benchmark path was hitting the `60/min` search limiter and falsely appearing as a performance regression.
+- Added fixed-claims diagnostic artifact (`http-bench-concurrent-fixed-2026-05-12.txt`) to preserve evidence of expected 429 saturation under single-sub benchmarking.
+
+## 2026-05-12 11:05
+
+- Added a root README benchmark section (`Benchmark Baseline (2026-05-12)`) with dated `bench_concurrent` results for `public`, `rotating`, and `fixed` claims modes.
+- Linked benchmark artifacts under `docs/testing/benchmarks/` from the root README so performance evidence is visible at repo entrypoint.
+- Why: make current throughput and rate-limit behavior discoverable without requiring readers to open server-specific docs first.
+
+## 2026-05-12 12:15
+
+- Hardened negotiation read/write lifecycle in `MarketplaceApp` and repositories:
+  - `get_negotiation_status` now requires stored negotiation + participant authz (`Action::GetNegotiationStatus`) and no longer fabricates fallback negotiation responses.
+  - `submit_offer` now validates positive finite amounts and blocks invalid status transitions.
+  - `accept_negotiation` and `reject_negotiation` now enforce explicit allowed states (including reserved-path consistency) before mutation.
+- Split idempotency namespaces for negotiation actions by adding `AcceptNegotiation` and `RejectNegotiation` operations, replacing shared `SubmitOffer` operation keys for those flows.
+- Aligned transport behavior across runtimes:
+  - Actix `open_negotiation` now returns `201 Created`.
+  - TCP runtime `request_contact_reveal` now returns `202 Accepted` to match Actix.
+  - Actix error mapping now respects repository/idempotency/search error kinds (409/404/403/400/500) instead of collapsing to generic 400s.
+- Added focused app-level tests for negotiation lifecycle and authz:
+  - reserved -> submit -> accept path,
+  - reject from reserved releasing reservation,
+  - invalid offer amount rejection,
+  - negotiation status read blocked for unrelated buyer.
+- Added `Debug` derive on TCP runtime `HttpResponse` to unblock test ergonomics that use `unwrap()` on `Result<_, HttpResponse>` in unit tests.
+- Validation: `cargo check --lib` passed, `cargo test --lib shared_app_` passed (16 tests), and `cargo test --lib negotiations` passed (13 tests).
+- Note: full `cargo test` is still blocked by pre-existing integration-test issues in `backend/server/tests/e2e.rs` unrelated to this negotiation patch set.
+## 2026-05-12 07:33
+
+- Fixed failing runtime unit test http::runtime::tests::test_claims_from_headers_valid by updating the synthetic x-marketplace-claims header payload to valid current Claims JSON (roles as snake_case enum strings).
+- Revalidated status-code parity checks in runtime tests (open_negotiation => 201, request_contact_reveal => 202) and kept the e2e contract-shape test aligned with the current app constructor and routes.
+- Ran full ./check.ps1 with no skip flags: PASS for journal guard, active spec guard, cargo check, cargo fmt --check, cargo clippy (-D warnings), and cargo test --lib.
+- Why: close the last CI blocker and preserve an auditable checkpoint before moving remaining active specs.
+
+
+## 2026-05-12 13:05
+
+- Repaired checker failures after benchmark-spec activation pass.
+- Ran `cargo fmt --all` to fix formatting drift flagged in `backend/server/src/models/db.rs`.
+- Fixed clippy compile errors in `backend/server/src/models/db.rs` tests by replacing invalid `CurrencyCode::USD` usage with `"USD".to_string()` (current contract uses string currency codes).
+- Re-ran full `./check.ps1` with no skip flags: PASS on journal guard, active spec governance, cargo check, cargo fmt --check, cargo clippy (`-D warnings`), and cargo test --lib.
+- Why: restore a green, reliable baseline before continuing active spec implementation.
+
+## 2026-05-12 13:18
+
+- Activated new active spec package `0004-http-benchmark-stability` under `docs/specs/_active/` with full governance artifacts and machine-readable parity report.
+- Added `backend/coverage/` to `.gitignore` and removed generated tarpaulin HTML output from the working tree.
+- Re-ran full `./check.ps1` before commit/push: all gates passed.
+- Why: keep benchmark work spec-driven, auditable, and free from generated artifact noise.

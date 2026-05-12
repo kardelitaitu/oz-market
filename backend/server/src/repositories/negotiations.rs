@@ -199,6 +199,48 @@ fn parse_history(
     })
 }
 
+fn validate_submit_offer_request(request: &SubmitOfferRequest) -> Result<(), RepositoryError> {
+    if !request.offer_amount.is_finite() || request.offer_amount <= 0.0 {
+        return Err(RepositoryError::new(
+            RepositoryErrorKind::Validation,
+            "offer_amount must be a positive finite number",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_submit_allowed(status: NegotiationStatus) -> Result<(), RepositoryError> {
+    match status {
+        NegotiationStatus::Open
+        | NegotiationStatus::Countered
+        | NegotiationStatus::NearClose
+        | NegotiationStatus::Reserved => Ok(()),
+        _ => Err(conflict(
+            "negotiation cannot accept new offers in current state",
+        )),
+    }
+}
+
+fn ensure_accept_allowed(status: NegotiationStatus) -> Result<(), RepositoryError> {
+    match status {
+        NegotiationStatus::Open
+        | NegotiationStatus::Countered
+        | NegotiationStatus::NearClose
+        | NegotiationStatus::Reserved => Ok(()),
+        _ => Err(conflict("negotiation cannot be accepted in current state")),
+    }
+}
+
+fn ensure_reject_allowed(status: NegotiationStatus) -> Result<(), RepositoryError> {
+    match status {
+        NegotiationStatus::Open
+        | NegotiationStatus::Countered
+        | NegotiationStatus::NearClose
+        | NegotiationStatus::Reserved => Ok(()),
+        _ => Err(conflict("negotiation cannot be rejected in current state")),
+    }
+}
+
 #[derive(Default)]
 pub struct InMemoryNegotiationRepository {
     negotiations: RwLock<HashMap<String, NegotiationResponse>>,
@@ -248,6 +290,7 @@ impl NegotiationRepository for InMemoryNegotiationRepository {
         actor_role: &str,
         now_rfc3339: &str,
     ) -> Result<NegotiationResponse, RepositoryError> {
+        validate_submit_offer_request(request)?;
         let mut write = self
             .negotiations
             .write()
@@ -255,6 +298,7 @@ impl NegotiationRepository for InMemoryNegotiationRepository {
         let current = write
             .get_mut(negotiation_id)
             .ok_or_else(|| not_found("negotiation not found"))?;
+        ensure_submit_allowed(current.status)?;
         update_offer_state(current, request, actor_subject, actor_role, now_rfc3339);
         Ok(current.clone())
     }
@@ -274,6 +318,7 @@ impl NegotiationRepository for InMemoryNegotiationRepository {
         let current = write
             .get_mut(negotiation_id)
             .ok_or_else(|| not_found("negotiation not found"))?;
+        ensure_accept_allowed(current.status)?;
         update_accept_state(current, request, actor_subject, actor_role, now_rfc3339);
         Ok(current.clone())
     }
@@ -293,6 +338,7 @@ impl NegotiationRepository for InMemoryNegotiationRepository {
         let current = write
             .get_mut(negotiation_id)
             .ok_or_else(|| not_found("negotiation not found"))?;
+        ensure_reject_allowed(current.status)?;
         update_reject_state(current, request, actor_subject, actor_role, now_rfc3339);
         Ok(current.clone())
     }
@@ -433,6 +479,7 @@ impl NegotiationRepository for PostgresNegotiationRepository {
         actor_role: &str,
         now_rfc3339: &str,
     ) -> Result<NegotiationResponse, RepositoryError> {
+        validate_submit_offer_request(request)?;
         let mut tx = self
             .pool
             .begin()
@@ -463,6 +510,7 @@ impl NegotiationRepository for PostgresNegotiationRepository {
         .ok_or_else(|| not_found("negotiation not found"))?;
 
         let mut response = Self::row_to_response(&row)?;
+        ensure_submit_allowed(response.status)?;
         update_offer_state(
             &mut response,
             request,
@@ -540,6 +588,7 @@ impl NegotiationRepository for PostgresNegotiationRepository {
         .ok_or_else(|| not_found("negotiation not found"))?;
 
         let mut response = Self::row_to_response(&row)?;
+        ensure_accept_allowed(response.status)?;
         update_accept_state(
             &mut response,
             request,
@@ -613,6 +662,7 @@ impl NegotiationRepository for PostgresNegotiationRepository {
         .ok_or_else(|| not_found("negotiation not found"))?;
 
         let mut response = Self::row_to_response(&row)?;
+        ensure_reject_allowed(response.status)?;
         update_reject_state(
             &mut response,
             request,
@@ -644,5 +694,191 @@ impl NegotiationRepository for PostgresNegotiationRepository {
             .await
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use marketplace_api_contract::{NegotiationResponse, NegotiationStatus};
+
+    fn sample_negotiation() -> NegotiationResponse {
+        NegotiationResponse {
+            negotiation_id: "neg_123".to_string(),
+            listing_id: "lst_456".to_string(),
+            buyer_agent_id: "buyer_789".to_string(),
+            status: NegotiationStatus::Open,
+            offer_currency: "USD".to_string(),
+            latest_offer_amount: 100.0,
+            reservation_lease_id: None,
+            final_offer_amount: None,
+            offer_history: vec![],
+            version: 1,
+            updated_at: "2023-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_status_to_db() {
+        assert_eq!(status_to_db(NegotiationStatus::Open), "open");
+        assert_eq!(status_to_db(NegotiationStatus::Closed), "closed");
+        assert_eq!(status_to_db(NegotiationStatus::Cancelled), "cancelled");
+    }
+
+    #[test]
+    fn test_status_from_db_valid() {
+        assert_eq!(status_from_db("open").unwrap(), NegotiationStatus::Open);
+        assert_eq!(status_from_db("closed").unwrap(), NegotiationStatus::Closed);
+    }
+
+    #[test]
+    fn test_status_from_db_invalid() {
+        let err = status_from_db("invalid").unwrap_err();
+        assert_eq!(err.kind, RepositoryErrorKind::Storage);
+    }
+
+    #[test]
+    fn test_next_entry_id() {
+        assert_eq!(
+            next_entry_id("neg_123", 0, NegotiationHistoryEntryType::Offer),
+            "neg_123-offer-1"
+        );
+        assert_eq!(
+            next_entry_id("neg_123", 2, NegotiationHistoryEntryType::Accept),
+            "neg_123-accept-3"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_upsert_open_negotiation_success() {
+        let repo = InMemoryNegotiationRepository::new();
+        let negotiation = sample_negotiation();
+        let result = repo
+            .upsert_open_negotiation(&negotiation, "key", "now")
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().negotiation_id, "neg_123");
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_upsert_open_negotiation_conflict() {
+        let repo = InMemoryNegotiationRepository::new();
+        let negotiation = sample_negotiation();
+        repo.upsert_open_negotiation(&negotiation, "key", "now")
+            .await
+            .unwrap();
+        let result = repo
+            .upsert_open_negotiation(&negotiation, "key2", "now2")
+            .await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind, RepositoryErrorKind::Conflict);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_negotiation_found() {
+        let repo = InMemoryNegotiationRepository::new();
+        let negotiation = sample_negotiation();
+        repo.upsert_open_negotiation(&negotiation, "key", "now")
+            .await
+            .unwrap();
+        let result = repo.get_negotiation("neg_123").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_negotiation_not_found() {
+        let repo = InMemoryNegotiationRepository::new();
+        let result = repo.get_negotiation("nonexistent").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_submit_offer_success() {
+        let repo = InMemoryNegotiationRepository::new();
+        let negotiation = sample_negotiation();
+        repo.upsert_open_negotiation(&negotiation, "key", "now")
+            .await
+            .unwrap();
+        let request = SubmitOfferRequest {
+            offer_amount: 150.0,
+            offer_currency: "USD".to_string(),
+            idempotency_key: "offer_key".to_string(),
+        };
+        let result = repo
+            .submit_offer("neg_123", &request, "user", "buyer", "2023-01-02T00:00:00Z")
+            .await;
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+        assert_eq!(updated.status, NegotiationStatus::Countered);
+        assert_eq!(updated.latest_offer_amount, 150.0);
+        assert_eq!(updated.offer_history.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_submit_offer_not_found() {
+        let repo = InMemoryNegotiationRepository::new();
+        let request = SubmitOfferRequest {
+            offer_amount: 150.0,
+            offer_currency: "USD".to_string(),
+            idempotency_key: "offer_key".to_string(),
+        };
+        let result = repo
+            .submit_offer("nonexistent", &request, "user", "buyer", "now")
+            .await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind, RepositoryErrorKind::NotFound);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_accept_negotiation_success() {
+        let repo = InMemoryNegotiationRepository::new();
+        let negotiation = sample_negotiation();
+        repo.upsert_open_negotiation(&negotiation, "key", "now")
+            .await
+            .unwrap();
+        let request = AcceptNegotiationRequest {
+            idempotency_key: "accept_key".to_string(),
+        };
+        let result = repo
+            .accept_negotiation(
+                "neg_123",
+                &request,
+                "user",
+                "seller",
+                "2023-01-02T00:00:00Z",
+            )
+            .await;
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+        assert_eq!(updated.status, NegotiationStatus::Closed);
+        assert_eq!(updated.final_offer_amount, Some(100.0));
+        assert_eq!(updated.offer_history.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_reject_negotiation_success() {
+        let repo = InMemoryNegotiationRepository::new();
+        let negotiation = sample_negotiation();
+        repo.upsert_open_negotiation(&negotiation, "key", "now")
+            .await
+            .unwrap();
+        let request = RejectNegotiationRequest {
+            idempotency_key: "reject_key".to_string(),
+        };
+        let result = repo
+            .reject_negotiation(
+                "neg_123",
+                &request,
+                "user",
+                "seller",
+                "2023-01-02T00:00:00Z",
+            )
+            .await;
+        assert!(result.is_ok());
+        let updated = result.unwrap();
+        assert_eq!(updated.status, NegotiationStatus::Cancelled);
+        assert_eq!(updated.offer_history.len(), 1);
     }
 }

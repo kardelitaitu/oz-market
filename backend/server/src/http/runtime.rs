@@ -150,6 +150,7 @@ struct HttpRequest {
     body: Vec<u8>,
 }
 
+#[derive(Debug)]
 struct HttpResponse {
     status: u16,
     body: Vec<u8>,
@@ -722,7 +723,7 @@ where
                         )
                         .await
                     {
-                        Ok(reveal) => json_response(200, serde_json::to_value(reveal).unwrap()),
+                        Ok(reveal) => json_response(202, serde_json::to_value(reveal).unwrap()),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -1276,7 +1277,7 @@ mod tests {
         let app = build_runtime_app_for_test();
         let accept_app = Arc::clone(&app);
         tokio::spawn(async move {
-            for _ in 0..7 {
+            for _ in 0..8 {
                 let (stream, _) = listener.accept().await.unwrap();
                 let app = Arc::clone(&accept_app);
                 let observability = Arc::new(ServerObservability::new());
@@ -1341,6 +1342,26 @@ mod tests {
         )
         .await;
         assert!(open.contains("\"status\":\"reserved\""));
+        assert!(open.starts_with("HTTP/1.1 201"));
+
+        let reveal = round_trip(
+            &address,
+            &format!(
+                "POST /v1/negotiations/neg_lst_000001/request-contact-reveal HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-Marketplace-Claims: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                claims_header(),
+                serde_json::json!({
+                    "idempotency_key": "idem-reveal-1"
+                })
+                .to_string()
+                .len(),
+                serde_json::json!({
+                    "idempotency_key": "idem-reveal-1"
+                })
+            ),
+        )
+        .await;
+        assert!(reveal.starts_with("HTTP/1.1 202"));
+        assert!(reveal.contains("\"reveal_status\":\"pending\""));
 
         let internal_listing = round_trip(
             &address,
@@ -1616,5 +1637,108 @@ mod tests {
         )
         .await;
         assert!(archived.contains("\"status\":\"archived\""));
+    }
+
+    #[test]
+    fn test_claims_from_headers_valid() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "x-marketplace-claims".to_string(),
+            r#"{"sub":"user123","roles":["seller_listing_writer"]}"#.to_string(),
+        );
+        let result = claims_from_headers(&headers);
+        assert!(result.is_ok());
+        let claims = result.unwrap();
+        assert_eq!(claims.sub, "user123");
+    }
+
+    #[test]
+    fn test_claims_from_headers_invalid_json() {
+        let mut headers = HashMap::new();
+        headers.insert("x-marketplace-claims".to_string(), "invalid".to_string());
+        let result = claims_from_headers(&headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_claims_from_headers_missing() {
+        let headers = HashMap::new();
+        let result = claims_from_headers(&headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_authorize_internal_read_admin_allowed() {
+        let claims = Claims {
+            sub: "admin".to_string(),
+            roles: vec![Role::Admin],
+            scopes: vec![],
+            seller_account_id: None,
+            buyer_agent_id: None,
+            hardware_id: None,
+            exp: None,
+        };
+        let result = authorize_internal_read(&claims);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_authorize_internal_read_reviewer_allowed() {
+        let claims = Claims {
+            sub: "reviewer".to_string(),
+            roles: vec![Role::SupportReviewer],
+            scopes: vec![],
+            seller_account_id: None,
+            buyer_agent_id: None,
+            hardware_id: None,
+            exp: None,
+        };
+        let result = authorize_internal_read(&claims);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_authorize_internal_read_user_denied() {
+        let claims = Claims {
+            sub: "user".to_string(),
+            roles: vec![Role::SellerListingWriter],
+            scopes: vec![],
+            seller_account_id: None,
+            buyer_agent_id: None,
+            hardware_id: None,
+            exp: None,
+        };
+        let result = authorize_internal_read(&claims);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_authorize_internal_write_admin_allowed() {
+        let claims = Claims {
+            sub: "admin".to_string(),
+            roles: vec![Role::Admin],
+            scopes: vec![],
+            seller_account_id: None,
+            buyer_agent_id: None,
+            hardware_id: None,
+            exp: None,
+        };
+        let result = authorize_internal_write(&claims);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_authorize_internal_write_user_denied() {
+        let claims = Claims {
+            sub: "user".to_string(),
+            roles: vec![Role::SellerListingWriter],
+            scopes: vec![],
+            seller_account_id: None,
+            buyer_agent_id: None,
+            hardware_id: None,
+            exp: None,
+        };
+        let result = authorize_internal_write(&claims);
+        assert!(result.is_err());
     }
 }

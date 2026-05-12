@@ -144,4 +144,62 @@ mod tests {
         assert_eq!(events[0].event_id, 1);
         assert_eq!(events[0].topic, "listing.created");
     }
+
+    #[tokio::test]
+    async fn append_outbox_event_preserves_existing_id() {
+        let repo = InMemoryOutboxEventRepository::new();
+        repo.append_event(OutboxEventRow {
+            event_id: 42,
+            topic: "negotiation.started".to_string(),
+            aggregate_type: "negotiation".to_string(),
+            aggregate_id: "neg_1".to_string(),
+            payload: json!({"amount": 100}),
+            available_at: "2026-05-05T00:00:00Z".to_string(),
+            published_at: None,
+            attempt_count: 1,
+            created_at: "2026-05-05T00:00:00Z".to_string(),
+        })
+        .await
+        .unwrap();
+        let events = repo.events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_id, 42);
+    }
+
+    #[tokio::test]
+    async fn append_multiple_outbox_events_maintains_order() {
+        let repo = InMemoryOutboxEventRepository::new();
+        repo.append_event(OutboxEventRow {
+            event_id: 0,
+            topic: "event1".to_string(),
+            aggregate_type: "type".to_string(),
+            aggregate_id: "id1".to_string(),
+            payload: json!({"seq": 1}),
+            available_at: "2026-05-04T00:00:00Z".to_string(),
+            published_at: None,
+            attempt_count: 0,
+            created_at: "2026-05-04T00:00:00Z".to_string(),
+        })
+        .await
+        .unwrap();
+        repo.append_event(OutboxEventRow {
+            event_id: 0,
+            topic: "event2".to_string(),
+            aggregate_type: "type".to_string(),
+            aggregate_id: "id2".to_string(),
+            payload: json!({"seq": 2}),
+            available_at: "2026-05-04T00:00:01Z".to_string(),
+            published_at: None,
+            attempt_count: 0,
+            created_at: "2026-05-04T00:00:01Z".to_string(),
+        })
+        .await
+        .unwrap();
+        let events = repo.events();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event_id, 1);
+        assert_eq!(events[0].payload["seq"], 1);
+        assert_eq!(events[1].event_id, 2);
+        assert_eq!(events[1].payload["seq"], 2);
+    }
 }

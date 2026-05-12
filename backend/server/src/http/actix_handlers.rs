@@ -92,18 +92,70 @@ fn map_handler_error(error: &HandlerError) -> HttpResponse {
             "error_code": "FORBIDDEN",
             "message": authz_error.to_string()
         })),
-        Idempotency(idem_error) => HttpResponse::Conflict().json(json!({
-            "error_code": "IDEMPOTENCY_CONFLICT",
-            "message": format!("{:?}", idem_error)
-        })),
-        Search(search_error) => HttpResponse::BadRequest().json(json!({
-            "error_code": "SEARCH_ERROR",
-            "message": format!("{:?}", search_error)
-        })),
-        Repository(repo_error) => HttpResponse::BadRequest().json(json!({
-            "error_code": "REPOSITORY_ERROR",
-            "message": repo_error.to_string()
-        })),
+        Idempotency(idem_error) => match idem_error.kind {
+            crate::services::idempotency::IdempotencyErrorKind::InvalidKey => {
+                HttpResponse::BadRequest().json(json!({
+                    "error_code": "INVALID_FIELD",
+                    "message": idem_error.message
+                }))
+            }
+            crate::services::idempotency::IdempotencyErrorKind::Conflict => {
+                HttpResponse::Conflict().json(json!({
+                    "error_code": "CONFLICT",
+                    "message": idem_error.message
+                }))
+            }
+            crate::services::idempotency::IdempotencyErrorKind::Storage => {
+                HttpResponse::InternalServerError().json(json!({
+                    "error_code": "INTERNAL_ERROR",
+                    "message": idem_error.message
+                }))
+            }
+        },
+        Search(search_error) => match search_error {
+            crate::services::search::SearchError::Authz(authz_error) => HttpResponse::Forbidden()
+                .json(json!({
+                    "error_code": "FORBIDDEN",
+                    "message": authz_error.to_string()
+                })),
+            crate::services::search::SearchError::Storage(storage_error) => {
+                HttpResponse::InternalServerError().json(json!({
+                    "error_code": "INTERNAL_ERROR",
+                    "message": storage_error.to_string()
+                }))
+            }
+        },
+        Repository(repo_error) => match repo_error.kind {
+            crate::repositories::RepositoryErrorKind::Conflict => {
+                HttpResponse::Conflict().json(json!({
+                    "error_code": "CONFLICT",
+                    "message": repo_error.message
+                }))
+            }
+            crate::repositories::RepositoryErrorKind::NotFound => {
+                HttpResponse::NotFound().json(json!({
+                    "error_code": "NOT_FOUND",
+                    "message": repo_error.message
+                }))
+            }
+            crate::repositories::RepositoryErrorKind::PermissionDenied => HttpResponse::Forbidden()
+                .json(json!({
+                    "error_code": "FORBIDDEN",
+                    "message": repo_error.message
+                })),
+            crate::repositories::RepositoryErrorKind::Validation => HttpResponse::BadRequest()
+                .json(json!({
+                    "error_code": "INVALID_FIELD",
+                    "message": repo_error.message
+                })),
+            crate::repositories::RepositoryErrorKind::Storage
+            | crate::repositories::RepositoryErrorKind::Unknown => {
+                HttpResponse::InternalServerError().json(json!({
+                    "error_code": "INTERNAL_ERROR",
+                    "message": repo_error.message
+                }))
+            }
+        },
         QuotaExceeded { message } => HttpResponse::TooManyRequests().json(json!({
             "error_code": "QUOTA_EXCEEDED",
             "message": message
@@ -391,7 +443,7 @@ pub async fn open_negotiation(
         .open_negotiation(&claims, &body, &fingerprint, &now)
         .await
     {
-        Ok(response) => HttpResponse::Ok().json(response),
+        Ok(response) => HttpResponse::Created().json(response),
         Err(e) => map_handler_error(&e),
     }
 }
@@ -955,6 +1007,8 @@ pub async fn reject_review(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use actix_web::http::StatusCode;
+    use actix_web::test::TestRequest;
 
     #[test]
     fn test_parse_fields_param_single() {
@@ -1026,5 +1080,138 @@ mod tests {
         fields.insert("x".to_string());
         let result = filter_listing_fields(&json, &fields);
         assert_eq!(result, json);
+    }
+
+    #[test]
+    fn test_extract_claims_valid() {
+        use crate::test_support::make_user;
+        let claims = make_user();
+        let json = serde_json::to_string(&claims).unwrap();
+        let req = TestRequest::default()
+            .insert_header(("x-marketplace-claims", json))
+            .to_http_request();
+        let result = extract_claims(&req);
+        assert!(result.is_ok());
+        let extracted = result.unwrap();
+        assert_eq!(extracted.sub, claims.sub);
+    }
+
+    #[test]
+    fn test_extract_claims_invalid_json() {
+        let req = TestRequest::default()
+            .insert_header(("x-marketplace-claims", "invalid json"))
+            .to_http_request();
+        let result = extract_claims(&req);
+        assert!(result.is_err());
+        // Check it's Unauthorized response
+        let resp = result.unwrap_err();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_extract_claims_missing_header() {
+        let req = TestRequest::default().to_http_request();
+        let result = extract_claims(&req);
+        assert!(result.is_err());
+        let resp = result.unwrap_err();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_extract_claims_optional_valid() {
+        let req = TestRequest::default()
+            .insert_header(("x-marketplace-claims", r#"{"sub":"user123"}"#))
+            .to_http_request();
+        let claims = extract_claims_optional(&req);
+        assert!(claims.is_some());
+        assert_eq!(claims.unwrap().sub, "user123");
+    }
+
+    #[test]
+    fn test_extract_claims_optional_invalid() {
+        let req = TestRequest::default()
+            .insert_header(("x-marketplace-claims", "bad"))
+            .to_http_request();
+        let claims = extract_claims_optional(&req);
+        assert!(claims.is_none());
+    }
+
+    #[test]
+    fn test_extract_listing_type_from_path_product() {
+        let req = TestRequest::default()
+            .uri("/v1/product/123")
+            .to_http_request();
+        let listing_type = extract_listing_type_from_path(&req);
+        assert_eq!(
+            listing_type,
+            Some(marketplace_api_contract::ListingType::Product)
+        );
+    }
+
+    #[test]
+    fn test_extract_listing_type_from_path_service() {
+        let req = TestRequest::default()
+            .uri("/v1/service/123")
+            .to_http_request();
+        let listing_type = extract_listing_type_from_path(&req);
+        assert_eq!(
+            listing_type,
+            Some(marketplace_api_contract::ListingType::Service)
+        );
+    }
+
+    #[test]
+    fn test_extract_listing_type_from_path_property() {
+        let req = TestRequest::default()
+            .uri("/v1/property/123")
+            .to_http_request();
+        let listing_type = extract_listing_type_from_path(&req);
+        assert_eq!(
+            listing_type,
+            Some(marketplace_api_contract::ListingType::Property)
+        );
+    }
+
+    #[test]
+    fn test_extract_listing_type_from_path_unknown() {
+        let req = TestRequest::default()
+            .uri("/v1/listings/123")
+            .to_http_request();
+        let listing_type = extract_listing_type_from_path(&req);
+        assert!(listing_type.is_none());
+    }
+
+    #[test]
+    fn test_map_handler_error_authz() {
+        use crate::auth::{AuthzError, AuthzErrorKind};
+        use crate::http::handlers::HandlerError;
+        let error = HandlerError::Authz(AuthzError::new(
+            AuthzErrorKind::MissingRole,
+            "test auth error",
+        ));
+        let resp = map_handler_error(&error);
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn test_map_handler_error_repository() {
+        use crate::http::handlers::HandlerError;
+        use crate::repositories::{RepositoryError, RepositoryErrorKind};
+        let error = HandlerError::Repository(RepositoryError::new(
+            RepositoryErrorKind::Validation,
+            "test repo error",
+        ));
+        let resp = map_handler_error(&error);
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_map_handler_error_quota_exceeded() {
+        use crate::http::handlers::HandlerError;
+        let error = HandlerError::QuotaExceeded {
+            message: "quota".into(),
+        };
+        let resp = map_handler_error(&error);
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
