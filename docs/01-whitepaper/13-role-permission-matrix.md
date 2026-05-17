@@ -54,7 +54,7 @@ Permissions alone are not enough. Every action must also pass:
 | MCP Tool | seller_listing_writer | seller_negotiator | seller_contact_reveal_approver | buyer_searcher | buyer_negotiator | admin | support_reviewer |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `create_listing` | allow | deny | deny | deny | deny | allow | deny |
-| `update_listing_status` | allow | deny | deny | deny | deny | allow | deny |
+| `archive_listing` | deny | deny | deny | deny | deny | allow | deny |
 | `search_listings` | allow | allow | allow | allow | allow | allow | allow |
 | `get_listing` | allow | allow | allow | allow | allow | allow | allow |
 | `open_negotiation` | deny | deny | deny | deny | allow | allow | deny |
@@ -63,6 +63,8 @@ Permissions alone are not enough. Every action must also pass:
 | `request_contact_reveal` | deny | allow | deny | deny | allow | allow | deny |
 | `approve_contact_reveal` | deny | deny | allow | deny | deny | allow | deny |
 
+Public MCP V1 stays on the seller/buyer tools above. Internal admin and support helpers such as `archive_listing` and `get_contact_reveal` stay on the server-side surface.
+
 ## Ownership Rules
 
 ### Seller-owned actions
@@ -70,7 +72,7 @@ Permissions alone are not enough. Every action must also pass:
 These require the acting credential to belong to the same seller account as `owner_id`:
 
 - create listing
-- update listing status
+- archive listing
 - seller counter-offer
 - seller reveal approval
 

@@ -113,4 +113,48 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(1100));
         assert!(limiter.check("test-key", 5, 1));
     }
+
+    #[test]
+    fn rate_limiter_partial_window_cleanup() {
+        let limiter = SlidingWindowRateLimiter::new();
+        for _ in 0..3 {
+            limiter.check("test-key", 5, 2);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        // Should retain 3, allow 2 more
+        for _ in 0..2 {
+            assert!(limiter.check("test-key", 5, 2));
+        }
+        assert!(!limiter.check("test-key", 5, 2));
+    }
+
+    #[test]
+    fn rate_limiter_empty_key_allowed() {
+        let limiter = SlidingWindowRateLimiter::new();
+        assert!(limiter.check("", 1, 60));
+        assert!(!limiter.check("", 1, 60));
+    }
+
+    #[test]
+    fn rate_limiter_zero_max_count() {
+        let limiter = SlidingWindowRateLimiter::new();
+        assert!(!limiter.check("test-key", 0, 60));
+    }
+
+    #[test]
+    fn rate_limiter_zero_window() {
+        let limiter = SlidingWindowRateLimiter::new();
+        assert!(limiter.check("test-key", 1, 0));
+        // Window of 0 should not retain timestamps, so always allow
+        assert!(limiter.check("test-key", 1, 0));
+    }
+
+    #[test]
+    fn is_new_seller_checks() {
+        assert!(is_new_seller("new"));
+        assert!(is_new_seller(""));
+        assert!(!is_new_seller("basic"));
+        assert!(!is_new_seller("premium"));
+        assert!(!is_new_seller("trusted"));
+    }
 }

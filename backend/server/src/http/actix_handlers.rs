@@ -197,24 +197,6 @@ fn extract_claims_optional(req: &HttpRequest) -> Option<Claims> {
     None
 }
 
-// Helper to extract listing type from URL path
-fn extract_listing_type_from_path(
-    req: &HttpRequest,
-) -> Option<marketplace_api_contract::ListingType> {
-    use marketplace_api_contract::ListingType;
-
-    let path = req.path();
-    if path.starts_with("/v1/product/") {
-        Some(ListingType::Product)
-    } else if path.starts_with("/v1/service/") {
-        Some(ListingType::Service)
-    } else if path.starts_with("/v1/property/") {
-        Some(ListingType::Property)
-    } else {
-        None
-    }
-}
-
 // --- Listing handlers ---
 
 pub async fn get_listing(
@@ -261,50 +243,6 @@ pub async fn get_listing(
     }
 }
 
-const DEPRECATION_SUNSET_DATE: &str = "Sat, 01 Jun 2026 00:00:00 GMT";
-
-pub async fn deprecated_listing_redirect(
-    listing_id: web::Path<String>,
-    req: HttpRequest,
-) -> impl Responder {
-    let _path = req.path();
-    let redirect_path = format!("/v1/listings/{}", listing_id);
-    HttpResponse::MovedPermanently()
-        .insert_header(("Location", redirect_path))
-        .insert_header(("Deprecation", "true"))
-        .insert_header(("Sunset", DEPRECATION_SUNSET_DATE))
-        .insert_header((
-            "Link",
-            format!(
-                "<https://api.example.com/v1/listings/{}>; rel=\"alternate\"",
-                listing_id
-            ),
-        ))
-        .finish()
-}
-
-pub async fn deprecated_search_redirect(
-    query: web::Query<SearchRequest>,
-    req: HttpRequest,
-) -> impl Responder {
-    let _path = req.path();
-    let redirect_path = "/v1/listings/search";
-    let mut redirect_url = format!("https://api.example.com{}", redirect_path);
-    if let Some(q) = &query.query {
-        let encoded = q.replace(' ', "%20").replace('\n', "%0A");
-        redirect_url.push_str(&format!("?query={}", encoded));
-    }
-    HttpResponse::MovedPermanently()
-        .insert_header(("Location", redirect_url))
-        .insert_header(("Deprecation", "true"))
-        .insert_header(("Sunset", DEPRECATION_SUNSET_DATE))
-        .insert_header((
-            "Link",
-            "<https://api.example.com/v1/listings/search>; rel=\"alternate\"",
-        ))
-        .finish()
-}
-
 pub async fn search_listings(
     app: web::Data<ActixApp>,
     cache_enabled: web::Data<bool>,
@@ -324,13 +262,8 @@ pub async fn search_listings(
         }
     }
 
-    // Extract listing type from URL path and add to query
-    let mut modified_query = (*query).clone();
-    if modified_query.listing_type.is_none() {
-        modified_query.listing_type = extract_listing_type_from_path(&req);
-    }
-
     // Build cache key with meaningful search params for better cache hits
+    let modified_query = (*query).clone();
     let listing_type_str = modified_query
         .listing_type
         .map(|t| format!("{:?}", t))
@@ -344,10 +277,15 @@ pub async fn search_listings(
         .limit
         .map(|l| l.to_string())
         .unwrap_or_else(|| "20".to_string());
+    let cursor_str = modified_query
+        .cursor
+        .as_deref()
+        .unwrap_or("none")
+        .to_string();
 
     let cache_key = format!(
-        "search:lt:{}:cat:{}:sort:{}:limit:{}",
-        listing_type_str, category_str, sort_by_str, limit_str
+        "search:lt:{}:cat:{}:sort:{}:limit:{}:cur:{}",
+        listing_type_str, category_str, sort_by_str, limit_str, cursor_str
     );
 
     // Try cache first (stores pre-serialized JSON)
@@ -1134,51 +1072,6 @@ mod tests {
             .to_http_request();
         let claims = extract_claims_optional(&req);
         assert!(claims.is_none());
-    }
-
-    #[test]
-    fn test_extract_listing_type_from_path_product() {
-        let req = TestRequest::default()
-            .uri("/v1/product/123")
-            .to_http_request();
-        let listing_type = extract_listing_type_from_path(&req);
-        assert_eq!(
-            listing_type,
-            Some(marketplace_api_contract::ListingType::Product)
-        );
-    }
-
-    #[test]
-    fn test_extract_listing_type_from_path_service() {
-        let req = TestRequest::default()
-            .uri("/v1/service/123")
-            .to_http_request();
-        let listing_type = extract_listing_type_from_path(&req);
-        assert_eq!(
-            listing_type,
-            Some(marketplace_api_contract::ListingType::Service)
-        );
-    }
-
-    #[test]
-    fn test_extract_listing_type_from_path_property() {
-        let req = TestRequest::default()
-            .uri("/v1/property/123")
-            .to_http_request();
-        let listing_type = extract_listing_type_from_path(&req);
-        assert_eq!(
-            listing_type,
-            Some(marketplace_api_contract::ListingType::Property)
-        );
-    }
-
-    #[test]
-    fn test_extract_listing_type_from_path_unknown() {
-        let req = TestRequest::default()
-            .uri("/v1/listings/123")
-            .to_http_request();
-        let listing_type = extract_listing_type_from_path(&req);
-        assert!(listing_type.is_none());
     }
 
     #[test]

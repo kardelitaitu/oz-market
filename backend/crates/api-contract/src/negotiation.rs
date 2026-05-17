@@ -1,7 +1,7 @@
 use crate::listing::{CurrencyCode, ResourceId};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum NegotiationStatus {
     Open,
@@ -14,7 +14,7 @@ pub enum NegotiationStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ContactRevealStatus {
     Pending,
@@ -23,7 +23,7 @@ pub enum ContactRevealStatus {
     Expired,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct OpenNegotiationRequest {
     pub listing_id: ResourceId,
     pub buyer_agent_id: String,
@@ -32,29 +32,29 @@ pub struct OpenNegotiationRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct SubmitOfferRequest {
     pub offer_currency: CurrencyCode,
     pub offer_amount: f64,
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct AcceptNegotiationRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct RejectNegotiationRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct RequestContactRevealRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum NegotiationHistoryEntryType {
     Offer,
@@ -62,7 +62,7 @@ pub enum NegotiationHistoryEntryType {
     Reject,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct NegotiationHistoryEntry {
     pub entry_id: String,
     pub entry_type: NegotiationHistoryEntryType,
@@ -75,7 +75,7 @@ pub struct NegotiationHistoryEntry {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct NegotiationResponse {
     pub negotiation_id: ResourceId,
     pub listing_id: ResourceId,
@@ -93,7 +93,7 @@ pub struct NegotiationResponse {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct ContactRevealResponse {
     pub reveal_id: ResourceId,
     pub negotiation_id: ResourceId,

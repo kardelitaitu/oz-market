@@ -35,6 +35,9 @@ backend/
         lib.rs
   server/
     src/
+      bootstrap.rs
+      bin/
+        bootstrap_schema.rs
       main.rs
       lib.rs
       app.rs

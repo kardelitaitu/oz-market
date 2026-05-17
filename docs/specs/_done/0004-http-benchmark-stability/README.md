@@ -1,7 +1,7 @@
 ---
 id: 0004-http-benchmark-stability
 title: HTTP Benchmark Stability and Reproducibility
-status: active
+status: completed
 owner: backend-team
 implementer: opencode
 priority: P1
@@ -23,7 +23,7 @@ acceptance:
   - benchmark output reports ops/s with explicit 429 and other failure counts
   - benchmark docs define canonical command set for public, rotating, and fixed modes
   - benchmark artifacts include dated baseline evidence and root-cause notes
-  - full ./check.ps1 passes after benchmark-related updates
+  - cargo check passes after benchmark-related backend updates
 non_goals:
   - changing product search semantics
   - disabling rate limiter for production paths
@@ -36,7 +36,7 @@ risks:
 
 # HTTP Benchmark Stability and Reproducibility
 
-Status: `active`
+Status: `completed`
 
 Owner: `backend-team`
 Implementer: `opencode`
@@ -64,8 +64,17 @@ Standardize benchmark execution and reporting so throughput comparisons are reli
 
 The repository now has benchmark artifacts for `public`, `rotating`, and `fixed` claims modes dated `2026-05-12`.
 
-Recent investigation showed that fixed-sub tests hit search limiter thresholds and can under-report sustainable throughput if compared directly with rotating/public runs.
+Fresh cycle note: fixed-mode no longer saturated the limiter in the 2026-05-12 rerun, so compare it as a diagnostic run rather than a direct baseline match.
 
 ## Target Outcome
 
 A single canonical benchmark process that keeps comparisons apples-to-apples and captures enough metadata for audit and diagnosis.
+
+Canonical benchmark command source of truth:
+
+- `docs/server/README.md` (HTTP Bench Baseline section and benchmark run command)
+- `docs/testing/benchmarks/http-bench-baseline-2026-05-12.md` (dated baseline command examples)
+
+Fresh cycle artifact:
+
+- `docs/testing/benchmarks/http-bench-cycle-2026-05-12.md`

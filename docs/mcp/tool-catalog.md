@@ -2,16 +2,16 @@
 
 ## Goal
 
-Define the first MCP tool set for desktop agents.
+Define the first desktop-agent MCP tool set.
 
 The MCP server should stay thin and call the same backend service logic as HTTP.
+Mobile clients should use the same backend contract through the app or HTTP adapter, not the stdio MCP transport.
 
-## V1 Tool Set
+## Public V1 Tool Set
 
 | Tool | Purpose | Required Role |
 | --- | --- | --- |
 | `create_listing` | create seller listing | `seller_listing_writer` |
-| `update_listing_status` | update listing state | `seller_listing_writer` |
 | `search_listings` | search indexed listings | `buyer_searcher` or seller-side role |
 | `get_listing` | fetch one listing | authenticated client |
 | `open_negotiation` | open buyer-side negotiation | `buyer_negotiator` |
@@ -19,6 +19,19 @@ The MCP server should stay thin and call the same backend service logic as HTTP.
 | `get_negotiation_status` | fetch negotiation state | authorized participant |
 | `request_contact_reveal` | request reveal for reserved negotiation | authorized participant |
 | `approve_contact_reveal` | seller-side reveal approval | `seller_contact_reveal_approver` |
+| `accept_negotiation` | accept a negotiation | `buyer_negotiator` or `seller_negotiator` |
+| `reject_negotiation` | reject a negotiation | `buyer_negotiator` or `seller_negotiator` |
+
+## Internal Helpers
+
+These stay on the server-side admin/support surface and are not part of the public desktop-agent V1 catalog.
+
+| Tool | Purpose | Required Role |
+| --- | --- | --- |
+| `archive_listing` | archive listing | `admin` |
+| `get_contact_reveal` | read reveal status | `admin` or `support_reviewer` |
+| `set_seller_trust_level` | adjust seller trust | `admin` |
+| `set_seller_quota_override` | override seller quota | `admin` |
 
 ## Example Inputs
 
@@ -114,3 +127,4 @@ The MCP server should stay thin and call the same backend service logic as HTTP.
   }
 }
 ```
+

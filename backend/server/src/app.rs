@@ -2091,6 +2091,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn shared_app_contact_reveal_polling_flow() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(crate::repositories::negotiations::InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let claims = claims();
+        let listing = app
+            .create_listing(
+                &claims,
+                &create_request(),
+                "fp-create-reveal-poll",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let open = app
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: listing.listing_id.clone(),
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-reveal-poll".to_string(),
+                },
+                "fp-open-reveal-poll",
+                "2026-05-04T00:00:01Z",
+            )
+            .await
+            .unwrap();
+        let reveal = app
+            .request_contact_reveal(
+                &claims,
+                &open.negotiation_id,
+                &RequestContactRevealRequest {
+                    idempotency_key: "idem-reveal-poll".to_string(),
+                },
+                "fp-reveal-poll",
+                "2026-05-04T00:00:02Z",
+            )
+            .await
+            .unwrap();
+        assert_eq!(reveal.reveal_status, ContactRevealStatus::Pending);
+
+        let fetched = app
+            .get_contact_reveal(&reveal.reveal_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(fetched.reveal_status, ContactRevealStatus::Pending);
+
+        let approved = app
+            .approve_contact_reveal(&claims, &reveal.reveal_id)
+            .await
+            .unwrap();
+        assert_eq!(approved.reveal_status, ContactRevealStatus::Approved);
+
+        let fetched_after = app
+            .get_contact_reveal(&reveal.reveal_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(fetched_after.reveal_status, ContactRevealStatus::Approved);
+    }
+
+    #[tokio::test]
     async fn shared_app_negotiation_lifecycle_from_reserved_to_closed() {
         let app = MarketplaceApp::new(
             InMemoryListingRepository::new(),

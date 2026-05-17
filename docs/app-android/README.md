@@ -137,11 +137,12 @@ class AiAgentRepository {
 ## Next Docs To Add
 
 1. ✅ **Screen and navigation flow** (see `first-user-flow.md`)
-2. 🔜 **Mobile auth flow** (JWT + refresh tokens)
-3. 🔜 **App-agent lifecycle and settings**
-4. 🔜 **Push notification strategy** (negotiation updates, contact reveals)
-5. 🔜 **Offline caching approach** (Room database for listings)
-6. 🔜 **Image handling** (we don't support images yet per spec!)
+2. ✅ **Full build plan** (see `build-plan.md`)
+3. 🔜 **Mobile auth flow** (JWT + refresh tokens)
+4. 🔜 **App-agent lifecycle and settings**
+5. 🔜 **Push notification strategy** (negotiation updates, contact reveals)
+6. 🔜 **Offline caching approach** (Room database for listings)
+7. 🔜 **Image handling** (we don't support images yet per spec!)
 
 ## Open Questions for Mobile
 

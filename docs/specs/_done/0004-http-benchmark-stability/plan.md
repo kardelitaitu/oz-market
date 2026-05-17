@@ -17,7 +17,7 @@
 ### Step 3: Parity and Validation
 
 1. Recheck status-code parity across runtime and handler paths used by benchmark flows.
-2. Run full `./check.ps1` before committing benchmark-affecting changes.
+2. Run `cargo check` before committing benchmark-affecting backend changes.
 3. Record benchmark outcome and interpretation in `JOURNAL.md`.
 
 ### Step 4: Baseline Discipline
@@ -37,5 +37,5 @@
 
 1. Confirm documentation and report templates.
 2. Run benchmark profiles and refresh artifacts.
-3. Validate with checker and journal checkpoint.
+3. Validate with cargo check and journal checkpoint.
 4. Move spec to `_done` after acceptance criteria are confirmed.

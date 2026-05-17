@@ -1,116 +1,39 @@
 # MCP Documentation
 
-This folder contains marketplace MCP server documentation.
+This folder contains the marketplace MCP docs for the desktop-agent surface.
 
-## Intended Contents:
+## Current Direction
 
-- MCP tool catalog
-- tool input/output contracts
-- auth flow for desktop agents
-- MCP examples
-- failure and retry behavior
+- Desktop agents use the separate `marketplace-mcp` stdio sidecar.
+- Mobile clients use the same backend contract through the app or HTTP adapter, not stdio MCP.
+- Authz, quotas, idempotency, and reservation checks stay in the shared server layer.
 
-## Current Status:
+## Current Status
 
-The **MCP server is implemented and compiles! 🎉**
+- `backend/mcp/src/runtime.rs` hosts the stdio `rmcp` sidecar and delegates into `MarketplaceApp`.
+- `backend/mcp/src/bin/mcp_tester.rs` is a local harness and now injects explicit launcher claims before spawning the sidecar.
+- `backend/mcp/tests/basic_protocol.rs` is the lightweight binary smoke test for initialize + `tools/list`.
+- The sidecar expects `MARKETPLACE_MCP_CLAIMS_JSON` from its launcher; `MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1` is only for local smoke tests.
+- The scheduled `mcp-smoke` workflow uses the shared Rust schema bootstrap helper before running the current listing-only MCP smoke path.
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| `marketplace-mcp` package | ✅ **COMPILES!** | Binary built: `target/debug/marketplace-mcp.exe` (14MB) |
-| `mcp/src/lib.rs` | ✅ Complete | 7 MCP tools implemented |
-| `mcp/src/bin/mcp_tester.rs` | ⚠️ Has issues | Type inference errors in closures |
+## Launcher Contract
 
-## MCP Tools Implemented (7 tools):
+- pass `MARKETPLACE_MCP_CLAIMS_JSON` explicitly from the desktop launcher
+- pass `MARKETPLACE_MCP_DATABASE_URL` only when the sidecar should use Postgres
+- keep `MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1` for local smoke tests only
+- avoid relying on ambient process environment for agent identity or data access
 
-| Tool | Purpose | Required Role |
-|------|---------|---------------|
-| `create_listing` | Create seller listing | `seller_listing_writer` |
-| `search_listings` | Search indexed listings | `buyer_searcher` or seller-side role |
-| `get_listing` | Fetch one listing | authenticated client |
-| `open_negotiation` | Open buyer-side negotiation | `buyer_negotiator` |
-| `request_contact_reveal` | Request contact reveal | `buyer_negotiator` |
-| `approve_contact_reveal` | Seller-side approval | `seller_contact_reveal_approver` |
-| `get_negotiation_status` | Fetch negotiation state | authorized participant |
+## Public Tool Catalog
 
-## How to Use with Claude Desktop:
+See [tool-catalog.md](tool-catalog.md) for the canonical public V1 tools.
 
-1. **Build the MCP server**:
-   ```bash
-   cd backend && cargo build --package marketplace-mcp
-   ```
+## Internal Helpers
 
-2. **Configure Claude Desktop** (settings.json):
-   ```json
-   {
-     "mcpServers": {
-       "marketplace": {
-         "command": "/path/to/marketplace-mcp.exe"
-       }
-     }
-   }
-   ```
+Internal admin and support helpers stay on the server-side surface and are not part of the public desktop-agent V1 catalog.
 
-3. **AI can now use tools**:
-   - "Search for laptops under $500"
-   - "Create a new listing for my ThinkPad"
-   - "Check negotiation status for neg_123"
+## References
 
-## MCP Implementation Details:
-
-### Architecture:
-```
-marketplace-mcp (crate)
-├── lib.rs - MCP server implementation
-│   ├── MarketplaceMcpServer (implements ServerHandler)
-│   ├── MarketplaceMcp (wraps MarketplaceApp)
-│   └── MCP tools (7 tools via #[tool_router])
-└── bin/
-    └── mcp_tester.rs (has compilation issues)
-```
-
-### Transport:
-- **stdio** transport for desktop agents (Claude Desktop, Cursor, etc.)
-- MCP server communicates via stdin/stdout
-- Each tool delegates to `MarketplaceApp` methods (same as HTTP API!)
-
-### Claims Handling:
-- Each tool builds appropriate `Claims` (roles + scopes)
-- Pre-configured for each tool's required permissions
-- Uses `marketplace-auth-core` for auth logic
-
-## Known Issues:
-
-### 1. MCP Tester Has Compilation Errors ⚠️
-- **File**: `mcp/src/bin/mcp_tester.rs`
-- **Issue**: Type inference in `and_then()` closure chains
-- **Workaround**: Test MCP server manually:
-  ```bash
-  # Terminal 1: Start MCP server
-  cd backend && cargo run --package marketplace-mcp
-  
-  # Terminal 2: Send JSON-RPC manually
-  echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {...}}' | ./target/debug/marketplace-mcp.exe
-  ```
-
-### 2. Pre-existing Server Errors (Now FIXED ✅):
-- ✅ `reservations` module added to `services/mod.rs`
-- ✅ `moka::sync` feature enabled in `server/Cargo.toml`
-- ✅ Broken `#[path(...)]` attributes removed from `actix_handlers.rs`
-
-## Next Docs to Add:
-
-1. ✅ Auth and session flow for MCP clients
-2. ✅ Example desktop agent workflows
-3. ✅ Conflict and retry examples
-4. ✅ MCP tool input/output schemas (reference tool-catalog.md)
-
-## References:
-
-- `tool-catalog.md` - Detailed tool definitions
-- `../whitepaper/07-mcp-server.md` - MCP design document
-- `../whitepaper/10-api-contract.md` - API contract (shared with HTTP)
-- `../specs/openapi.yaml` - Full API specification (20+ endpoints)
-
----
-
-**The MCP server is ready!** Just needs testing with a real MCP client. 🚀
+- [tool-catalog.md](tool-catalog.md)
+- [../01-whitepaper/07-mcp-server.md](../01-whitepaper/07-mcp-server.md)
+- [../01-whitepaper/10-api-contract.md](../01-whitepaper/10-api-contract.md)
+- [../specs/openapi.yaml](../specs/openapi.yaml)

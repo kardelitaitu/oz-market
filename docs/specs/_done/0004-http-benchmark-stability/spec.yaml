@@ -1,7 +1,7 @@
 version: 1
 id: 0004-http-benchmark-stability
 title: HTTP Benchmark Stability and Reproducibility
-status: active
+status: completed
 owner: backend-team
 implementer: opencode
 priority: P1
@@ -23,7 +23,7 @@ acceptance:
   - benchmark output reports ops/s with explicit 429 and other failure counts
   - benchmark docs define canonical command set for public, rotating, and fixed modes
   - benchmark artifacts include dated baseline evidence and root-cause notes
-  - full ./check.ps1 passes after benchmark-related updates
+  - cargo check passes after benchmark-related backend updates
 non_goals:
   - changing product search semantics
   - disabling rate limiter for production paths

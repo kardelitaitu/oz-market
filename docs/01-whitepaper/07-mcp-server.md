@@ -18,12 +18,27 @@ Add `MCP` as a thin agent-facing adapter over the same business logic.
 
 This MCP layer is for `desktop agents`.
 
+Mobile clients should reuse the same backend contract through the app or HTTP adapter, not the stdio MCP transport.
+
 This gives two integration modes:
 
 | Mode | Pros | Cons |
 | --- | --- | --- |
 | HTTP JSON API | Fastest, simplest backend contract, best for strong agents and direct integrations | Lower-quality agents may misuse raw endpoints |
 | MCP server | Easier for weaker agents, clearer actions, safer workflows | One more surface area to maintain |
+
+## Launcher Contract
+
+Desktop launchers should pass the sidecar two explicit env vars when needed:
+
+- `MARKETPLACE_MCP_CLAIMS_JSON` for the agent credential payload
+- `MARKETPLACE_MCP_DATABASE_URL` only when the sidecar should connect to Postgres
+
+Use `MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1` only for local smoke tests.
+
+Do not rely on ambient process environment for the agent identity or storage target.
+
+The scheduled MCP smoke workflow uses the shared Rust schema bootstrap helper before running the public listing flow. Expand that smoke path deliberately if negotiation or contact-reveal tools join it later.
 
 ## Design Rule
 
@@ -40,13 +55,24 @@ Both HTTP and MCP should call the same service functions.
 ## Recommended V1 MCP Tools
 
 - `create_listing`
-- `update_listing_status`
 - `search_listings`
 - `get_listing`
 - `open_negotiation`
 - `submit_offer`
 - `get_negotiation_status`
+- `accept_negotiation`
+- `reject_negotiation`
 - `request_contact_reveal`
+- `approve_contact_reveal`
+
+## Internal Helpers
+
+These stay on the server-side admin/support surface and are not part of the public desktop-agent V1 catalog:
+
+- `archive_listing`
+- `get_contact_reveal`
+- `set_seller_trust_level`
+- `set_seller_quota_override`
 
 ## Tool Design Principles
 
@@ -194,6 +220,56 @@ Output:
 }
 ```
 
+### `accept_negotiation`
+
+Input:
+
+```json
+{
+  "negotiation_id": "neg_123",
+  "idempotency_key": "accept-001"
+}
+```
+
+Output:
+
+```json
+{
+  "negotiation_id": "neg_123",
+  "status": "closed",
+  "offer_currency": "USD",
+  "latest_offer_amount": 440,
+  "offer_history": [
+    {"round": 0, "currency": "USD", "amount": 440.0, "actor": "buyer"}
+  ]
+}
+```
+
+### `reject_negotiation`
+
+Input:
+
+```json
+{
+  "negotiation_id": "neg_123",
+  "idempotency_key": "reject-001"
+}
+```
+
+Output:
+
+```json
+{
+  "negotiation_id": "neg_123",
+  "status": "closed",
+  "offer_currency": "USD",
+  "latest_offer_amount": 440,
+  "offer_history": [
+    {"round": 0, "currency": "USD", "amount": 440.0, "actor": "buyer"}
+  ]
+}
+```
+
 ## Event Consumption Model
 
 MCP clients should consume state changes by polling the shared read tools instead of subscribing directly to events in V1.
@@ -202,7 +278,7 @@ Recommended polling tools:
 
 - `get_listing`
 - `get_negotiation_status`
-- `get_contact_reveal`
+- `get_contact_reveal` for trusted server-side callers only
 
 Model:
 
@@ -265,7 +341,7 @@ MCP should not become a second heavy backend.
 
 1. Define the HTTP service contract first.
 2. Extract the shared business logic into a core service module.
-3. Map the first 6-8 MCP tools to those service functions.
+3. Map the 10 MCP tools to those service functions.
 4. Add examples and strict schemas for weaker agents.
 5. Load test HTTP first, then measure MCP overhead separately.
 
@@ -275,6 +351,7 @@ MCP should not become a second heavy backend.
 - version MCP and HTTP together
 - publish examples for buyer and seller agents
 - keep the MCP surface smaller than the HTTP surface
+- keep mobile on the same backend contract, but not the stdio MCP transport
 - prefer deterministic outputs over conversational responses
 - do not let MCP behavior diverge from mobile app or server business rules
 - keep MCP write-tool envelopes aligned with HTTP when idempotency is required

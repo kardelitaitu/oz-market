@@ -360,3 +360,195 @@ eg_{listing_id} + PK conflict) with option tradeoffs for future reopen semantics
 - Added `backend/coverage/` to `.gitignore` and removed generated tarpaulin HTML output from the working tree.
 - Re-ran full `./check.ps1` before commit/push: all gates passed.
 - Why: keep benchmark work spec-driven, auditable, and free from generated artifact noise.
+
+## 2026-05-12 13:31
+
+- Updated active spec `0004-http-benchmark-stability` to enforce minimal CI policy.
+- Replaced `./check.ps1`/checker references with `cargo check` only across `ci-commands.md`, `README.md`, `spec.yaml`, `plan.md`, `quality-rules.md`, `parity-report.md`, and `validation-checklist.md`.
+- Ran `cargo check --manifest-path backend/server/Cargo.toml --workspace` successfully.
+- Why: keep CI surface minimal while preserving benchmark governance and auditability.
+
+## 2026-05-12 14:03
+
+- Tightened active spec `0005-negotiation-hardening-and-parity` acceptance and parity requirements.
+- Added explicit requirement that all post-begin failures must mark idempotency as failed (no stuck pending states).
+- Added explicit status parity target for `POST /v1/negotiations/{negotiation_id}/request-contact-reveal` => `202 Accepted` across runtime, actix, and OpenAPI.
+- Expanded `files.code` to include expected authz wiring and integration test files (`services/authz.rs`, `tests/postgres_flows.rs`, `tests/e2e.rs`).
+- Why: make negotiation hardening implementation auditable and unambiguous before coding.
+
+## 2026-05-12 14:18
+
+- Updated OpenAPI negotiation contact-reveal response status from `200` to `202` for `/v1/negotiations/{negotiation_id}/request-contact-reveal` to match runtime and actix behavior.
+- Updated active spec `0004-http-benchmark-stability` to explicitly point canonical benchmark-command source of truth to `docs/server/README.md` and `docs/testing/benchmarks/http-bench-baseline-2026-05-12.md`.
+- Ran quick governance verification: `cargo check --manifest-path backend/server/Cargo.toml --workspace` passed, plus targeted spec consistency checks (status/implementer parity, legacy path scan, and reveal-route 202 parity) passed.
+- Why: keep benchmark and negotiation parity claims accurate and auditable before implementation continues.
+
+## 2026-05-12 14:31
+
+- Downgraded `0004-http-benchmark-stability` parity result to `in_progress` because a fresh benchmark cycle could not be run from this workspace state (no local target listening on 3000/3003/8080).
+- Added `fresh_benchmark_cycle_executed: false` to the `0004` parity snapshot and noted that the spec still needs a live rerun before moving to `_done`.
+- Revalidated `cargo check --manifest-path backend/server/Cargo.toml --workspace` and confirmed the `0004` source-of-truth references remain consistent.
+- Why: keep the benchmark spec audit-safe instead of overstating completion.
+# 2026-05-12 20:43 UTC - 0004 benchmark cycle completed
+
+- Ran a fresh `bench_concurrent` cycle for `public`, `rotating`, and `fixed` against the local release server.
+- Recorded the cycle in a dated benchmark artifact and refreshed the `0004` parity report and validation checklist.
+- Rechecked `cargo check` after the benchmark refresh, then marked the spec metadata `completed` for move to `_done`.
+# 2026-05-12 20:58 UTC - 0005 scope expanded
+
+- Expanded `0005` implementation scope to include idempotency and reservation modules explicitly.
+- This keeps the spec aligned with the actual code paths needed for post-begin failure handling and conflict compensation.
+
+## 2026-05-12 18:14
+
+- Added 5 unit tests for reviews.rs InMemory repository (edge cases for create with body, timestamp updates, empty results); added 3 integration tests (auth flow create listing, concurrent negotiation submissions, seller account trust level update) in postgres_flows.rs; added 5 unit tests for rate_limiter.rs (partial cleanup, edge cases, is_new_seller)
+
+## 2026-05-17 00:00
+
+- Marked MCP deployment shape as an accepted decision: a separate stdio sidecar binary.
+- Removed the old open question from the roadmap and risks docs so the MCP plan stays consistent across whitepaper notes.
+- Why: keep the MCP adapter isolated from the HTTP runtime while preserving one shared backend service layer.
+
+## 2026-05-17 00:20
+
+- Reworked the MCP docs to define one public desktop-agent tool set and separate internal admin helpers.
+- Updated the API contract and role matrix so the MCP surface, HTTP routes, and internal helper paths stay aligned.
+- Added shared-app parity tests for the contact-reveal polling flow in `marketplace-server` and `marketplace-mcp`.
+- Why: keep the agent-facing contract small and consistent while proving both desktop and mobile-style paths reuse the same backend behavior.
+
+## 2026-05-17 00:45
+
+- Wired the real stdio MCP sidecar in `backend/mcp` with an `rmcp` tool router, shared app-backed tool calls, and a small dev fallback for local runs.
+- Added `JsonSchema` to the shared API contract so MCP tools can reuse the same request types instead of drifting onto a separate wrapper model.
+- Updated the tester to send the MCP `notifications/initialized` handshake and verify the public 8-tool catalog.
+- Why: make the desktop MCP path real, keep the tool surface small, and prove the transport reaches the same backend logic as the shared app layer.
+
+## 2026-05-17 20:53
+
+- Hardened the MCP launcher contract so the sidecar now expects explicit `MARKETPLACE_MCP_CLAIMS_JSON` input instead of silently falling back in normal runs.
+- Added a real end-to-end smoke test that launches the tester against the built `marketplace-mcp` binary and keeps ambient `DATABASE_URL` out of the default path.
+- Added shared-contract mobile parity tests for the Android and iOS manifests plus canonical payload round-trips.
+- Why: make the launcher boundary explicit, keep the MCP smoke path predictable, and prove the shared contract still matches mobile-facing payload shapes.
+
+## 2026-05-17 21:00
+
+- Removed the legacy MCP claims alias so the sidecar and tester now use one explicit launcher payload path only.
+- Extended the MCP smoke tester and launcher-contract test with a real `create_listing` write-path check plus read-back coverage.
+- Why: shrink the launcher contract, prove a mutating tool still flows through the shared backend logic, and keep the desktop agent path easier to reason about.
+
+## 2026-05-17 20:59
+
+- Added CI coverage for the MCP launcher smoke test and the shared mobile contract parity test.
+- Synced the stale server MCP README so it now describes the runtime sidecar, the real tester, and the 8-tool public surface.
+- Why: keep the repo honest about MCP readiness and catch launcher or contract drift automatically.
+
+## 2026-05-17 21:00
+
+- Added a nightly MCP smoke workflow so the launcher contract and shared contract parity keep getting checked after PRs merge.
+- Added explicit launcher-contract notes to the MCP docs and whitepaper so desktop launchers know which env vars to pass.
+- Why: keep the MCP contract visible, scheduled, and easy to wire from the real launcher without guessing.
+
+## 2026-05-17 21:03
+
+- Switched the MCP runtime to read `MARKETPLACE_MCP_DATABASE_URL` explicitly instead of ambient `DATABASE_URL`.
+- Updated the tester helpers to validate the explicit Postgres env path and keep the launcher contract pure.
+- Why: make the database target part of the launcher contract, not an inherited process-side surprise.
+
+## 2026-05-17 21:07
+
+- Upgraded the nightly MCP smoke workflow to boot a real Postgres service, apply the base schema, and run the launcher smoke against that database.
+- Why: prove the desktop-agent path works against a real backend schema instead of only the in-memory fallback.
+
+## 2026-05-17 21:12
+
+- Documented that the MCP smoke workflow is intentionally base-schema only for the current listing-only public path.
+- Why: keep future negotiation or contact-reveal coverage from accidentally inheriting a too-small bootstrap without an explicit decision.
+
+## 2026-05-17 21:14
+
+- Added a shared server schema bootstrap helper and switched the MCP smoke workflow and Postgres server tests onto it.
+- Why: keep the smoke setup and live Postgres tests on one reusable migration path instead of separate hand-rolled schema setup code.
+
+## 2026-05-17 21:17
+
+- Updated the server module layout doc to include the new schema bootstrap helper and binary.
+- Why: keep the architecture docs aligned with the new reusable migration entrypoint.
+
+## 2026-05-17 21:18
+
+- Wired the local Postgres test script to run `bootstrap_schema` before the integration tests.
+- Why: make the local test workflow self-contained on a fresh database and reuse the same schema bootstrap path as CI.
+
+## 2026-05-17 21:20
+
+- Converted the remaining Postgres flow tests off `sqlx::test` and onto the same live-db skip path as the rest of the file.
+- Why: keep the test suite reliable when no local Postgres is running, while still exercising the same schema bootstrap when a database is present.
+
+## 2026-05-17 21:21
+
+- Wired the local phase5 benchmark wrapper to run the shared schema bootstrap helper before the benchmark.
+- Why: make the local benchmark path self-contained on a fresh Postgres database without duplicating schema setup logic.
+
+## 2026-05-17 21:22
+
+- Fixed the local benchmark and Postgres test wrappers to preserve `Pop-Location` cleanup before exiting.
+- Why: keep the PowerShell wrappers predictable when they are called from other scripts.
+
+## 2026-05-17 21:23
+
+- Added a dedicated `Server Postgres` GitHub Actions workflow that boots Postgres, runs the shared schema bootstrap helper, and executes the live integration tests.
+- Why: keep a continuous proof of the full Postgres path without bloating the main CI job.
+
+## 2026-05-17 21:24
+
+- Expanded the Claude Desktop example in the server docs to show the explicit launcher env contract.
+- Why: make the external launcher wiring easier to implement without guessing the expected environment variables.
+
+## 2026-05-17 21:52
+
+- Reduced duplicate schema bootstraps in the combined local Postgres workflow by adding a skip flag to the child scripts.
+- Why: keep the standalone scripts self-contained while making the combined developer path faster and less repetitive.
+
+## 2026-05-17 21:53
+
+- Clarified in the server docs that the live `Server Postgres` workflow can also be rerun manually in GitHub Actions.
+- Why: make the live-db proof path easier to monitor and rerun without changing the workflow behavior.
+
+## 2026-05-17 21:54
+
+- Added a lightweight MCP binary smoke test that checks initialize plus the public `tools/list` catalog on the real sidecar.
+- Why: give the MCP surface a small, reliable regression test without depending only on the broader launcher smoke path.
+
+## 2026-05-18
+
+- Wired `accept_negotiation` and `reject_negotiation` as MCP tools in the `rmcp` tool router at `backend/mcp/src/runtime.rs`.
+- Updated `docs/01-whitepaper/07-mcp-server.md` to reflect the 10-tool surface (added tools to list, example shapes for accept/reject, updated rollout count).
+- Updated `docs/server/README.md` MCP tools table from 8→10 rows.
+- Why: keep whitepaper and server docs in sync with the expanded MCP tool surface after adding negotiation finalization tools.
+
+## 2026-05-18
+
+- Created `docs/app-android/build-plan.md` with 6-phase plan: Project Scaffold, API Client, Auth, UI Screens, AI Agent, Polish.
+- Created `docs/app-ios/build-plan.md` with matching 6-phase plan adapted for Swift/SwiftUI tech stack.
+- Updated `docs/app-android/README.md` and `docs/app-ios/README.md` to reference the new build plans.
+- Why: give both mobile platforms a phased, actionable roadmap aligned with the frozen V1 backend contract.
+
+## 2026-05-18
+
+- **Idempotency persistence** — created `PostgresIdempotencyKeyRepository` in `repositories/idempotency_keys.rs`. Wired into production Actix runtime (`actix_runtime.rs`), replacing the in-memory-only `InMemoryIdempotencyRepository` that lost keys on restart. The Postgres table already existed in migration `0001_init.sql`. Uses `now() + interval '1 day'` for TTL (matching the 24h TTL used throughout the app). Timestamps returned via `::TEXT AS` casting, consistent with other Postgres repos.
+- **Server README** — created `backend/server/README.md` with base URLs, auth/claims docs, endpoint table, rate limits, error codes, env config, and OpenAPI spec reference for mobile dev onboarding.
+- **Search pagination** — implemented cursor-based pagination in `PostgresListingRepository::search_listings()`. Applies cursor filtering after in-memory sort (same pattern as `InMemoryListingRepository`). Returns `next_cursor` as the last item's `listing_id` when more results exist. Added cursor to search cache key in `actix_handlers.rs` to prevent cross-page cache collisions.
+ - Why: fix the three mobile-blocking backend gaps identified in the audit — idempotency data loss on restart, missing dev onboarding docs, and search results that couldn't be paginated.
+
+## 2026-05-18
+
+- **check.ps1 refactored + Pester tests** — extracted `Test-JournalAppendOnly` and `Test-ActiveSpecGovernance` from `check.ps1` to `backend/scripts/check-helpers.ps1` for unit testability.
+- Created `backend/scripts/check-helpers.Tests.ps1` with 13 Pester 5 tests covering both helpers (file missing/unchanged/append-only/removal checks, spec directory governance, status/implementer mismatch, placeholder text, yaml scanning, multi-file reporting).
+- Fixed `\\s*` → `\s*` in frontmatter regex patterns (PowerShell double-quoted strings don't interpret `\` as escape, so `\\s` passed literal `\` to the .NET regex engine instead of whitespace class).
+- Why: make the CI gate testable and prevent regex-escape drift from reaching main.
+
+## 2026-05-18
+
+- **Deprecated routes removed** — deleted 6 deprecated route registrations from `actix_runtime.rs:126-152` (`/v1/product/`, `/v1/service/`, `/v1/property/` detail + search). Removed `extract_listing_type_from_path()`, `deprecated_listing_redirect()`, `deprecated_search_redirect()`, and `DEPRECATION_SUNSET_DATE` const from `actix_handlers.rs`. Stripped the listing-type-from-path fallback from `search_listings()` (was dead code after routes removed). Deleted 4 unit tests for the now-removed helper. Test count dropped 211→207.
+- Why: sunset deadline June 1; the 301 redirects have been live since May 11 but no clients depend on the old paths (MCP uses service layer, mobile uses `/v1/listings`).
+new line

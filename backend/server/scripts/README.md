@@ -45,14 +45,20 @@ Then run:
 .\backend\server\scripts\run-phase5-bench-local.ps1
 ```
 
+- The local benchmark runner bootstraps the schema through `bootstrap_schema` before invoking `phase5_bench`.
+
 To run the Postgres integration tests against the same local database:
 
 ```powershell
 .\backend\server\scripts\run-postgres-tests-local.ps1
 ```
 
+- The test runner bootstraps the schema through `bootstrap_schema` before invoking the integration tests.
+
 To run both steps in sequence:
 
 ```powershell
 .\backend\server\scripts\run-local-postgres-dev.ps1
 ```
+
+- The combined workflow bootstraps the schema once, then skips duplicate setup in the child scripts.

@@ -1007,11 +1007,27 @@ impl ListingRepository for PostgresListingRepository {
         &self,
         request: &SearchRequest,
     ) -> Result<SearchResponse, RepositoryError> {
-        let items = self.fetch_rows(request).await?;
+        let mut items = self.fetch_rows(request).await?;
+        let limit = request.limit.unwrap_or(50).min(200) as usize;
+
+        // Cursor-based pagination: skip items before (and including) the cursor
+        if let Some(ref cursor) = request.cursor {
+            if let Some(pos) = items.iter().position(|item| item.listing_id == *cursor) {
+                items = items.into_iter().skip(pos + 1).collect();
+            }
+        }
+
+        let next_cursor = if items.len() > limit {
+            Some(items[limit - 1].listing_id.clone())
+        } else {
+            None
+        };
+        items.truncate(limit);
+
         Ok(SearchResponse {
             items,
             applied_sort_by: request.sort_by,
-            next_cursor: None, // TODO: implement pagination
+            next_cursor,
         })
     }
 

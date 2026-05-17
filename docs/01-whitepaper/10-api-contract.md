@@ -291,9 +291,18 @@ Default behavior:
 | MCP tool | HTTP equivalent |
 | --- | --- |
 | `create_listing` | `POST /v1/listings` |
-| `open_negotiation` | `POST /v1/negotiations` |
-| `get_listing` | `GET /v1/listings/{id}` |
 | `search_listings` | `GET /v1/listings/search` |
+| `get_listing` | `GET /v1/listings/{listing_id}` |
+| `archive_listing` | `POST /internal/v1/listings/{listing_id}/archive` |
+| `open_negotiation` | `POST /v1/negotiations` |
+| `get_negotiation_status` | `GET /v1/negotiations/{negotiation_id}` |
+| `submit_offer` | `POST /v1/negotiations/{negotiation_id}/offers` |
+| `request_contact_reveal` | `POST /v1/negotiations/{negotiation_id}/request-contact-reveal` |
+| `approve_contact_reveal` | `POST /v1/contact-reveals/{reveal_id}/approve` |
+| `get_contact_reveal` | `GET /internal/v1/contact-reveals/{reveal_id}` |
+
+The public desktop-agent MCP catalog should stay smaller than the full HTTP surface.
+Internal helpers such as `archive_listing` and `get_contact_reveal` remain server-side unless they are explicitly promoted later.
 
 ## MCP Input Examples
 

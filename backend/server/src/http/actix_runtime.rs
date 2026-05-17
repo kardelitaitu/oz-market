@@ -7,8 +7,10 @@ use crate::repositories::negotiations::PostgresNegotiationRepository;
 use crate::repositories::outbox_events::PostgresOutboxEventRepository;
 use crate::repositories::reservations::PostgresReservationLeaseRepository;
 use crate::repositories::seller_accounts::PostgresSellerAccountRepository;
-use crate::repositories::{AuditEventRepository, OutboxEventRepository, SellerAccountRepository};
-use crate::services::idempotency::InMemoryIdempotencyRepository;
+use crate::repositories::{
+    AuditEventRepository, OutboxEventRepository, PostgresIdempotencyKeyRepository,
+    SellerAccountRepository,
+};
 use actix_web::{web, App, HttpServer};
 use moka::future::Cache;
 use std::error::Error;
@@ -121,33 +123,6 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                 web::get().to(crate::openapi::serve_openapi_json),
             )
             // Public API v1 routes - organized by resource type
-            // Product listings (DEPRECATED - redirect to /v1/listings)
-            .route(
-                "/v1/product/{listing_id}",
-                web::get().to(crate::http::actix_handlers::deprecated_listing_redirect),
-            )
-            .route(
-                "/v1/product/search",
-                web::get().to(crate::http::actix_handlers::deprecated_search_redirect),
-            )
-            // Service listings (DEPRECATED - redirect to /v1/listings)
-            .route(
-                "/v1/service/{listing_id}",
-                web::get().to(crate::http::actix_handlers::deprecated_listing_redirect),
-            )
-            .route(
-                "/v1/service/search",
-                web::get().to(crate::http::actix_handlers::deprecated_search_redirect),
-            )
-            // Property listings (DEPRECATED - redirect to /v1/listings)
-            .route(
-                "/v1/property/{listing_id}",
-                web::get().to(crate::http::actix_handlers::deprecated_listing_redirect),
-            )
-            .route(
-                "/v1/property/search",
-                web::get().to(crate::http::actix_handlers::deprecated_search_redirect),
-            )
             .service(
                 // General listings (search across all types)
                 web::scope("/v1/listings")
@@ -402,13 +377,13 @@ fn build_app(
 ) -> Arc<
     MarketplaceApp<
         PostgresListingRepository,
-        InMemoryIdempotencyRepository,
+        PostgresIdempotencyKeyRepository,
         PostgresReservationLeaseRepository,
         PostgresContactRevealRepository,
     >,
 > {
     let listing_repository = PostgresListingRepository::new(pool.clone());
-    let idempotency_repository = InMemoryIdempotencyRepository::new();
+    let idempotency_repository = PostgresIdempotencyKeyRepository::new(pool.clone());
     let reservation_repository = PostgresReservationLeaseRepository::new(pool.clone());
     let contact_reveal_repository = PostgresContactRevealRepository::new(pool.clone());
     let negotiation_repository = Arc::new(PostgresNegotiationRepository::new(pool.clone()));

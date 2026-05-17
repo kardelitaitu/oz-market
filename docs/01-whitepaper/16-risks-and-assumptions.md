@@ -13,6 +13,7 @@ This reduces hidden disagreement and prevents the codebase from embedding accide
 - the end product is `server + MCP + Android + iOS`
 - traditional website marketplace UI is not required for V1
 - buyer and seller agents should use the same backend rules
+- MCP is delivered as a separate stdio sidecar binary, not embedded in the HTTP server
 
 ### Contract Assumptions
 
@@ -113,7 +114,6 @@ Mitigation:
 
 - whether `currency` is the only money normalization needed in V1
 - whether `location.city` is normalized or free text
-- whether MCP runs inside the main binary or sidecar
 - whether mobile agent provider remains only `openrouter/free` in V1
 - whether support reviewers can access negotiation detail beyond read-only views
 

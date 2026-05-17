@@ -5,7 +5,7 @@ use marketplace_api_contract::{
 use marketplace_server::repositories::{
     negotiations::{NegotiationRepository, PostgresNegotiationRepository},
     ContactRevealRepository, PostgresContactRevealRepository, PostgresReservationLeaseRepository,
-    ReservationLeaseRepository,
+    ReservationLeaseRepository, SellerAccountRepository,
 };
 use serde_json::json;
 use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Row};
@@ -25,35 +25,12 @@ async fn live_pool() -> Result<Option<PgPool>, Box<dyn Error + Send + Sync>> {
     Ok(Some(pool))
 }
 
-async fn ensure_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
-    // Check if migrations table exists and has version 6
-    let migration_exists =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations WHERE version = 6")
-            .fetch_optional(pool)
-            .await?
-            .unwrap_or(0)
-            > 0;
-
-    if migration_exists {
-        return Ok(());
-    }
-
-    for migration in [
-        include_str!("../migrations/0001_init.sql"),
-        include_str!("../migrations/0013_add_negotiation_offer_history.sql"),
-    ] {
-        for statement in migration.split(';') {
-            let statement = statement.trim();
-            if statement.is_empty()
-                || statement.eq_ignore_ascii_case("BEGIN")
-                || statement.eq_ignore_ascii_case("COMMIT")
-            {
-                continue;
-            }
-            sqlx::query(statement).execute(pool).await?;
-        }
-    }
-    Ok(())
+async fn live_bootstrapped_pool() -> Result<Option<PgPool>, Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_pool().await? else {
+        return Ok(None);
+    };
+    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    Ok(Some(pool))
 }
 
 fn unique_suffix() -> String {
@@ -112,7 +89,7 @@ async fn postgres_reservation_flow_persists_and_blocks_double_sell(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    ensure_schema(&pool).await?;
+    marketplace_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -165,7 +142,7 @@ async fn postgres_contact_approval_flow_persists_and_updates_status(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    ensure_schema(&pool).await?;
+    marketplace_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -220,7 +197,7 @@ async fn postgres_negotiation_submit_and_accept_persist_offer_history(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    ensure_schema(&pool).await?;
+    marketplace_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -293,7 +270,7 @@ async fn postgres_negotiation_reject_persists_cancelled_state_and_history(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    ensure_schema(&pool).await?;
+    marketplace_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -339,11 +316,12 @@ async fn postgres_negotiation_reject_persists_cancelled_state_and_history(
     Ok(())
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn postgres_negotiation_acceptance_flow_persists_closed_state_and_final_offer(
-    pool: PgPool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Schema ensured by other tests
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
     let suffix = unique_suffix();
     let negotiation_id = format!("neg_accept_{}", suffix);
     let listing_id = format!("lst_accept_{}", suffix);
@@ -399,11 +377,12 @@ async fn postgres_negotiation_acceptance_flow_persists_closed_state_and_final_of
     Ok(())
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn postgres_contact_reveal_request_and_approve_flow(
-    pool: PgPool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Schema ensured by other tests
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
     let suffix = unique_suffix();
     let reveal_id = format!("rev_req_{}", suffix);
     let negotiation_id = format!("neg_reveal_{}", suffix);
@@ -444,11 +423,12 @@ async fn postgres_contact_reveal_request_and_approve_flow(
     Ok(())
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn postgres_negotiation_submit_offer_invalid_negotiation_returns_error(
-    pool: PgPool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Schema ensured by other tests
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
     let repo = PostgresNegotiationRepository::new(pool);
     let request = SubmitOfferRequest {
         offer_amount: 200.0,
@@ -475,11 +455,12 @@ async fn postgres_negotiation_submit_offer_invalid_negotiation_returns_error(
     Ok(())
 }
 
-#[sqlx::test]
-async fn postgres_reservation_lease_creation_and_expiry(
-    pool: PgPool,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Schema ensured by other tests
+#[tokio::test]
+async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn Error + Send + Sync>>
+{
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
     let suffix = unique_suffix();
     let lease_id = format!("lease_exp_{}", suffix);
     let listing_id = format!("lst_lease_{}", suffix);
@@ -505,6 +486,168 @@ async fn postgres_reservation_lease_creation_and_expiry(
     let lease_after: Option<marketplace_server::models::db::ReservationLeaseRow> =
         repo.get_active_by_listing(&listing_id).await?;
     assert!(lease_after.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_auth_flow_create_listing_with_valid_seller_role(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+
+    // Seed seller account
+    sqlx::query(
+        "INSERT INTO seller_accounts (seller_account_id, owner_id, quota_remaining, trust_level, created_at, updated_at)
+         VALUES ($1, $2, 100, 'trusted', '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
+    )
+    .bind(format!("seller_{}", suffix))
+    .bind("seller_user")
+    .execute(&pool)
+    .await?;
+
+    let app = marketplace_server::app::MarketplaceApp::new(
+        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+            pool.clone(),
+        ),
+        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+            pool.clone(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::audit_events::PostgresAuditEventRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::outbox_events::PostgresOutboxEventRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+                pool,
+            ),
+        ),
+    );
+
+    let claims = marketplace_auth_core::Claims {
+        sub: "seller_user".to_string(),
+        roles: vec![marketplace_auth_core::Role::SellerListingWriter],
+        scopes: vec![marketplace_auth_core::Scope::ListingCreate],
+        seller_account_id: Some("seller_user".to_string()),
+        buyer_agent_id: None,
+        hardware_id: None,
+        exp: Some(1715475600),
+    };
+
+    let request = marketplace_api_contract::CreateListingRequest {
+        idempotency_key: format!("create_auth_{}", suffix),
+        listing: marketplace_api_contract::ListingPayload {
+            schema_version: "1.0".to_string(),
+            owner_id: "seller_user".to_string(),
+            listing_type: marketplace_api_contract::ListingType::Product,
+            category: Some(marketplace_api_contract::Category::Laptop),
+            title: "Auth Test Laptop".to_string(),
+            condition: Some(marketplace_api_contract::Condition::New),
+            price: marketplace_api_contract::Price {
+                currency: "USD".to_string(),
+                amount: 1000.0,
+            },
+            location: marketplace_api_contract::ListingLocation {
+                country_code: "US".to_string(),
+                country_name: "United States".to_string(),
+                city: "New York".to_string(),
+                latitude: None,
+                longitude: None,
+                geolocation_opt_out: None,
+            },
+            picture_urls: vec!["https://example.com/laptop.jpg".to_string()],
+            description: "Test listing for auth".to_string(),
+            attributes: None,
+            sku: None,
+            quantity: None,
+            shipping_info: None,
+            condition_details: None,
+            seller_notes: None,
+            service_type: None,
+            hourly_rate: None,
+            project_rate: None,
+            qualifications: None,
+            service_radius_km: None,
+            property_transaction_type: None,
+            property_sub_type: None,
+            area_sqm: None,
+            bedrooms: None,
+            bathrooms: None,
+            year_built: None,
+            lot_size_sqm: None,
+            zoning: None,
+        },
+    };
+
+    let result = app
+        .create_listing(
+            &claims,
+            &request,
+            &format!("fp_{}", suffix),
+            "2026-05-12T00:00:00Z",
+        )
+        .await;
+    assert!(result.is_ok());
+    // Note: listing_id generation might differ, so just check it's created
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_seller_account_trust_level_update() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let seller_id = format!("seller_trust_{}", suffix);
+
+    // Insert seller account
+    sqlx::query(
+        "INSERT INTO seller_accounts (seller_account_id, owner_id, quota_remaining, trust_level, created_at, updated_at)
+         VALUES ($1, $2, 100, 'basic', '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
+    )
+    .bind(&seller_id)
+    .bind("owner_trust")
+    .execute(&pool)
+    .await?;
+
+    let repo =
+        marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            pool.clone(),
+        );
+
+    // Update trust level
+    let updated = repo
+        .update_trust_level(&seller_id, "premium")
+        .await
+        .unwrap();
+    assert!(updated.is_some());
+    let account = updated.unwrap();
+    assert_eq!(account.trust_level, "premium");
+    assert_eq!(account.seller_account_id, seller_id);
+
+    // Verify in DB
+    let row = sqlx::query("SELECT trust_level FROM seller_accounts WHERE seller_account_id = $1")
+        .bind(&seller_id)
+        .fetch_one(&pool)
+        .await?;
+    let db_trust: String = row.try_get("trust_level")?;
+    assert_eq!(db_trust, "premium");
 
     Ok(())
 }

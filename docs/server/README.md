@@ -25,7 +25,7 @@ The server is **production-ready** with:
 | **AI Prompt Cache** | ✅ | Moka-based (docs/server/ai-cache.md) |
 | **OpenAPI Spec** | ✅ **COMPLETE** | 20+ endpoints documented |
 | **Interactive Docs** | ✅ | Swagger Editor at `/docs` |
-| **MCP Server** | ✅ **COMPILES** | marketplace-mcp.exe built |
+| **MCP Server** | ✅ **SMOKE-TESTED** | marketplace-mcp sidecar built |
 | **Test Data** | 100k+ listings, 70k+ reviews | |
 
 ---
@@ -101,38 +101,48 @@ The API is **fully documented** with OpenAPI 3.0 spec!
 We've built an **MCP (Model Context Protocol)** server for AI agent integration!
 
 **Key Files**:
-- `backend/mcp/src/lib.rs` - MCP server implementation
-- `backend/mcp/src/bin/mcp_tester.rs` - Tester (has compilation issues)
+- `backend/mcp/src/runtime.rs` - stdio MCP sidecar runtime and tool router
+- `backend/mcp/src/bin/mcp_tester.rs` - Launcher smoke test and handshake checker
 - `docs/mcp/tool-catalog.md` - Tool definitions
 
 **Status**: 
-- ✅ `marketplace-mcp` package **COMPILES**!
-- ✅ Binary built: `target/debug/marketplace-mcp.exe` (14MB)
-- ⚠️ Tester has type inference issues (known)
+- `marketplace-mcp` sidecar **COMPILES** and the tester now passes the launcher smoke path
+- Binary built: `target/debug/marketplace-mcp.exe`
+- Launcher claims are passed explicitly through `MARKETPLACE_MCP_CLAIMS_JSON`
+- `MARKETPLACE_MCP_DATABASE_URL` is the explicit Postgres switch for the sidecar
+- The nightly smoke workflow uses the shared Rust schema bootstrap helper before the current listing create/search/get smoke path.
+- The `Server Postgres` workflow runs the live Postgres integration tests against the shared schema bootstrap helper and can be rerun manually in GitHub Actions.
 
-**MCP Tools Exposed** (7 tools):
+**MCP Tools Exposed** (10 tools):
 | Tool | Purpose | Required Role |
 |------|---------|---------------|
 | `create_listing` | Create seller listing | `seller_listing_writer` |
 | `search_listings` | Search indexed listings | `buyer_searcher` |
 | `get_listing` | Fetch one listing | authenticated client |
 | `open_negotiation` | Open buyer-side negotiation | `buyer_negotiator` |
+| `submit_offer` | Submit or counter offer | `buyer_negotiator` or `seller_negotiator` |
+| `get_negotiation_status` | Fetch negotiation state | authorized participant |
+| `accept_negotiation` | Accept a negotiation | `buyer_negotiator` or `seller_negotiator` |
+| `reject_negotiation` | Reject a negotiation | `buyer_negotiator` or `seller_negotiator` |
 | `request_contact_reveal` | Request contact reveal | `buyer_negotiator` |
 | `approve_contact_reveal` | Seller-side approval | `seller_contact_reveal_approver` |
-| `get_negotiation_status` | Fetch negotiation state | authorized participant |
 
 **How to Use with Claude Desktop**:
 ```json
 {
   "mcpServers": {
     "marketplace": {
-      "command": "path/to/marketplace-mcp.exe"
+      "command": "path/to/marketplace-mcp.exe",
+      "env": {
+        "MARKETPLACE_MCP_CLAIMS_JSON": "<launcher-provided-claims-json>",
+        "MARKETPLACE_MCP_DATABASE_URL": "<optional-postgres-url>"
+      }
     }
   }
 }
 ```
 
-The MCP server uses **stdio transport** and delegates to the same `MarketplaceApp` business logic as the HTTP API!
+The MCP server uses **stdio transport** and delegates to the same `MarketplaceApp` business logic as the HTTP API.
 
 ---
 

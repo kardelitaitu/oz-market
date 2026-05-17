@@ -1,6 +1,7 @@
 pub mod app;
 pub mod auth;
 pub mod background;
+pub mod bootstrap;
 pub mod config;
 pub mod domain;
 pub mod errors;

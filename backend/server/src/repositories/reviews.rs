@@ -467,4 +467,84 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }
+
+    #[tokio::test]
+    async fn test_in_memory_create_review_with_body_none() {
+        let repo = InMemoryReviewRepository::new();
+        let result = repo
+            .create_review(
+                "rev_125",
+                "lst_457",
+                "seller_790",
+                "buyer_102",
+                3,
+                "Average",
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+        let review = result.unwrap();
+        assert_eq!(review.body, None);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_create_review_updates_timestamps() {
+        let repo = InMemoryReviewRepository::new();
+        let before = chrono::Utc::now();
+        let result = repo
+            .create_review(
+                "rev_126",
+                "lst_458",
+                "seller_791",
+                "buyer_103",
+                4,
+                "Good",
+                Some("Worth it"),
+            )
+            .await;
+        assert!(result.is_ok());
+        let review = result.unwrap();
+        assert!(review.created_at >= before.to_rfc3339());
+        assert_eq!(review.created_at, review.updated_at);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_update_review_status_updates_timestamp() {
+        let repo = InMemoryReviewRepository::new();
+        repo.create_review(
+            "rev_127",
+            "lst_459",
+            "seller_792",
+            "buyer_104",
+            5,
+            "Excellent",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let before_update = chrono::Utc::now();
+        let result = repo.update_review_status("rev_127", "approved").await;
+        assert!(result.is_ok());
+        let updated = result.unwrap().unwrap();
+        assert_eq!(updated.status, "approved");
+        assert!(updated.updated_at >= before_update.to_rfc3339());
+        assert!(updated.updated_at > updated.created_at);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_reviews_empty_for_unknown_listing() {
+        let repo = InMemoryReviewRepository::new();
+        let result = repo.get_reviews_for_listing("unknown").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_get_reviews_empty_for_unknown_seller() {
+        let repo = InMemoryReviewRepository::new();
+        let result = repo.get_reviews_for_seller("unknown").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
 }

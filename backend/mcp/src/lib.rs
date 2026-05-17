@@ -12,6 +12,11 @@ use marketplace_api_contract::{
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
 
+mod launcher_claims;
+mod runtime;
+
+pub use launcher_claims::{dev_launcher_claims, dev_launcher_claims_json};
+
 type InMemoryApp = MarketplaceApp<
     marketplace_server::repositories::listings::InMemoryListingRepository,
     marketplace_server::services::idempotency::InMemoryIdempotencyRepository,
@@ -19,28 +24,8 @@ type InMemoryApp = MarketplaceApp<
     marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository,
 >;
 
-pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let app = InMemoryApp::new(
-        marketplace_server::repositories::listings::InMemoryListingRepository::new(),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository::new(),
-        marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository::new(),
-        std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::InMemoryNegotiationRepository::new(),
-        ),
-        std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
-        ),
-        std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
-        ),
-        std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository::new(
-            ),
-        ),
-    );
-    let _mcp = MarketplaceMcp::new(app);
-    Ok(())
+pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    runtime::run()
 }
 
 pub struct MarketplaceMcp {
@@ -477,5 +462,96 @@ mod tests {
             marketplace_api_contract::NegotiationStatus::Reserved
         );
         assert!(open.reservation_lease_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn mcp_delegates_contact_reveal_polling_to_shared_app() {
+        let audit_repo = Arc::new(InMemoryAuditEventRepository::new());
+        let outbox_repo = Arc::new(InMemoryOutboxEventRepository::new());
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
+            audit_repo,
+            outbox_repo,
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let mcp = MarketplaceMcp::new(app);
+        let claims = build_claims();
+        let admin = build_admin_claims();
+
+        let created = mcp
+            .create_listing(
+                &claims,
+                &build_create_request(),
+                "fp-create-reveal",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+
+        let opened = mcp
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: created.listing_id.clone(),
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-reveal".to_string(),
+                },
+                "fp-open-reveal",
+                "2026-05-04T00:00:01Z",
+            )
+            .await
+            .unwrap();
+
+        let reveal = mcp
+            .request_contact_reveal(
+                &claims,
+                &opened.negotiation_id,
+                &RequestContactRevealRequest {
+                    idempotency_key: "idem-reveal".to_string(),
+                },
+                "fp-reveal",
+                "2026-05-04T00:00:02Z",
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            reveal.reveal_status,
+            marketplace_api_contract::ContactRevealStatus::Pending
+        );
+
+        let fetched = mcp
+            .get_contact_reveal(&reveal.reveal_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            fetched.reveal_status,
+            marketplace_api_contract::ContactRevealStatus::Pending
+        );
+
+        let approved = mcp
+            .approve_contact_reveal(&admin, &reveal.reveal_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            approved.reveal_status,
+            marketplace_api_contract::ContactRevealStatus::Approved
+        );
+
+        let fetched_after = mcp
+            .get_contact_reveal(&reveal.reveal_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            fetched_after.reveal_status,
+            marketplace_api_contract::ContactRevealStatus::Approved
+        );
     }
 }

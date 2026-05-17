@@ -5,7 +5,9 @@ pub type ResourceId = String;
 pub type CurrencyCode = String;
 pub type CountryCode = String;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Category {
     Laptop,
@@ -23,7 +25,9 @@ pub enum Category {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Condition {
     New,
@@ -31,7 +35,9 @@ pub enum Condition {
     Refurbished,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ListingStatus {
     Draft,
@@ -41,7 +47,18 @@ pub enum ListingStatus {
     Archived,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    Default,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchSort {
     #[default]
@@ -56,7 +73,9 @@ pub enum SearchSort {
 }
 
 // NEW: Listing type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ListingType {
     Product,  // Physical goods (existing)
@@ -65,7 +84,9 @@ pub enum ListingType {
 }
 
 // NEW: Service type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceType {
     Local,  // In-person, location-based services
@@ -73,7 +94,9 @@ pub enum ServiceType {
 }
 
 // NEW: Property transaction type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyTransactionType {
     Rent, // Lease/rental
@@ -81,7 +104,9 @@ pub enum PropertyTransactionType {
 }
 
 // NEW: Property sub-type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertySubType {
     Building,  // Commercial/industrial structures
@@ -90,13 +115,13 @@ pub enum PropertySubType {
     Land,      // Empty plots/land
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct Price {
     pub currency: CurrencyCode,
     pub amount: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct ListingLocation {
     pub country_code: CountryCode,
     pub country_name: String,
@@ -110,7 +135,7 @@ pub struct ListingLocation {
     pub geolocation_opt_out: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct ShippingInfo {
     pub local_pickup: bool,
     pub shipping_available: bool,
@@ -120,7 +145,7 @@ pub struct ShippingInfo {
     pub shipping_regions: Option<Vec<CountryCode>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct ListingPayload {
     pub schema_version: String,
     pub owner_id: String,
@@ -178,13 +203,13 @@ pub struct ListingPayload {
     pub zoning: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct CreateListingRequest {
     pub idempotency_key: String,
     pub listing: ListingPayload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct ListingSummary {
     pub listing_id: ResourceId,
     pub status: ListingStatus,
@@ -201,7 +226,7 @@ pub struct ListingSummary {
 
 pub type CreateListingResponse = ListingSummary;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct SearchPriceFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<CurrencyCode>,
@@ -211,7 +236,7 @@ pub struct SearchPriceFilter {
     pub max_amount: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct SearchLocationFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub country_code: Option<CountryCode>,
@@ -219,7 +244,7 @@ pub struct SearchLocationFilter {
     pub city: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct SearchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
@@ -308,7 +333,7 @@ impl Default for SearchRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
 pub struct SearchResponse {
     pub items: Vec<ListingSummary>,
     pub applied_sort_by: SearchSort,

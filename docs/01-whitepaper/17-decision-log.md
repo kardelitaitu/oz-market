@@ -110,11 +110,9 @@ Track accepted, rejected, and deferred architecture decisions so the codebase do
 
 ### D-201: MCP Deployment Shape
 
-- `status`: deferred
-- `decision`: whether MCP runs inside the main binary or as sidecar
-- `reason`: depends on implementation and operational tradeoffs
-- `owner`: `dev (interim)`
-- `target_stage`: before MCP runtime implementation starts
+- `status`: accepted
+- `decision`: run MCP as a separate stdio sidecar binary
+- `reason`: keeps desktop-agent transport isolated while sharing the same backend service logic; simpler operational boundary than embedding MCP in the HTTP runtime
 
 ### D-202: Money Precision Policy
 

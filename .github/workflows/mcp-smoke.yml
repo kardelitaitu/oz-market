@@ -1,0 +1,48 @@
+name: MCP Smoke
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: MCP Smoke Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: marketplace
+          POSTGRES_USER: marketplace
+          POSTGRES_PASSWORD: marketplace
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U marketplace -d marketplace"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Bootstrap schema
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://marketplace:marketplace@127.0.0.1:${{ job.services.postgres.ports[5432] }}/marketplace?sslmode=disable"
+        run: cargo run -p marketplace-server --bin bootstrap_schema
+
+      - name: Launcher smoke test
+        working-directory: backend
+        env:
+          MARKETPLACE_MCP_DATABASE_URL: "postgresql://marketplace:marketplace@127.0.0.1:${{ job.services.postgres.ports[5432] }}/marketplace?sslmode=disable"
+        run: cargo test -p marketplace-mcp --test launcher_contract -- --nocapture
+
+      - name: Shared contract parity test
+        working-directory: backend
+        run: cargo test -p marketplace-api-contract --test mobile_contract -- --nocapture

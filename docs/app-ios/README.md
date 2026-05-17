@@ -160,11 +160,12 @@ class AiAgentService {
 ## Next Docs To Add
 
 1. ✅ **Screen and navigation flow** (see `first-user-flow.md`)
-2. 🔜 **Mobile auth flow** (JWT + Keychain, refresh tokens)
-3. 🔜 **App-agent lifecycle and settings**
-4. 🔜 **Push notification strategy** (APNs integration)
-5. 🔜 **Offline caching approach** (Core Data for listings)
-6. 🔜 **Image handling** (we don't support images yet per spec!)
+2. ✅ **Full build plan** (see `build-plan.md`)
+3. 🔜 **Mobile auth flow** (JWT + Keychain, refresh tokens)
+4. 🔜 **App-agent lifecycle and settings**
+5. 🔜 **Push notification strategy** (APNs integration)
+6. 🔜 **Offline caching approach** (Core Data for listings)
+7. 🔜 **Image handling** (we don't support images yet per spec!)
 
 ## Open Questions for Mobile
 

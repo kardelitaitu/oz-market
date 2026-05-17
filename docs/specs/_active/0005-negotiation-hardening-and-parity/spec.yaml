@@ -1,0 +1,48 @@
+version: 1
+id: 0005-negotiation-hardening-and-parity
+title: Negotiation Hardening and Contract Parity
+status: active
+owner: backend-team
+implementer: opencode
+priority: P0
+area:
+  - backend
+  - api
+  - mcp
+  - security
+files:
+  code:
+    - backend/crates/api-contract/src/negotiation.rs
+    - backend/server/src/app.rs
+    - backend/server/src/auth/mod.rs
+    - backend/server/src/services/authz.rs
+    - backend/server/src/services/idempotency.rs
+    - backend/server/src/services/reservations.rs
+    - backend/server/src/repositories/negotiations.rs
+    - backend/server/src/repositories/contact_reveals.rs
+    - backend/server/src/repositories/idempotency_keys.rs
+    - backend/server/src/repositories/reservations.rs
+    - backend/server/src/http/runtime.rs
+    - backend/server/src/http/actix_handlers.rs
+    - backend/server/tests/postgres_flows.rs
+    - backend/server/tests/e2e.rs
+  docs:
+    - docs/specs/openapi.yaml
+acceptance:
+  - request-contact-reveal enforces real negotiation participant ownership (seller or buyer side) for the target negotiation
+  - approve-contact-reveal enforces seller ownership of the listing tied to the reveal request
+  - open-negotiation validates offer_amount as positive finite and aligns with OpenAPI constraints
+  - open-negotiation conflict path does not leak active reservation or pending idempotency state
+  - all post-begin idempotency failures commit a failed idempotency outcome (no stuck pending state)
+  - request-contact-reveal returns 202 Accepted across runtime and actix, and OpenAPI documents the same status
+  - openapi response/status codes and runtime/actix behavior are parity-aligned for negotiation and contact-reveal routes
+  - targeted tests cover unauthorized reveal request/approval and open-negotiation conflict/validation branches
+  - cargo check passes for backend workspace after changes
+non_goals:
+  - redesigning negotiation domain model or introducing new statuses
+  - replacing idempotency storage architecture
+  - changing existing mobile payload fields
+risks:
+  - ownership fixes can break existing clients that relied on permissive behavior
+  - conflict compensation can introduce new race conditions if not tested in postgres path
+  - parity updates can drift again without explicit regression tests

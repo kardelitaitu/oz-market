@@ -81,6 +81,6 @@
 - Can one seller have multiple AI agents?
 - Does the marketplace eventually support escrow or payment links?
 - What exact workload defines the `50k+ RPS` target: reads, writes, or mixed traffic?
-- Will the MCP server run inside the main binary or as a thin sidecar over the API?
+- MCP deployment shape is resolved as a separate stdio sidecar binary over the shared backend logic.
 - Is device identity optional evidence only, or a hard requirement for seller onboarding?
 - Is `openrouter/free` the default free-agent path only, or the only app-agent provider in V1?

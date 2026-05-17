@@ -5,10 +5,10 @@ Claims mode: fixed
 ---
 
 === Health Check ===
-Health: 100/100 succeeded (100.00%) in 54.5408ms
-  → 1833.49 ops/s
+Health: 100/100 succeeded (100.00%) in 28.105ms
+  → 3558.09 ops/s
   → 429s: 0 | other_failures: 0
-  → p50 2.25 ms | p95 15.33 ms
+  → p50 1.88 ms | p95 5.37 ms
 
 === Server Configuration ===
   CPU Cores (Logical): 32
@@ -18,22 +18,22 @@ Health: 100/100 succeeded (100.00%) in 54.5408ms
   Search Cache: 6144 MB max, 0 MB used
   Total Cache: used 0 MB
 Using listing_id: lst_1778542535517163300
-Cold search (first request): 1/1 succeeded (100.00%) in 18.7984ms
-  → 53.20 ops/s
+Cold search (first request): 1/1 succeeded (100.00%) in 1.5589ms
+  → 641.48 ops/s
   → 429s: 0 | other_failures: 0
-  → p50 18.80 ms | p95 18.80 ms
+  → p50 1.56 ms | p95 1.56 ms
 
 === Warm-cache search sweep ===
 concurrency | success_rate | 429_rate | ops/s | p50_ms | p95_ms | elapsed_ms
-100         |        2.90% |    97.10% | 1764.69 |    1.30 |    3.93 |      32.87
-200         |        0.00% |   100.00% |    0.00 |    2.83 |    5.67 |      32.42
-500         |        0.00% |   100.00% |    0.00 |    6.71 |   18.90 |      42.50
+100         |      100.00% |     0.00% | 4488.23 |   24.58 |   41.67 |     445.61
+200         |      100.00% |     0.00% | 4604.07 |   40.61 |   72.90 |     434.40
+500         |      100.00% |     0.00% | 4410.62 |   98.45 |  180.35 |     453.45
 Warming listing cache...
 Cache warmed.
 
-Warm get_listing sample: 1000/1000 succeeded (100.00%) in 16.6146ms
-  → 60188.03 ops/s
+Warm get_listing sample: 1000/1000 succeeded (100.00%) in 214.9188ms
+  → 4652.92 ops/s
   → 429s: 0 | other_failures: 0
-  → p50 5.33 ms | p95 8.88 ms
+  → p50 88.83 ms | p95 178.28 ms
 
 === Benchmark Complete ===

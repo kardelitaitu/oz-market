@@ -465,7 +465,7 @@ paths:
             schema:
               $ref: '#/components/schemas/RequestContactRevealRequest'
       responses:
-        '200':
+        '202':
           description: Contact reveal requested
           content:
             application/json:

@@ -53,7 +53,7 @@ pub use audit_events::AuditEventRepository;
 pub use contact_reveals::{
     ContactRevealRepository, InMemoryContactRevealRepository, PostgresContactRevealRepository,
 };
-pub use idempotency_keys::IdempotencyKeyRepository;
+pub use idempotency_keys::{IdempotencyKeyRepository, PostgresIdempotencyKeyRepository};
 pub use listings::{InMemoryListingRepository, ListingRepository, PostgresListingRepository};
 pub use negotiations::{
     InMemoryNegotiationRepository, NegotiationRepository, PostgresNegotiationRepository,
