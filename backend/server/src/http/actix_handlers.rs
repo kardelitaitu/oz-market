@@ -346,7 +346,8 @@ pub async fn create_listing(
         search_cache.invalidate_all();
     }
     match app.create_listing(&claims, &body, &fingerprint, &now).await {
-        Ok(created) => HttpResponse::Created().json(created),
+        Ok((created, false)) => HttpResponse::Created().json(created),
+        Ok((created, true)) => HttpResponse::Ok().json(created),
         Err(e) => map_handler_error(&e),
     }
 }
@@ -382,7 +383,8 @@ pub async fn open_negotiation(
         .open_negotiation(&claims, &body, &fingerprint, &now)
         .await
     {
-        Ok(response) => HttpResponse::Created().json(response),
+        Ok((response, false)) => HttpResponse::Created().json(response),
+        Ok((response, true)) => HttpResponse::Ok().json(response),
         Err(e) => map_handler_error(&e),
     }
 }

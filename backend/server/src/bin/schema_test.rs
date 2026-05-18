@@ -200,7 +200,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "test-fingerprint-1",
             "2026-05-09T00:00:00Z",
         )
-        .await?;
+        .await?
+        .0;
     println!(
         "✅ Product listing created: {}",
         product_response.listing_id
@@ -214,7 +215,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "test-fingerprint-2",
             "2026-05-09T00:00:00Z",
         )
-        .await?;
+        .await?
+        .0;
     println!(
         "✅ Service listing created: {}",
         service_response.listing_id
@@ -228,7 +230,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "test-fingerprint-3",
             "2026-05-09T00:00:00Z",
         )
-        .await?;
+        .await?
+        .0;
     println!(
         "✅ Property listing created: {}",
         property_response.listing_id

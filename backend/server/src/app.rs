@@ -153,7 +153,7 @@ where
         request: &OpenNegotiationRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<NegotiationResponse, crate::http::handlers::HandlerError> {
+    ) -> Result<(NegotiationResponse, bool), crate::http::handlers::HandlerError> {
         crate::services::authz::authorize_open_negotiation(claims, &request.buyer_agent_id)?;
         let attempt = crate::services::idempotency::IdempotencyAttempt {
             actor_subject: &claims.sub,
@@ -320,7 +320,7 @@ where
                     now_rfc3339,
                 )
                 .await?;
-                Ok(response)
+                Ok((response, false))
             }
             crate::services::idempotency::IdempotencyDecision::ReplayAccepted {
                 response_payload,
@@ -331,14 +331,15 @@ where
                         "replayed open negotiation missing stored response payload",
                     )
                 })?;
-                serde_json::from_value::<NegotiationResponse>(payload)
+                let response = serde_json::from_value::<NegotiationResponse>(payload)
                     .map_err(|error| {
                         crate::services::idempotency::IdempotencyError::new(
                             crate::services::idempotency::IdempotencyErrorKind::Storage,
                             error.to_string(),
                         )
                     })
-                    .map_err(crate::http::handlers::HandlerError::from)
+                    .map_err(crate::http::handlers::HandlerError::from)?;
+                Ok((response, true))
             }
             crate::services::idempotency::IdempotencyDecision::InFlight => {
                 Err(crate::services::idempotency::IdempotencyError::new(
@@ -801,7 +802,7 @@ where
         request: &CreateListingRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<CreateListingResponse, crate::http::handlers::HandlerError> {
+    ) -> Result<(CreateListingResponse, bool), crate::http::handlers::HandlerError> {
         crate::services::authz::authorize_create_listing(claims, &request.listing.owner_id)?;
 
         // Check quota before proceeding
@@ -905,7 +906,7 @@ where
                     now_rfc3339,
                 )
                 .await?;
-                Ok(response)
+                Ok((response, false))
             }
             crate::services::idempotency::IdempotencyDecision::ReplayAccepted {
                 response_payload,
@@ -916,14 +917,15 @@ where
                         "replayed create listing missing stored response payload",
                     )
                 })?;
-                serde_json::from_value::<CreateListingResponse>(payload)
+                let response = serde_json::from_value::<CreateListingResponse>(payload)
                     .map_err(|error| {
                         crate::services::idempotency::IdempotencyError::new(
                             crate::services::idempotency::IdempotencyErrorKind::Storage,
                             error.to_string(),
                         )
                     })
-                    .map_err(crate::http::handlers::HandlerError::from)
+                    .map_err(crate::http::handlers::HandlerError::from)?;
+                Ok((response, true))
             }
             crate::services::idempotency::IdempotencyDecision::InFlight => {
                 Err(crate::services::idempotency::IdempotencyError::new(
@@ -1534,11 +1536,12 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(audit_repo.events().len(), 1);
         assert_eq!(outbox_repo.events().len(), 1);
 
-        let open = app
+        let (open, _) = app
             .open_negotiation(
                 &claims,
                 &OpenNegotiationRequest {
@@ -1669,8 +1672,9 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
-        let open = app
+            .unwrap()
+            .0;
+        let (open, _) = app
             .open_negotiation(
                 &claims,
                 &OpenNegotiationRequest {
@@ -1736,7 +1740,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         let opened = app
             .open_negotiation(
                 &buyer,
@@ -1751,7 +1756,8 @@ mod tests {
                 "2026-05-04T00:00:01Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let released = app
             .release_reservation(
@@ -1826,7 +1832,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         let archived = app
             .archive_listing(
                 &admin,
@@ -1861,7 +1868,8 @@ mod tests {
         let created = app
             .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:00Z")
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(created.listing.title, "ThinkPad T480");
 
         let response = app
@@ -1913,13 +1921,15 @@ mod tests {
         let first = app
             .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:00Z")
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(first.listing.title, "ThinkPad T480");
 
         let replay = app
             .create_listing(&claims, &request, "fp-create-1", "2026-05-04T00:00:01Z")
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(replay.listing_id, first.listing_id);
         assert_eq!(audit_repo.events().len(), 1);
         assert_eq!(outbox_repo.events().len(), 1);
@@ -1948,7 +1958,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let request = OpenNegotiationRequest {
             listing_id: listing.listing_id.clone(),
@@ -1960,11 +1971,13 @@ mod tests {
         let first = app
             .open_negotiation(&claims, &request, "fp-open-replay", "2026-05-04T00:00:01Z")
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         let replay = app
             .open_negotiation(&claims, &request, "fp-open-replay", "2026-05-04T00:00:02Z")
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         assert_eq!(replay.negotiation_id, first.negotiation_id);
         assert_eq!(audit_repo.events().len(), 2);
@@ -1994,8 +2007,9 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
-        let open = app
+            .unwrap()
+            .0;
+        let (open, _) = app
             .open_negotiation(
                 &claims,
                 &OpenNegotiationRequest {
@@ -2063,7 +2077,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let first_request = OpenNegotiationRequest {
             listing_id: listing.listing_id.clone(),
@@ -2149,8 +2164,9 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
-        let open = app
+            .unwrap()
+            .0;
+        let (open, _) = app
             .open_negotiation(
                 &claims,
                 &OpenNegotiationRequest {
@@ -2237,8 +2253,9 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
-        let open = app
+            .unwrap()
+            .0;
+        let (open, _) = app
             .open_negotiation(
                 &claims,
                 &OpenNegotiationRequest {
@@ -2309,7 +2326,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let opened = app
             .open_negotiation(
@@ -2325,7 +2343,8 @@ mod tests {
                 "2026-05-04T00:00:01Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         assert_eq!(opened.status, NegotiationStatus::Reserved);
 
         let submitted = app
@@ -2384,7 +2403,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         let opened = app
             .open_negotiation(
                 &claims,
@@ -2399,7 +2419,8 @@ mod tests {
                 "2026-05-04T00:00:01Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let result = app
             .submit_offer(
@@ -2445,7 +2466,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         let opened = app
             .open_negotiation(
                 &claims,
@@ -2460,7 +2482,8 @@ mod tests {
                 "2026-05-04T00:00:01Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let rejected = app
             .reject_negotiation(
@@ -2504,7 +2527,8 @@ mod tests {
                 "2026-05-04T00:00:00Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
         let opened = app
             .open_negotiation(
                 &claims,
@@ -2519,7 +2543,8 @@ mod tests {
                 "2026-05-04T00:00:01Z",
             )
             .await
-            .unwrap();
+            .unwrap()
+            .0;
 
         let outsider = Claims {
             sub: "sub-outsider".to_string(),

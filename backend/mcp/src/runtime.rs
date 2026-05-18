@@ -3,9 +3,9 @@ use std::future::Future;
 use std::sync::Arc;
 
 use marketplace_api_contract::{
-    AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
-    NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
-    RequestContactRevealRequest, SearchRequest, SearchResponse, SubmitOfferRequest,
+    AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, NegotiationResponse,
+    OpenNegotiationRequest, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
+    SearchResponse, SubmitOfferRequest,
 };
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
@@ -105,7 +105,7 @@ where
     ) -> Result<String, McpToolError> {
         let fingerprint = serde_json::to_string(&request)
             .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let response: CreateListingResponse = self
+        let result = self
             .app
             .create_listing(
                 self.claims(),
@@ -115,6 +115,7 @@ where
             )
             .await
             .map_err(McpToolError::from)?;
+        let response = result.0;
         json_string(&response)
     }
 
@@ -152,7 +153,7 @@ where
     ) -> Result<String, McpToolError> {
         let fingerprint = serde_json::to_string(&request)
             .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let response: NegotiationResponse = self
+        let result = self
             .app
             .open_negotiation(
                 self.claims(),
@@ -162,6 +163,7 @@ where
             )
             .await
             .map_err(McpToolError::from)?;
+        let response = result.0;
         json_string(&response)
     }
 

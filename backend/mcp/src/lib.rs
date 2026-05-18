@@ -77,6 +77,7 @@ impl MarketplaceMcp {
         self.app
             .create_listing(claims, request, request_fingerprint, now_rfc3339)
             .await
+            .map(|(r, _)| r)
     }
 
     pub async fn begin_open_negotiation(
@@ -104,6 +105,7 @@ impl MarketplaceMcp {
         self.app
             .open_negotiation(claims, request, request_fingerprint, now_rfc3339)
             .await
+            .map(|(r, _)| r)
     }
 
     pub async fn get_negotiation_status(

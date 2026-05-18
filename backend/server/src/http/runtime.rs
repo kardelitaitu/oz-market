@@ -523,8 +523,11 @@ where
                         .create_listing(&claims, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok(created) => {
+                        Ok((created, false)) => {
                             json_response(201, serde_json::to_value(created).unwrap_or_default())
+                        }
+                        Ok((created, true)) => {
+                            json_response(200, serde_json::to_value(created).unwrap_or_default())
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -559,8 +562,11 @@ where
                         .open_negotiation(&claims, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok(created) => {
+                        Ok((created, false)) => {
                             json_response(201, serde_json::to_value(created).unwrap_or_default())
+                        }
+                        Ok((created, true)) => {
+                            json_response(200, serde_json::to_value(created).unwrap_or_default())
                         }
                         Err(error) => map_handler_error(&error),
                     }

@@ -125,10 +125,12 @@ impl BenchmarkAppFacade for BenchmarkHarness {
             Self::Postgres(harness) => Ok(harness
                 .app
                 .create_listing(claims, request, request_fingerprint, now_rfc3339)
-                .await?),
+                .await?
+                .0),
             Self::Memory(app) => Ok(app
                 .create_listing(claims, request, request_fingerprint, now_rfc3339)
-                .await?),
+                .await?
+                .0),
         }
     }
 
@@ -166,10 +168,12 @@ impl BenchmarkAppFacade for BenchmarkHarness {
             Self::Postgres(harness) => Ok(harness
                 .app
                 .open_negotiation(claims, request, request_fingerprint, now_rfc3339)
-                .await?),
+                .await?
+                .0),
             Self::Memory(app) => Ok(app
                 .open_negotiation(claims, request, request_fingerprint, now_rfc3339)
-                .await?),
+                .await?
+                .0),
         }
     }
 

@@ -590,3 +590,9 @@ new line
   runs 11 HTTP test scenarios (health, CRUD, negotiation, reveal, auth errors, rate limiting), and cleans up.
 - Why: spec 0005 is fully implemented and ready for archiving; live-test harness enables end-to-end validation
   against real Postgres before mobile clients consume the API.
+
+## 2026-05-18 (later)
+
+- **Updated return types** of `create_listing` and `open_negotiation` on `MarketplaceApp` to `Result<(X, bool), Error>` (the `bool` indicates idempotency replay).
+- Updated all 22 call sites in `backend/server/src/app.rs` test code to destructure `.0` or use `let (var, _) =`.
+- No behavioral change — all 20 `app::tests` pass.
