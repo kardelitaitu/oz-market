@@ -436,8 +436,9 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
         .try_get::<Option<String>, _>("sku")
         .map_err(|error| storage(error.to_string()))?;
     let quantity = row
-        .try_get::<i32, _>("quantity")
-        .map_err(|error| storage(error.to_string()))?;
+        .try_get::<Option<i32>, _>("quantity")
+        .map_err(|error| storage(error.to_string()))?
+        .unwrap_or(0);
     let shipping_info = row
         .try_get::<Option<serde_json::Value>, _>("shipping_info")
         .map_err(|error| storage(error.to_string()))?;
@@ -939,8 +940,8 @@ impl ListingRepository for PostgresListingRepository {
         };
 
         sqlx::query(
-            "INSERT INTO listings (listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, sku, quantity, shipping_info, condition_details, seller_notes, listing_type, latitude, longitude, geolocation_opt_out)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
+            "INSERT INTO listings (listing_id, owner_id, schema_version, category, product_name, \"condition\", price_currency, price_amount, country_code, country_name, city, picture_urls, description, attributes, status, version, create_idempotency_key, sku, quantity, shipping_info, condition_details, seller_notes, listing_type, latitude, longitude, geolocation_opt_out)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)",
         )
         .bind(&listing_summary.listing_id)
         .bind(&listing_summary.listing.owner_id)
@@ -953,11 +954,12 @@ impl ListingRepository for PostgresListingRepository {
         .bind(&listing_summary.listing.location.country_code)
         .bind(&listing_summary.listing.location.country_name)
         .bind(&listing_summary.listing.location.city)
-        .bind(&listing_summary.listing.picture_urls)
+        .bind(sqlx::types::Json(&listing_summary.listing.picture_urls))
         .bind(&listing_summary.listing.description)
-        .bind(&listing_summary.listing.attributes)
+        .bind(listing_summary.listing.attributes.as_ref().unwrap_or(&serde_json::Value::Null))
         .bind(db_enum_value(&listing_summary.status))
         .bind(listing_summary.version as i64)
+        .bind(&request.idempotency_key)
         .bind(&listing_summary.listing.sku)
         .bind(listing_summary.listing.quantity.map(|q| q as i32))
         .bind(listing_summary.listing.shipping_info.as_ref().map(|si| serde_json::to_value(si).unwrap_or(serde_json::Value::Null)))

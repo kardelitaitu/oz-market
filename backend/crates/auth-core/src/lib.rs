@@ -64,14 +64,17 @@ pub struct Claims {
 }
 
 impl Claims {
+    #[must_use]
     pub fn has_scope(&self, scope: Scope) -> bool {
         self.scopes.contains(&scope)
     }
 
+    #[must_use]
     pub fn has_role(&self, role: Role) -> bool {
         self.roles.contains(&role)
     }
 
+    #[must_use]
     pub fn is_expired(&self) -> bool {
         if let Some(exp) = self.exp {
             let now = chrono::Utc::now().timestamp();
@@ -191,6 +194,7 @@ pub fn authorize(claims: &Claims, action: Action, ownership: OwnershipContext) -
     }
 }
 
+#[must_use]
 pub fn action_to_scopes(action: Action) -> Vec<Scope> {
     match action {
         Action::CreateListing => vec![Scope::ListingCreate],

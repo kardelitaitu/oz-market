@@ -1,7 +1,7 @@
 ---
 id: 0005-negotiation-hardening-and-parity
 title: Negotiation Hardening and Contract Parity
-status: active
+status: completed
 owner: backend-team
 implementer: opencode
 priority: P0
@@ -50,7 +50,7 @@ risks:
 
 # Negotiation Hardening and Contract Parity
 
-Status: `active`
+Status: `completed`
 
 Owner: `backend-team`
 Implementer: `opencode`

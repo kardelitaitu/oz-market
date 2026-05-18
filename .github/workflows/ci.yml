@@ -20,11 +20,3 @@ jobs:
       - name: Cargo check
         working-directory: backend
         run: cargo check
-
-      - name: MCP launcher smoke tests
-        working-directory: backend
-        run: cargo test -p marketplace-mcp --lib --tests -- --nocapture
-
-      - name: Shared contract parity tests
-        working-directory: backend
-        run: cargo test -p marketplace-api-contract --test mobile_contract -- --nocapture

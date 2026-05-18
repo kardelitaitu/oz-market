@@ -236,7 +236,7 @@ pub struct SearchPriceFilter {
     pub max_amount: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, schemars::JsonSchema)]
 pub struct SearchLocationFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub country_code: Option<CountryCode>,

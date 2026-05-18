@@ -19,7 +19,7 @@ pub enum ApiErrorCode {
     InvalidTransition,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiErrorDetail {
     pub code: ApiErrorCode,
     pub message: String,

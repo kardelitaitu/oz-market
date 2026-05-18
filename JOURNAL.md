@@ -552,3 +552,41 @@ eg_{listing_id} + PK conflict) with option tradeoffs for future reopen semantics
 - **Deprecated routes removed** — deleted 6 deprecated route registrations from `actix_runtime.rs:126-152` (`/v1/product/`, `/v1/service/`, `/v1/property/` detail + search). Removed `extract_listing_type_from_path()`, `deprecated_listing_redirect()`, `deprecated_search_redirect()`, and `DEPRECATION_SUNSET_DATE` const from `actix_handlers.rs`. Stripped the listing-type-from-path fallback from `search_listings()` (was dead code after routes removed). Deleted 4 unit tests for the now-removed helper. Test count dropped 211→207.
 - Why: sunset deadline June 1; the 301 redirects have been live since May 11 but no clients depend on the old paths (MCP uses service layer, mobile uses `/v1/listings`).
 new line
+## 2026-05-18
+
+- **Audit fixes applied** — replaced 16 `serde_json::to_value(...).unwrap()` calls in `runtime.rs` with `.unwrap_or_default()`
+  to eliminate panic-on-NaN path; cfg-gated 3 dead helper functions in `actix_handlers.rs`;
+  removed redundant `pool.clone()` in mcp `runtime.rs:594`; cfg-gated 3 test-only helpers in mcp `lib.rs`;
+  added `Eq` derive to `ApiErrorDetail`, `SearchLocationFilter`, `AcceptNegotiationRequest`,
+  `RejectNegotiationRequest`, `RequestContactRevealRequest`, `ContactRevealResponse`;
+  added `#[must_use]` to 4 auth-core methods (`has_scope`, `has_role`, `is_expired`, `action_to_scopes`);
+  upgraded `reqwest 0.11→0.12`, `utoipa 3→5`, `utoipa-swagger-ui 3→8`.
+- Why: eliminate all panic-at-runtime paths, suppress dead-code enables in production, and reduce
+  transitive-dependency bloat from old crate versions.
+
+## 2026-05-18
+
+- **Spec 0005 implementation** — `open_negotiation` now validates offer_amount is positive finite;
+  upsert-conflict (already reserved) releases reservation + commits idempotency failure;
+  listing-not-found/-inactive branches commit idempotency failure.
+  `request_contact_reveal` authz now looks up stored negotiation + listing to bind permission context
+  (rejecting outsider requests).
+  `approve_contact_reveal` authz now traverses reveal→negotiation→listing chain
+  (rejecting wrong-seller reveals).
+  Added rate limiting to `approve_contact_reveal` (10/min per sub).
+- Why: close spec 0005 requirements — idempotency integrity on all failure paths, authz binds to
+  actual stored state instead of relying on claims alone.
+
+## 2026-05-18
+
+- **Spec 0005 completed** — all 7 parity checks flipped to true.
+  Added `InternalServerError` response component + 500 responses to all 11 user-facing endpoints in OpenAPI.
+  Added 5 Postgres integration tests: outsider reveal request rejection, wrong-seller reveal approval rejection,
+  invalid offer amount (zero/negative), open-negotiation conflict compensation, inactive listing idempotency failure commit.
+- Why: prepare backend for live-testing by closing spec 0005 requirements, documenting all 500 paths in OpenAPI,
+  and covering ownership/conflict/validation paths with Postgres regressions.
+- **Archived spec 0005** from `_active/` to `_done/` — no active specs remain.
+- **Created `backend/scripts/live-test.ps1`** — standalone harness that boots Postgres, starts the Actix server,
+  runs 11 HTTP test scenarios (health, CRUD, negotiation, reveal, auth errors, rate limiting), and cleans up.
+- Why: spec 0005 is fully implemented and ready for archiving; live-test harness enables end-to-end validation
+  against real Postgres before mobile clients consume the API.

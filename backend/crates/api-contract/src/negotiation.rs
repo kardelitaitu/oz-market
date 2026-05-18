@@ -39,17 +39,17 @@ pub struct SubmitOfferRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct AcceptNegotiationRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct RejectNegotiationRequest {
     pub idempotency_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct RequestContactRevealRequest {
     pub idempotency_key: String,
 }
@@ -93,7 +93,7 @@ pub struct NegotiationResponse {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct ContactRevealResponse {
     pub reveal_id: ResourceId,
     pub negotiation_id: ResourceId,

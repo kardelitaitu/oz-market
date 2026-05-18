@@ -591,7 +591,7 @@ async fn build_postgres_app(
         InMemoryIdempotencyRepository::new(),
         PostgresReservationLeaseRepository::new(pool.clone()),
         PostgresContactRevealRepository::new(pool.clone()),
-        Arc::new(PostgresNegotiationRepository::new(pool.clone())),
+        Arc::new(PostgresNegotiationRepository::new(pool)),
         audit_repo,
         outbox_repo,
         seller_account_repo,

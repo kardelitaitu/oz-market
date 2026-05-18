@@ -165,15 +165,52 @@ where
 
         match self.idempotency.begin(&attempt, now_rfc3339).await? {
             crate::services::idempotency::IdempotencyDecision::FirstUse => {
+                if !request.offer_amount.is_finite() || request.offer_amount <= 0.0 {
+                    let _ = self
+                        .idempotency
+                        .commit_failure(
+                            &attempt,
+                            Some(json!({"error": "offer_amount must be positive finite"})),
+                        )
+                        .await;
+                    return Err(RepositoryError::new(
+                        RepositoryErrorKind::Validation,
+                        "offer_amount must be a positive finite number",
+                    )
+                    .into());
+                }
+
                 let listing = self
                     .search
                     .get_listing(Some(claims), &request.listing_id)
-                    .await?
-                    .ok_or_else(|| {
-                        RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
-                    })?;
+                    .await;
+                let listing = match listing {
+                    Ok(Some(listing)) => listing,
+                    Ok(None) => {
+                        let _ = self
+                            .idempotency
+                            .commit_failure(&attempt, Some(json!({"error": "listing not found"})))
+                            .await;
+                        return Err(RepositoryError::new(
+                            RepositoryErrorKind::NotFound,
+                            "listing not found",
+                        )
+                        .into());
+                    }
+                    Err(error) => {
+                        let _ = self
+                            .idempotency
+                            .commit_failure(&attempt, Some(json!({"error": format!("{error:?}")})))
+                            .await;
+                        return Err(error.into());
+                    }
+                };
 
                 if listing.status != marketplace_api_contract::ListingStatus::Active {
+                    let _ = self
+                        .idempotency
+                        .commit_failure(&attempt, Some(json!({"error": "listing is not active"})))
+                        .await;
                     return Err(RepositoryError::new(
                         RepositoryErrorKind::Conflict,
                         "listing is not active",
@@ -226,13 +263,36 @@ where
                     version: 1,
                     updated_at: now_rfc3339.to_string(),
                 };
-                self.negotiations
+                match self
+                    .negotiations
                     .upsert_open_negotiation(&response, &request.idempotency_key, now_rfc3339)
-                    .await?;
+                    .await
+                {
+                    Ok(negotiation) => negotiation,
+                    Err(error) => {
+                        let _ = self
+                            .reservations
+                            .release(&reservation.lease_id, now_rfc3339)
+                            .await;
+                        let _ = self
+                            .idempotency
+                            .commit_failure(&attempt, Some(json!({"error": error.to_string()})))
+                            .await;
+                        return Err(error.into());
+                    }
+                };
 
-                self.idempotency
+                if let Err(error) = self
+                    .idempotency
                     .commit_success(&attempt, json!(response))
-                    .await?;
+                    .await
+                {
+                    let _ = self
+                        .reservations
+                        .release(&reservation.lease_id, now_rfc3339)
+                        .await;
+                    return Err(error.into());
+                }
                 self.record_audit_event(
                     "negotiation",
                     &response.negotiation_id,
@@ -883,17 +943,31 @@ where
         request_fingerprint: &str,
         now_rfc3339: &str,
     ) -> Result<ContactRevealResponse, crate::http::handlers::HandlerError> {
-        let seller_account_id = claims.seller_account_id.as_deref().unwrap_or(&claims.sub);
-        let buyer_agent_id = claims.buyer_agent_id.as_deref().unwrap_or(&claims.sub);
+        let negotiation = self
+            .negotiations
+            .get_negotiation(negotiation_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
+            })?;
+        let listing = self
+            .search
+            .get_listing(Some(claims), &negotiation.listing_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
+            })?;
+        let stored_seller_id = &listing.listing.owner_id;
+        let stored_buyer_id = &negotiation.buyer_agent_id;
         crate::services::authz::authorize_request_contact_reveal(
             claims,
-            seller_account_id,
-            buyer_agent_id,
+            stored_seller_id,
+            stored_buyer_id,
         )?;
-        let listing_id = negotiation_id
-            .strip_prefix("neg_")
-            .unwrap_or(negotiation_id);
-        let reservation = self.reservations.get_active_by_listing(listing_id).await?;
+        let reservation = self
+            .reservations
+            .get_active_by_listing(&negotiation.listing_id)
+            .await?;
         if reservation.is_none() {
             return Err(RepositoryError::new(
                 RepositoryErrorKind::Conflict,
@@ -914,7 +988,7 @@ where
             crate::services::idempotency::IdempotencyDecision::FirstUse => {
                 let response = self
                     .contact_reveals
-                    .create_request(negotiation_id, request, buyer_agent_id, now_rfc3339)
+                    .create_request(negotiation_id, request, stored_buyer_id, now_rfc3339)
                     .await?;
                 self.idempotency
                     .commit_success(&attempt, json!(response))
@@ -979,8 +1053,31 @@ where
         claims: &Claims,
         reveal_id: &str,
     ) -> Result<ContactRevealResponse, crate::http::handlers::HandlerError> {
-        let seller_account_id = claims.seller_account_id.as_deref().unwrap_or(&claims.sub);
-        crate::services::authz::authorize_approve_contact_reveal(claims, seller_account_id)?;
+        let reveal = self
+            .contact_reveals
+            .get_by_reveal_id(reveal_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "contact reveal not found")
+            })?;
+        let negotiation = self
+            .negotiations
+            .get_negotiation(&reveal.negotiation_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "negotiation not found")
+            })?;
+        let listing = self
+            .search
+            .get_listing(Some(claims), &negotiation.listing_id)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::new(RepositoryErrorKind::NotFound, "listing not found")
+            })?;
+        crate::services::authz::authorize_approve_contact_reveal(
+            claims,
+            &listing.listing.owner_id,
+        )?;
         let now = now_marker();
         let response = self
             .contact_reveals
@@ -1564,10 +1661,39 @@ mod tests {
             std::sync::Arc::new(InMemorySellerAccountRepository::new()),
         );
         let claims = claims();
+        let listing = app
+            .create_listing(
+                &claims,
+                &create_request(),
+                "fp-create-reject-reveal",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let open = app
+            .open_negotiation(
+                &claims,
+                &OpenNegotiationRequest {
+                    listing_id: listing.listing_id.clone(),
+                    buyer_agent_id: "buyer-1".to_string(),
+                    offer_currency: "USD".to_string(),
+                    offer_amount: 440.0,
+                    idempotency_key: "idem-open-reject-reveal".to_string(),
+                },
+                "fp-open-reject-reveal",
+                "2026-05-04T00:00:00Z",
+            )
+            .await
+            .unwrap();
+        let lease_id = open.reservation_lease_id.unwrap();
+        app.reservations
+            .release(&lease_id, "2026-05-04T00:01:00Z")
+            .await
+            .unwrap();
         let error = app
             .request_contact_reveal(
                 &claims,
-                "neg_lst_404",
+                &open.negotiation_id,
                 &RequestContactRevealRequest {
                     idempotency_key: "idem-reveal-missing-reservation".to_string(),
                 },

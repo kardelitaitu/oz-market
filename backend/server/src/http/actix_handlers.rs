@@ -1,9 +1,9 @@
 use crate::app::MarketplaceApp;
 use crate::http::handlers::HandlerError;
+use crate::repositories::PostgresIdempotencyKeyRepository;
 use crate::repositories::{
     PostgresContactRevealRepository, PostgresListingRepository, PostgresReservationLeaseRepository,
 };
-use crate::services::idempotency::InMemoryIdempotencyRepository;
 use crate::services::rate_limiter::{
     global_limiter, CONTACT_REVEAL_RATE_MAX, CONTACT_REVEAL_RATE_WINDOW_SECS,
     CREATE_LISTING_RATE_MAX, CREATE_LISTING_RATE_WINDOW_SECS, OPEN_NEGOTIATION_RATE_MAX,
@@ -24,9 +24,10 @@ use std::sync::Arc;
 use metrics::{counter, histogram};
 use tracing::error;
 
+#[cfg(test)]
 use std::collections::HashSet;
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn parse_fields_param(query: &str) -> Option<HashSet<String>> {
     let result: HashSet<String> = query
         .split(',')
@@ -40,7 +41,7 @@ fn parse_fields_param(query: &str) -> Option<HashSet<String>> {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn parse_include_param(query: &str) -> Option<HashSet<String>> {
     let result: HashSet<String> = query
         .split(',')
@@ -54,7 +55,7 @@ fn parse_include_param(query: &str) -> Option<HashSet<String>> {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn filter_listing_fields(value: &serde_json::Value, fields: &HashSet<String>) -> serde_json::Value {
     if fields.is_empty() {
         return value.clone();
@@ -78,7 +79,7 @@ fn filter_listing_fields(value: &serde_json::Value, fields: &HashSet<String>) ->
 type ActixApp = Arc<
     MarketplaceApp<
         PostgresListingRepository,
-        InMemoryIdempotencyRepository,
+        PostgresIdempotencyKeyRepository,
         PostgresReservationLeaseRepository,
         PostgresContactRevealRepository,
     >,
@@ -554,6 +555,15 @@ pub async fn approve_contact_reveal(
         Ok(c) => c,
         Err(resp) => return resp,
     };
+    let approve_key = format!("approve:{}", claims.sub);
+    if !global_limiter().check(
+        &approve_key,
+        CONTACT_REVEAL_RATE_MAX,
+        CONTACT_REVEAL_RATE_WINDOW_SECS,
+    ) {
+        return HttpResponse::TooManyRequests()
+            .json(serde_json::json!({"error_code": "RATE_LIMITED", "message": "contact reveal rate limit exceeded (10/min)"}));
+    }
     if **cache_enabled {
         search_cache.invalidate_all();
     }

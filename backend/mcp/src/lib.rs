@@ -4,10 +4,9 @@
 //! with the marketplace via standardized tools.
 
 use marketplace_api_contract::{
-    AcceptNegotiationRequest, Category, Condition, ContactRevealResponse, CreateListingRequest,
-    CreateListingResponse, ListingSummary, NegotiationResponse, OpenNegotiationRequest,
-    RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest, SearchResponse,
-    SubmitOfferRequest,
+    AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
+    ListingSummary, NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
+    RequestContactRevealRequest, SearchRequest, SearchResponse, SubmitOfferRequest,
 };
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
@@ -260,7 +259,7 @@ impl MarketplaceMcp {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn build_claims() -> Claims {
     Claims {
         sub: "sub-1".to_string(),
@@ -283,7 +282,7 @@ fn build_claims() -> Claims {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn build_admin_claims() -> Claims {
     Claims {
         sub: "admin-1".to_string(),
@@ -300,16 +299,16 @@ fn build_admin_claims() -> Claims {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn build_create_request() -> CreateListingRequest {
     CreateListingRequest {
         idempotency_key: "idem-create-1".to_string(),
         listing: marketplace_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "seller-1".to_string(),
-            category: Some(Category::Laptop),
+            category: Some(marketplace_api_contract::Category::Laptop),
             title: "ThinkPad T480".to_string(),
-            condition: Some(Condition::Used),
+            condition: Some(marketplace_api_contract::Condition::Used),
             price: marketplace_api_contract::Price {
                 currency: "USD".to_string(),
                 amount: 450.0,
@@ -394,8 +393,8 @@ mod tests {
                 &claims,
                 &SearchRequest {
                     query: Some("ThinkPad".to_string()),
-                    category: Some(Category::Laptop),
-                    condition: Some(Condition::Used),
+                    category: Some(marketplace_api_contract::Category::Laptop),
+                    condition: Some(marketplace_api_contract::Condition::Used),
                     sort_by: SearchSort::Relevance,
                     limit: Some(10),
                     ..SearchRequest::default()

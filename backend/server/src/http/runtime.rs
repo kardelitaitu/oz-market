@@ -261,7 +261,9 @@ where
                 .archive_listing(&claims, listing_id, reason, &current_time_marker())
                 .await
             {
-                Ok(Some(listing)) => json_response(200, serde_json::to_value(listing).unwrap()),
+                Ok(Some(listing)) => {
+                    json_response(200, serde_json::to_value(listing).unwrap_or_default())
+                }
                 Ok(None) => {
                     api_error_response(404, ApiErrorCode::NotFound, "listing not found", None)
                 }
@@ -318,7 +320,9 @@ where
             }
             let listing_id = path.trim_start_matches("/internal/v1/listings/");
             match app.get_listing(Some(&claims), listing_id).await {
-                Ok(Some(listing)) => json_response(200, serde_json::to_value(listing).unwrap()),
+                Ok(Some(listing)) => {
+                    json_response(200, serde_json::to_value(listing).unwrap_or_default())
+                }
                 Ok(None) => {
                     api_error_response(404, ApiErrorCode::NotFound, "listing not found", None)
                 }
@@ -331,7 +335,9 @@ where
             }
             let negotiation_id = path.trim_start_matches("/internal/v1/negotiations/");
             match app.get_negotiation_status(&claims, negotiation_id).await {
-                Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                Ok(response) => {
+                    json_response(200, serde_json::to_value(response).unwrap_or_default())
+                }
                 Err(error) => map_handler_error(&error),
             }
         }
@@ -341,7 +347,9 @@ where
             }
             let reveal_id = path.trim_start_matches("/internal/v1/contact-reveals/");
             match app.get_contact_reveal(reveal_id).await {
-                Ok(Some(response)) => json_response(200, serde_json::to_value(response).unwrap()),
+                Ok(Some(response)) => {
+                    json_response(200, serde_json::to_value(response).unwrap_or_default())
+                }
                 Ok(None) => api_error_response(
                     404,
                     ApiErrorCode::NotFound,
@@ -398,7 +406,9 @@ where
                 )
                 .await
             {
-                Ok(Some(account)) => json_response(200, serde_json::to_value(account).unwrap()),
+                Ok(Some(account)) => {
+                    json_response(200, serde_json::to_value(account).unwrap_or_default())
+                }
                 Ok(None) => api_error_response(
                     404,
                     ApiErrorCode::NotFound,
@@ -451,7 +461,9 @@ where
                 )
                 .await
             {
-                Ok(Some(account)) => json_response(200, serde_json::to_value(account).unwrap()),
+                Ok(Some(account)) => {
+                    json_response(200, serde_json::to_value(account).unwrap_or_default())
+                }
                 Ok(None) => api_error_response(
                     404,
                     ApiErrorCode::NotFound,
@@ -473,14 +485,16 @@ where
             }
             let search = search_request_from_query(&request.query);
             match app.search_listings(Some(&claims), &search).await {
-                Ok(result) => json_response(200, serde_json::to_value(result).unwrap()),
+                Ok(result) => json_response(200, serde_json::to_value(result).unwrap_or_default()),
                 Err(error) => map_handler_error(&error),
             }
         }
         ("GET", path) if path.starts_with("/v1/listings/") => {
             let listing_id = path.trim_start_matches("/v1/listings/");
             match app.get_listing(Some(&claims), listing_id).await {
-                Ok(Some(listing)) => json_response(200, serde_json::to_value(listing).unwrap()),
+                Ok(Some(listing)) => {
+                    json_response(200, serde_json::to_value(listing).unwrap_or_default())
+                }
                 Ok(None) => {
                     api_error_response(404, ApiErrorCode::NotFound, "listing not found", None)
                 }
@@ -509,7 +523,9 @@ where
                         .create_listing(&claims, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok(created) => json_response(201, serde_json::to_value(created).unwrap()),
+                        Ok(created) => {
+                            json_response(201, serde_json::to_value(created).unwrap_or_default())
+                        }
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -543,7 +559,9 @@ where
                         .open_negotiation(&claims, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok(created) => json_response(201, serde_json::to_value(created).unwrap()),
+                        Ok(created) => {
+                            json_response(201, serde_json::to_value(created).unwrap_or_default())
+                        }
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -561,7 +579,9 @@ where
         {
             let negotiation_id = path.trim_start_matches("/v1/negotiations/");
             match app.get_negotiation_status(&claims, negotiation_id).await {
-                Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                Ok(response) => {
+                    json_response(200, serde_json::to_value(response).unwrap_or_default())
+                }
                 Err(error) => map_handler_error(&error),
             }
         }
@@ -591,7 +611,9 @@ where
                         .submit_offer(&claims, negotiation_id, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                        Ok(response) => {
+                            json_response(200, serde_json::to_value(response).unwrap_or_default())
+                        }
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -635,7 +657,9 @@ where
                         )
                         .await
                     {
-                        Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                        Ok(response) => {
+                            json_response(200, serde_json::to_value(response).unwrap_or_default())
+                        }
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -679,7 +703,9 @@ where
                         )
                         .await
                     {
-                        Ok(response) => json_response(200, serde_json::to_value(response).unwrap()),
+                        Ok(response) => {
+                            json_response(200, serde_json::to_value(response).unwrap_or_default())
+                        }
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -723,7 +749,9 @@ where
                         )
                         .await
                     {
-                        Ok(reveal) => json_response(202, serde_json::to_value(reveal).unwrap()),
+                        Ok(reveal) => {
+                            json_response(202, serde_json::to_value(reveal).unwrap_or_default())
+                        }
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -743,7 +771,7 @@ where
                 .trim_end_matches("/approve")
                 .trim_end_matches('/');
             match app.approve_contact_reveal(&claims, reveal_id).await {
-                Ok(reveal) => json_response(200, serde_json::to_value(reveal).unwrap()),
+                Ok(reveal) => json_response(200, serde_json::to_value(reveal).unwrap_or_default()),
                 Err(error) => map_handler_error(&error),
             }
         }

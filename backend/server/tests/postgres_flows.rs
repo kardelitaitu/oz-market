@@ -651,3 +651,496 @@ async fn postgres_seller_account_trust_level_update() -> Result<(), Box<dyn Erro
 
     Ok(())
 }
+
+#[tokio::test]
+async fn postgres_rejects_outsider_reveal_request() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let listing_id = format!("lst_outsider_{suffix}");
+
+    sqlx::query(
+        "INSERT INTO listings (
+            listing_id, owner_id, schema_version, category, product_name, \"condition\",
+            price_currency, price_amount, country_code, country_name, city,
+            picture_urls, description, attributes, status, version, create_idempotency_key,
+            created_at, updated_at
+        ) VALUES ($1, 'seller-1', '1.0', 'laptop', 'Outsider Test', 'used', 'USD', 499.00, 'JP', 'Japan', 'Osaka', $2, $3, $4, 'active', 1, $5, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&listing_id)
+    .bind(serde_json::json!(["https://example.com/item.jpg"]))
+    .bind("Outsider test listing")
+    .bind(serde_json::json!({"brand": "Test"}))
+    .bind(format!("create-outsider-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let negotiation_id = format!("neg_outsider_{suffix}");
+    sqlx::query(
+        "INSERT INTO negotiations (
+            negotiation_id, listing_id, buyer_agent_id, status, offer_currency,
+            latest_offer_amount, reservation_lease_id, final_offer_amount, version,
+            open_idempotency_key, created_at, updated_at
+        ) VALUES ($1, $2, 'buyer-1', 'reserved', 'USD', 499.00, NULL, NULL, 1, $3, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&negotiation_id)
+    .bind(&listing_id)
+    .bind(format!("open-outsider-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let app = marketplace_server::app::MarketplaceApp::new(
+        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+            pool.clone(),
+        ),
+        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+            pool.clone(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+                pool,
+            ),
+        ),
+    );
+
+    // Outsider buyer tries to request reveal
+    let outsider = marketplace_auth_core::Claims {
+        sub: "buyer-2".to_string(),
+        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
+        scopes: vec![marketplace_auth_core::Scope::NegotiationRevealRequest],
+        seller_account_id: None,
+        buyer_agent_id: Some("buyer-2".to_string()),
+        hardware_id: None,
+        exp: Some(1715475600),
+    };
+
+    let result = app
+        .request_contact_reveal(
+            &outsider,
+            &negotiation_id,
+            &RequestContactRevealRequest {
+                idempotency_key: format!("reveal-outsider-{suffix}"),
+            },
+            &format!("fp-outsider-{suffix}"),
+            "2026-05-04T00:00:00Z",
+        )
+        .await;
+    assert!(
+        matches!(
+            result,
+            Err(marketplace_server::http::handlers::HandlerError::Authz(_))
+        ),
+        "outsider reveal request should be forbidden, got {:?}",
+        result
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_rejects_wrong_seller_reveal_approval() -> Result<(), Box<dyn Error + Send + Sync>>
+{
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let listing_id = format!("lst_wrongseller_{suffix}");
+
+    sqlx::query(
+        "INSERT INTO listings (
+            listing_id, owner_id, schema_version, category, product_name, \"condition\",
+            price_currency, price_amount, country_code, country_name, city,
+            picture_urls, description, attributes, status, version, create_idempotency_key,
+            created_at, updated_at
+        ) VALUES ($1, 'seller-1', '1.0', 'laptop', 'Wrong Seller Test', 'used', 'USD', 499.00, 'JP', 'Japan', 'Osaka', $2, $3, $4, 'active', 1, $5, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&listing_id)
+    .bind(serde_json::json!(["https://example.com/item.jpg"]))
+    .bind("Wrong seller approval test")
+    .bind(serde_json::json!({"brand": "Test"}))
+    .bind(format!("create-wrongseller-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let negotiation_id = format!("neg_wrongseller_{suffix}");
+    sqlx::query(
+        "INSERT INTO negotiations (
+            negotiation_id, listing_id, buyer_agent_id, status, offer_currency,
+            latest_offer_amount, reservation_lease_id, final_offer_amount, version,
+            open_idempotency_key, created_at, updated_at
+        ) VALUES ($1, $2, 'buyer-1', 'reserved', 'USD', 499.00, NULL, NULL, 1, $3, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&negotiation_id)
+    .bind(&listing_id)
+    .bind(format!("open-wrongseller-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let reveal_id = format!("rev_wrongseller_{suffix}");
+    sqlx::query(
+        "INSERT INTO contact_reveals (
+            reveal_id, negotiation_id, listing_id, buyer_agent_id, seller_agent_id,
+            reveal_status, phone_number, request_idempotency_key, created_at
+        ) VALUES ($1, $2, $3, 'buyer-1', 'seller-1', 'pending', '+1234567890', $4, '2026-05-04T00:00:00Z')",
+    )
+    .bind(&reveal_id)
+    .bind(&negotiation_id)
+    .bind(&listing_id)
+    .bind(format!("req-wrongseller-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let app = marketplace_server::app::MarketplaceApp::new(
+        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+            pool.clone(),
+        ),
+        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+            pool.clone(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+                pool,
+            ),
+        ),
+    );
+
+    // Wrong seller tries to approve
+    let wrong_seller = marketplace_auth_core::Claims {
+        sub: "seller-2".to_string(),
+        roles: vec![marketplace_auth_core::Role::SellerContactRevealApprover],
+        scopes: vec![marketplace_auth_core::Scope::RevealApprove],
+        seller_account_id: Some("seller-2".to_string()),
+        buyer_agent_id: None,
+        hardware_id: None,
+        exp: Some(1715475600),
+    };
+
+    let result = app.approve_contact_reveal(&wrong_seller, &reveal_id).await;
+    assert!(
+        matches!(
+            result,
+            Err(marketplace_server::http::handlers::HandlerError::Authz(_))
+        ),
+        "wrong seller approval should be forbidden, got {:?}",
+        result
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_rejects_open_negotiation_invalid_amount(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let listing_id = format!("lst_invamt_{suffix}");
+
+    sqlx::query(
+        "INSERT INTO listings (
+            listing_id, owner_id, schema_version, category, product_name, \"condition\",
+            price_currency, price_amount, country_code, country_name, city,
+            picture_urls, description, attributes, status, version, create_idempotency_key,
+            created_at, updated_at
+        ) VALUES ($1, 'seller-1', '1.0', 'laptop', 'Invalid Amount Test', 'used', 'USD', 499.00, 'JP', 'Japan', 'Osaka', $2, $3, $4, 'active', 1, $5, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&listing_id)
+    .bind(serde_json::json!(["https://example.com/item.jpg"]))
+    .bind("Invalid amount test listing")
+    .bind(serde_json::json!({"brand": "Test"}))
+    .bind(format!("create-invamt-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let app = marketplace_server::app::MarketplaceApp::new(
+        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+            pool.clone(),
+        ),
+        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+            pool.clone(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+                pool,
+            ),
+        ),
+    );
+
+    let buyer = marketplace_auth_core::Claims {
+        sub: "buyer-1".to_string(),
+        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
+        scopes: vec![marketplace_auth_core::Scope::NegotiationCreate],
+        seller_account_id: None,
+        buyer_agent_id: Some("buyer-1".to_string()),
+        hardware_id: None,
+        exp: Some(1715475600),
+    };
+
+    // Zero amount
+    let result = app
+        .open_negotiation(
+            &buyer,
+            &marketplace_api_contract::OpenNegotiationRequest {
+                listing_id: listing_id.clone(),
+                buyer_agent_id: "buyer-1".to_string(),
+                offer_currency: "USD".to_string(),
+                offer_amount: 0.0,
+                idempotency_key: format!("open-zero-{suffix}"),
+            },
+            &format!("fp-zero-{suffix}"),
+            "2026-05-04T00:00:00Z",
+        )
+        .await;
+    assert!(result.is_err(), "zero offer amount should be rejected");
+
+    // Negative amount
+    let result = app
+        .open_negotiation(
+            &buyer,
+            &marketplace_api_contract::OpenNegotiationRequest {
+                listing_id: listing_id.clone(),
+                buyer_agent_id: "buyer-1".to_string(),
+                offer_currency: "USD".to_string(),
+                offer_amount: -100.0,
+                idempotency_key: format!("open-neg-{suffix}"),
+            },
+            &format!("fp-neg-{suffix}"),
+            "2026-05-04T00:00:00Z",
+        )
+        .await;
+    assert!(result.is_err(), "negative offer amount should be rejected");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_open_negotiation_conflict_compensation(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let listing_id = format!("lst_conflict_{suffix}");
+
+    sqlx::query(
+        "INSERT INTO listings (
+            listing_id, owner_id, schema_version, category, product_name, \"condition\",
+            price_currency, price_amount, country_code, country_name, city,
+            picture_urls, description, attributes, status, version, create_idempotency_key,
+            created_at, updated_at
+        ) VALUES ($1, 'seller-1', '1.0', 'laptop', 'Conflict Test', 'used', 'USD', 499.00, 'JP', 'Japan', 'Osaka', $2, $3, $4, 'active', 1, $5, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&listing_id)
+    .bind(serde_json::json!(["https://example.com/item.jpg"]))
+    .bind("Conflict compensation test listing")
+    .bind(serde_json::json!({"brand": "Test"}))
+    .bind(format!("create-conflict-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let app = marketplace_server::app::MarketplaceApp::new(
+        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+            pool.clone(),
+        ),
+        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+            pool.clone(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+                pool,
+            ),
+        ),
+    );
+
+    let seller = marketplace_auth_core::Claims {
+        sub: "seller-1".to_string(),
+        roles: vec![marketplace_auth_core::Role::SellerListingWriter],
+        scopes: vec![marketplace_auth_core::Scope::ListingCreate],
+        seller_account_id: Some("seller-1".to_string()),
+        buyer_agent_id: None,
+        hardware_id: None,
+        exp: Some(1715475600),
+    };
+
+    // First open-negotiation succeeds (creates reservation)
+    let result = app
+        .open_negotiation(
+            &seller,
+            &marketplace_api_contract::OpenNegotiationRequest {
+                listing_id: listing_id.clone(),
+                buyer_agent_id: "seller-1".to_string(),
+                offer_currency: "USD".to_string(),
+                offer_amount: 400.0,
+                idempotency_key: format!("open-first-{suffix}"),
+            },
+            &format!("fp-first-{suffix}"),
+            "2026-05-04T00:00:00Z",
+        )
+        .await;
+    assert!(
+        result.is_ok(),
+        "first open-negotiation should succeed, got {:?}",
+        result
+    );
+
+    // Second open-negotiation fails with Conflict (listing already reserved)
+    let result = app
+        .open_negotiation(
+            &seller,
+            &marketplace_api_contract::OpenNegotiationRequest {
+                listing_id: listing_id.clone(),
+                buyer_agent_id: "seller-1".to_string(),
+                offer_currency: "USD".to_string(),
+                offer_amount: 450.0,
+                idempotency_key: format!("open-second-{suffix}"),
+            },
+            &format!("fp-second-{suffix}"),
+            "2026-05-04T00:01:00Z",
+        )
+        .await;
+    assert!(
+        matches!(result, Err(marketplace_server::http::handlers::HandlerError::Repository(ref e)) if e.kind == marketplace_server::repositories::RepositoryErrorKind::Conflict),
+        "second open-negotiation should conflict, got {:?}",
+        result
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_open_negotiation_inactive_listing_commits_idempotency_failure(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let listing_id = format!("lst_inactive_{suffix}");
+
+    sqlx::query(
+        "INSERT INTO listings (
+            listing_id, owner_id, schema_version, category, product_name, \"condition\",
+            price_currency, price_amount, country_code, country_name, city,
+            picture_urls, description, attributes, status, version, create_idempotency_key,
+            created_at, updated_at
+        ) VALUES ($1, 'seller-1', '1.0', 'laptop', 'Inactive Test', 'used', 'USD', 499.00, 'JP', 'Japan', 'Osaka', $2, $3, $4, 'sold', 1, $5, '2026-05-04T00:00:00Z', '2026-05-04T00:00:00Z')",
+    )
+    .bind(&listing_id)
+    .bind(serde_json::json!(["https://example.com/item.jpg"]))
+    .bind("Inactive listing test")
+    .bind(serde_json::json!({"brand": "Test"}))
+    .bind(format!("create-inactive-{suffix}"))
+    .execute(&pool)
+    .await?;
+
+    let app = marketplace_server::app::MarketplaceApp::new(
+        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+            pool.clone(),
+        ),
+        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+            pool.clone(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+        ),
+        std::sync::Arc::new(
+            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+                pool,
+            ),
+        ),
+    );
+
+    let buyer = marketplace_auth_core::Claims {
+        sub: "buyer-1".to_string(),
+        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
+        scopes: vec![marketplace_auth_core::Scope::NegotiationCreate],
+        seller_account_id: None,
+        buyer_agent_id: Some("buyer-1".to_string()),
+        hardware_id: None,
+        exp: Some(1715475600),
+    };
+
+    let result = app
+        .open_negotiation(
+            &buyer,
+            &marketplace_api_contract::OpenNegotiationRequest {
+                listing_id: listing_id.clone(),
+                buyer_agent_id: "buyer-1".to_string(),
+                offer_currency: "USD".to_string(),
+                offer_amount: 400.0,
+                idempotency_key: format!("open-inactive-{suffix}"),
+            },
+            &format!("fp-inactive-{suffix}"),
+            "2026-05-04T00:00:00Z",
+        )
+        .await;
+    assert!(
+        result.is_err(),
+        "open-negotiation on sold listing should fail"
+    );
+
+    Ok(())
+}

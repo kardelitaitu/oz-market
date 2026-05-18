@@ -64,6 +64,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /listings/{listing_id}:
     get:
       tags: [listings]
@@ -85,6 +87,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /listings/{listing_id}/reviews:
     parameters:
       - $ref: '#/components/parameters/ListingId'
@@ -140,6 +144,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /listings/search:
     get:
       tags: [search]
@@ -259,6 +265,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /negotiations:
     post:
       tags: [negotiations]
@@ -297,6 +305,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /negotiations/{negotiation_id}:
     get:
       tags: [negotiations]
@@ -323,6 +333,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /negotiations/{negotiation_id}/offers:
     post:
       tags: [negotiations]
@@ -363,6 +375,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /negotiations/{negotiation_id}/accept:
     post:
       tags: [negotiations]
@@ -403,6 +417,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /negotiations/{negotiation_id}/reject:
     post:
       tags: [negotiations]
@@ -443,6 +459,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /negotiations/{negotiation_id}/request-contact-reveal:
     post:
       tags: [contact-reveals]
@@ -483,6 +501,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /contact-reveals/{reveal_id}/approve:
     post:
       tags: [contact-reveals]
@@ -517,6 +537,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   # Internal Admin Endpoints
   /internal/v1/listings/{listing_id}/archive:
@@ -717,6 +739,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     RateLimited:
       description: Rate limit or quota exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Unexpected server error
       content:
         application/json:
           schema:
