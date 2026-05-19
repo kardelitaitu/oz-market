@@ -25,3 +25,5 @@ backend/coverage/
 # Environment
 .env
 .env.local
+
+server_*.txt

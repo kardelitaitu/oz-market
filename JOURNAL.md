@@ -596,3 +596,7 @@ new line
 - **Updated return types** of `create_listing` and `open_negotiation` on `MarketplaceApp` to `Result<(X, bool), Error>` (the `bool` indicates idempotency replay).
 - Updated all 22 call sites in `backend/server/src/app.rs` test code to destructure `.0` or use `let (var, _) =`.
 - No behavioral change — all 20 `app::tests` pass.
+- **Created mobile roadmap** — `docs/mobile/ROADMAP.md` with 5 milestones (M1–M5), dependency graph, risk register, and success criteria.
+- **Created Tauri+Svelte build plan** — `docs/mobile/tauri-svelte-plan.md` covering architecture, Rust client, Svelte screens, auth flow, and phased implementation.
+- **Deprecated native plans** — `docs/app-android/build-plan.md` and `docs/app-ios/build-plan.md` marked deprecated with redirect to `mobile/`.
+- **Why:** adopt Tauri v2 for unified Android/iOS codebase with shared Rust types from `api-contract` crate.

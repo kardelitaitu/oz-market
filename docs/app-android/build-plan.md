@@ -1,4 +1,7 @@
-# Android Build Plan
+# Android Build Plan (Deprecated)
+
+> **Deprecated:** This project now uses Tauri v2 + Svelte for a unified Android + iOS codebase.
+> See `docs/mobile/ROADMAP.md` and `docs/mobile/tauri-svelte-plan.md` instead.
 
 ## Overview
 
