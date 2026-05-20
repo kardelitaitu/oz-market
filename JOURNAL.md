@@ -600,3 +600,210 @@ new line
 - **Created Tauri+Svelte build plan** — `docs/mobile/tauri-svelte-plan.md` covering architecture, Rust client, Svelte screens, auth flow, and phased implementation.
 - **Deprecated native plans** — `docs/app-android/build-plan.md` and `docs/app-ios/build-plan.md` marked deprecated with redirect to `mobile/`.
 - **Why:** adopt Tauri v2 for unified Android/iOS codebase with shared Rust types from `api-contract` crate.
+
+## 2026-05-19 17:00
+
+- **M1 Foundation complete** — scaffolded Tauri v2 + Svelte 5 project at `mobile/marketplace/`.
+- **Rust side:** `client/` module with typed reqwest wrappers for all 11 endpoints; `auth/` module with keyring-based claims storage; `commands/` with Tauri IPC commands for `health`, `get_listing`, `search_listings`, `login`, `logout`, `get_claims`.
+- **Svelte side:** SvelteKit with `@sveltejs/adapter-static`, home page with health-check, login screen, Tauri IPC invoke bridge, TypeScript types.
+- Both `cargo check` and `npm run build` pass.
+- **Why:** start mobile builds with Tauri v2 + Svelte 5 as specified in roadmap M1.
+
+## 2026-05-19 17:00 (continued)
+
+- **Extended M1** — added search results screen (`/listings/search`), listing detail screen (`/listings/[id]`), create listing form placeholder (`/listings/create`), settings screen (`/settings`) with backend URL config and logout.
+- **Added Rust commands** — `set_base_url`, `get_base_url` for configuring the backend endpoint at runtime.
+- **Updated layout** — navigation bar with active route highlighting, conditional links based on auth state.
+- **Updated .gitignore** — added mobile artifacts (`node_modules/`, `build/`, `.svelte-kit/`, `target/`, `gen/`).
+- **Updated AGENTS.md** — added `mobile/marketplace` ownership, marked native plans as deprecated.
+- Both `cargo check` and `npm run build` pass. `cargo tauri build` pipeline has a Windows exit-code interop issue (npm build succeeds independently).
+- **Live-test readiness:** project structure complete, requires `cargo tauri android/ios dev` on a machine with Android SDK/Xcode, or `cargo tauri dev` on desktop for local testing.
+
+## 2026-05-19 17:00 (session 2)
+
+- **Fixed Tauri build pipeline** — removed `beforeBuildCommand` from `tauri.conf.json` (subprocess exit-code issue on Windows); frontend is pre-built via `npm run build` before `cargo tauri build --no-bundle`
+- **Fixed runtime panic** — `build_client()` used `tokio::runtime::Handle::block_on` inside a Tauri async command; changed to `async fn` with `.await` to avoid nested runtime error
+- **Verified binary runs** — `marketplace-mobile.exe` (13 MB) starts without crashing; no more "Cannot start a runtime from within a runtime" panic
+- **Created `mobile/marketplace/README.md`** — architecture overview, dev workflow, live testing guide, command table
+- **Created `mobile/marketplace/scripts/check.ps1`** — mobile smoke test runs `cargo check`, `cargo fmt --check`, `cargo clippy`, `npm run build`; all 4 pass clean
+- **Live-test ready** — backend runs on `http://127.0.0.1:3000`, app connects via configurable base URL in Settings
+
+## 2026-05-19 17:00 (session 3)
+
+- **Wired Create Listing (M2)** — added `create_listing` Tauri command accepting `CreateListingParams` struct; registers in invoke handler; frontend form calls `createListing()` IPC and navigates to `/listings/search` on success
+- **Clippy fix** — grouped 9 individual params into a struct to satisfy `clippy::too_many_arguments`
+- All 4 check steps pass clean
+
+## 2026-05-19 17:00 (session 4)
+
+- **Added `owner_id` to SearchRequest** in `api-contract` + backend filtering (InMemory + Postgres repos + runtime.rs) — supports "my listings" and future per-seller queries
+- **My Listings screen (M2)** — `my_listings` Tauri command reuses `search_listings` with `owner_id` filter; frontend at `/listings/mine` loads user's listings on mount with pagination
+- **Negotiation commands (M3)** — created `commands/negotiations.rs` with 7 commands: `open_negotiation`, `get_negotiation`, `submit_offer`, `accept_negotiation`, `reject_negotiation`, `request_contact_reveal`, `approve_contact_reveal`
+- **Open negotiation from listing detail** — `/listings/[id]` shows "Start Negotiation" form with amount input when user is logged in and listing is active
+- **Negotiation thread page (M3)** — `/negotiations/[id]` shows offer history with polling (5s), status timeline, counter-offer form, accept/reject buttons, and request contact reveal
+- **Updated docs** — ROADMAP marked M2+M3 complete, M4 blocked (no backend agent endpoints); README updated with full command table and coverage
+- All check steps pass; Clippy + fmt clean
+
+## 2026-05-19 17:00 (session 3)
+
+- **Wired Create Listing** — added `create_listing` Tauri Rust command (`commands/listings.rs:74`) accepting `CreateListingParams` struct (title, description, listing_type, currency, amount, country_code, city, idempotency_key)
+- **Clarified clippy** — grouped 9 individual params into a `CreateListingParams` struct to satisfy `clippy::too_many_arguments`
+- **Registered in lib.rs** — added `commands::listings::create_listing` to the Tauri invoke handler list
+- **Frontend wiring** — added `createListing()` in `commands.ts` and wired form submit in `create/+page.svelte`; on success navigates to `/listings/search`, on failure shows error string
+- All 4 check steps pass clean.
+
+## 2026-05-20
+
+- **Cache fix**: Added `.weigher()` to Moka caches so `max_capacity` correctly limits by byte weight (was entry count, effectively unlimited). Reduced defaults from 2048MB/1024MB to 200MB/100MB for cheap VPS compatibility. Fixed metrics handler re-reading env with stale defaults.
+- **Auto-migration on startup**: `actix_runtime.rs` now calls `bootstrap::apply_schema()` on boot. Server self-migrates on first start against a fresh database.
+- **API key auth**: Added `MARKETPLACE_API_KEY` env var fallback. Requests with `x-marketplace-api-key` header get full-access demo Claims (seller + buyer + admin). Wired in both Actix and TCP runtimes.
+- **openapi.rs cleanup**: Removed hardcoded Windows path; Swagger redirect now uses request `Host` header dynamically instead of hardcoded `localhost:3003`.
+- **Dockerfile**: Multi-stage build (rust:1.85 → debian:bookworm-slim), 12MB binary, OpenAPI spec included.
+- **docker-compose.yml**: One-command deploy with PostgreSQL auto-config, health checks, configurable API key and port.
+- **docs/deploy.md**: Full deployment runbook with config reference, auth methods, verification steps, and a 8-step demo transaction flow using curl.
+- Release binary builds clean at 12MB. 223 workspace tests pass, clippy clean.
+
+## 2026-05-20
+
+- **MCP auth unification**: `runtime.rs` `load_claims()` now falls back to `MARKETPLACE_API_KEY` (shared with HTTP server) before checking MCP-specific env vars. One key works for both surfaces.
+- **Backup cleanup**: Removed stale `lib.rs.backup` files from mcp/src.
+- **docker-compose fix**: Replaced hardcoded `***` password in DATABASE_URL with `${POSTGRES_PASSWORD:-marketplace}` variable reference.
+- **docs/deploy.md**: Added full MCP server section — local run, database-backed run, Claude Desktop config, tool catalog, and verification smoke test. Replaced "MCP server compiles but does not serve" note with accurate instructions.
+- Confirmed MCP server fully functional: 10 tools with JSON Schema, 6/6 smoke tests pass, stdio transport working with rmcp.
+
+## 2026-05-20
+
+- **MCP full transaction flow test**: Extended mcp_tester from 6 to 15 tests covering the complete agent transaction lifecycle — create listing, open negotiation, submit offer, reject negotiation, create second listing, accept negotiation (status "closed"), request contact reveal, approve contact reveal (revealed phone reference returned). All 15 pass.
+- **Graceful shutdown**: Actix server now captures SIGINT/SIGTERM, drains in-flight connections (configurable via SHUTDOWN_TIMEOUT_SECS env, default 30s), then exits cleanly.
+- **Expanded CI**: Merged MCP smoke tests, Postgres integration tests, and all lint/format/check gates into a single comprehensive CI workflow. Replaced hardcoded `***` passwords with actual credentials.
+
+## 2026-05-20
+
+- **Structured JSON logging**: Server supports `LOG_FORMAT=json` env var for production log aggregation. Added `json` feature to tracing-subscriber.
+- **Cleanup**: Moved stale `archive/` and `backend/optimization/` docs to `docs/performance/`. Removed 2-month-old completed TODO file.
+- **Fixed broken api-contract test**: `SearchRequest` struct gained `owner_id` field but the roundtrip test's struct literal was missing it. Fixed compilation error, full `--workspace` test suite now passes (268 tests).
+
+## 2026-05-20
+
+- **Route unification**: Extracted all API route registrations from `actix_runtime.rs` into a single `register_api_routes()` function in `actix_handlers.rs`. Production (`actix_runtime.rs`) and any future Actix integration tests now share the same route definitions via `.configure(register_api_routes)`. Eliminated 100+ lines of duplicated route code. New endpoints need to be added to `register_api_routes` only.
+
+## 2026-05-20
+
+- **Dual-mode handlers**: `ActixApp` type alias switches between Postgres repos (production) and in-memory repos (tests) via `#[cfg(test)]`. Handler functions use the same code path in both modes.
+- **Actix integration tests**: 4 new tests (`actix_create_listing`, `actix_create_and_get_listing`, `actix_full_negotiation_flow`, `actix_search_listings`) exercise the full HTTP stack through the same `register_api_routes()` as production. All use in-memory repos — no Postgres needed.
+- **Cleanup**: Removed stale `fix_listings.py` (one-time script, hardcoded Windows path), `mcp_test.log`, and reference to deleted `archive/TODO-2026-05-05.md`. Updated `TODO.md` to reflect current project state. Fixed placeholder repo URL in deploy doc.
+
+## 2026-05-20
+
+- **Deprecated redirect handlers**: Added `deprecated_listing_redirect` and `deprecated_search_redirect` handlers implementing Spec 0001. Old `/v1/product/{id}`, `/v1/service/{id}`, `/v1/property/{id}`, and their search counterparts now return 301 Moved Permanently to the unified `/v1/listings/{id}` endpoint, with `Deprecation`, `Sunset`, and `Link` headers. Routes registered in `register_api_routes()` alongside all other routes.
+
+## 2026-05-20
+
+- **Fixed M4 compile errors**: Added missing `HandlerError::Agent` match arms in `mcp/src/runtime.rs` and `server/src/http/actix_handlers.rs`. Removed unused imports in `server/src/http/handlers.rs`. Prefixed unused closure param `amount` with `_` in `server/src/services/agent.rs`. Backend workspace now compiles cleanly with zero errors and zero warnings.
+
+## 2026-05-20
+
+- **M4 mobile fully wired**:
+  - Created `src-tauri/src/commands/agent.rs` with `agent_query` Tauri command
+  - Added `agent_query` method to `ApiClient` in `client/mod.rs`
+  - Registered command in `lib.rs` and `commands/mod.rs`
+  - Added `AgentAction`, `AgentQueryResponse`, `agentQuery()` to `commands.ts`
+  - Created `src/routes/agent/+page.svelte` — agent chat UI with message history, conversation ID tracking, action buttons, and listing navigation
+  - Added "Agent" nav link to `+layout.svelte`
+  - All mobile checks (cargo check, fmt, clippy, npm build) pass clean
+
+## 2026-05-20
+
+- **M5 — Approve reveal**: Added `reveal_id: Option<ResourceId>` to `NegotiationResponse` in api-contract. Added `get_by_negotiation_id` to `ContactRevealRepository` trait + both impls. Added `update_status` to `NegotiationRepository` trait + both impls. Backend now transitions negotiation to `ContactRequested`/`ContactRevealed` on reveal request/approval. Wired approve button in negotiation thread UI. All contract tests pass.
+- **M5 — Retry logic**: Created `$lib/utils/retry.ts` with `withRetry()` (exponential backoff, max 3 retries). Created `$lib/components/ErrorFallback.svelte`. Added Rust `with_retry()` in `client/mod.rs` wrapping all 10 ApiClient HTTP methods.
+- **M5 — Notifications**: Added `tauri-plugin-notification` with `@tauri-apps/plugin-notification` JS bindings. Added notification permission flow and `sendNotification()` utility. Registered plugin + capabilities.
+- **M5 — App polish**: Default app icons already in place. ROADMAP success criteria updated to mark approve reveal done.
+
+## 2026-05-20
+
+- **Updated AGENTS.md** with three new agent operating rules:
+  - **Context Gathering Rule** — spawn multiple file-picker and code-searcher agents in parallel before editing
+  - **Follow-up Rule** — always suggest 4-5 concrete next moves via `suggest_followups` after completing a task
+  - **Reinforced Change Logging Rule** — "always" write to `JOURNAL.md` and use `## YYYY-MM-DD HH:MM` heading format
+- Why: codify the user's three operating preferences into the repo's agent instructions for consistent behavior.
+
+## 2026-05-20
+
+- **Rate limit header standardization** — completed 5-move rate limiter improvement:
+  - Added `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers to all 10 Actix handler success responses
+  - Added `headers: Vec<(String, String)>` field to TCP `HttpResponse` struct, wired into `write_response()`
+  - Added `json_response_with_rl()` and `rate_limited_response()` helpers in TCP runtime
+  - Added `test_rate_limited_response()` unit test verifying 429 body + all 3 rate limit headers
+  - Fixed clippy warnings in `agent.rs` (unnecessary unwrap, char pattern comparison)
+  - All TCP runtime paths now capture full `RateLimitStatus` (remaining, reset_after_secs) on both success and 429 responses
+  - Why: enable pre-emptive client backoff and match API best-practice (GitHub/Stripe-style headers on every response)
+
+## 2026-05-20
+
+## 2026-05-20
+
+- **Admin rate-limits endpoint** — added `GET /internal/v1/rate-limits` exposing current rate limiter snapshot + config for monitoring:
+  - `rate_limiter.rs` — fixed orphaned `snapshot()` method (was outside impl block, causing syntax error); now inside `impl SlidingWindowRateLimiter`
+  - `actix_handlers.rs` — added `get_rate_limits()` handler (admin/reviewer auth), registered in `register_api_routes()` as `/internal/v1/rate-limits`
+  - `runtime.rs` — added TCP route with `authorize_internal_read`, same buckets+config JSON structure
+  - Actix integration test: `actix_rate_limits_endpoint` verifies 200 + buckets array + config object
+  - TCP integration test: `runtime_rate_limits_endpoint` verifies 200 + buckets + config via raw stream
+  - All 191 lib tests pass, clippy clean
+
+## 2026-05-20
+
+- **Full 8-step demo transaction executed** against live Postgres-backed server:
+  - Built fresh server binary with merged migration files (fixed SQLx 0.8 split migration issue)
+  - All 8 steps completed successfully with X-RateLimit-* headers verified:
+    - Step 1: Create listing → 201, Limit: 10, Remaining: 9 ✅
+    - Step 2: Search → 200, Limit: 60, Remaining: 59 ✅
+    - Step 3: Open negotiation → 201, Limit: 20, Remaining: 19 ✅
+    - Step 4: Submit counter-offer → 200, Limit: 20, Remaining: 18 ✅
+    - Step 5: Accept → 200, Limit: 20, Remaining: 17 ✅
+    - Step 6: Request contact reveal → 202, Limit: 10, Remaining: 9 ✅
+    - Step 7: Approve contact reveal → 200, Limit: 10, Remaining: 9 ✅
+    - Step 8: Check status → 200, status: contact_revealed ✅
+  - `/internal/v1/rate-limits` returns 5 active buckets + 7 config presets ✅
+  - **Bug fix**: Removed accidental `reveal_id: None,` from 4 SQL SELECT queries in `negotiations.rs` (caused PostgreSQL syntax error at `:`)  
+  - **Migration fix**: Merged split `0006_01/02` and `0007_01/02` migration files into single files to fix SQLx 0.8 duplicate PK error
+
+## 2026-05-20
+
+- **Server-side rate limit monitoring** — added structured logging + metrics to `rate_limiter.rs` `check()` method:
+  - `tracing::warn!` with structured fields (key, limit, window_secs, remaining, reset_after_secs) at 3 levels:
+    - `rate_limit_exhausted` — emitted when request is denied (remaining=0)
+    - `rate_limit_last_slot` — emitted when the current request consumed the last available slot
+    - `rate_limit_near_exhausted` — emitted when only 1-2 slots remain
+  - `metrics::counter!("rate_limit_exhausted_total")` incremented on each denial (no dynamic key labels to avoid cardinality explosion)
+  - All structured fields use snake_case for consistent log aggregation with `LOG_FORMAT=json`
+- **191 lib tests pass, clippy clean**
+- **Why:** single choke point in `check()` guarantees no rate limit event goes unlogged across all transports and handlers
+
+## 2026-05-20
+
+- **Concurrent load stress test** — verified rate limit counters decrement correctly under 80-way concurrency:
+  - **Search (60/min limit)**: 60 requests accepted, remaining 59→0 monotonically. Zero negative values. ✅
+  - **Create (10/min limit)**: 10 accepted (remaining 8→0), 5 rate-limited with 429. Zero negative values. ✅
+  - **Admin endpoint**: `/internal/v1/rate-limits` shows all active buckets (search: 60, create: 10, negotiate: 3, reveal: 1, approve: 1) with all 7 config presets ✅
+  - **191 lib tests pass, clippy clean**
+  - Created `backend/scripts/rate_limit_concurrency_test.sh` — reusable concurrent stress test
+  - Why: verify the critical rate limiter invariant (no negative remaining values) holds under real contention
+
+- **Client-side rate limit backoff** — added pre-emptive rate limit tracking to mobile app:
+  - Created `client/rate_limit.rs` with `RateLimitTracker` — per-action limit state with `wait_if_limited()` returning `Option<Duration>` to sleep
+  - Added `rate_limiter: Arc<RwLock<RateLimitTracker>>` to `AppState` in `state.rs`, initialized in `new()`
+  - Added `check_rate_limit()` (reads tracker, sleeps if remaining=0) and `update_rate_limit()` (parses X-RateLimit-* headers, writes tracker) to `ApiClient`
+  - Updated all 9 write-path `ApiClient` methods (search, create, negotiate, offer, accept, reject, reveal, approve, agent) with check-before-request + parse-after-response
+  - `update_rate_limit()` called before the status check, so 429 responses also update the tracker — next request automatically waits until reset
+  - Updated `build_client()` in all 3 command modules to pass `state.rate_limiter.clone()` to new 3-arg `ApiClient::new()`
+  - Why: prevent unnecessary 429 hits by having the mobile client pre-emptively back off when the server reports remaining=0
+
+## 2026-05-20
+
+- **Fixed 8 pre-existing Postgres integration test failures** in `backend/server/tests/postgres_flows.rs`:
+  - Column name fixes: `seller_agent_id`→`buyer_agent_id`, `phone_number`→`revealed_phone_reference`, `quota_remaining`→`quota_override, listings_created` (mismatched migration schema)
+  - Trust level validation: `'basic'`/`'premium'`→`'verified'`/`'trusted'` (CHECK constraint violation)
+  - FK dependency fixes: added `seed_listing()`/`seed_negotiation()` before raw INSERTs into child tables
+  - Parameter fixes: `approve_request("seller")`→timestamp, `reserve()` param ordering, owner_id aligned with claims.seller_account_id
+- All 15/15 Postgres tests pass against a fresh DB, 191/191 lib tests pass, clippy clean
+- Why: these tests were never run against a real Postgres backend - all failures were schema/test assumption mismatches

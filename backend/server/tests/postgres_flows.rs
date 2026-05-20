@@ -150,6 +150,12 @@ async fn postgres_contact_approval_flow_persists_and_updates_status(
     seed_listing(&pool, &listing_id).await?;
     seed_negotiation(&pool, &negotiation_id, &listing_id).await?;
 
+    // Seed reservation lease (create_request queries reservation_leases)
+    let res_repo = PostgresReservationLeaseRepository::new(pool.clone());
+    res_repo
+        .reserve(&listing_id, &negotiation_id, "buyer-1", "2026-05-04T00:00:00Z", 3600)
+        .await?;
+
     let repo = PostgresContactRevealRepository::new(pool.clone());
     let created = repo
         .create_request(
@@ -327,14 +333,18 @@ async fn postgres_negotiation_acceptance_flow_persists_closed_state_and_final_of
     let listing_id = format!("lst_accept_{}", suffix);
     let buyer_id = format!("buyer_accept_{}", suffix);
 
+    // Seed listing (FK dependency for negotiations)
+    seed_listing(&pool, &listing_id).await?;
+
     // Insert initial negotiation
     sqlx::query(
         "INSERT INTO negotiations (negotiation_id, listing_id, buyer_agent_id, status, offer_currency, latest_offer_amount, offer_history, version, open_idempotency_key, created_at, updated_at)
-         VALUES ($1, $2, $3, 'open', 'USD', 100.0, '[]'::jsonb, 1, 'key_accept', '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
+         VALUES ($1, $2, $3, 'open', 'USD', 100.0, '[]'::jsonb, 1, $4, '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
     )
     .bind(&negotiation_id)
     .bind(&listing_id)
     .bind(&buyer_id)
+    .bind(format!("key_accept_{}", suffix))
     .execute(&pool)
     .await?;
 
@@ -389,23 +399,27 @@ async fn postgres_contact_reveal_request_and_approve_flow(
     let listing_id = format!("lst_reveal_{}", suffix);
     let buyer_id = format!("buyer_reveal_{}", suffix);
 
-    // Insert negotiation and reveal request
+    // Seed listing and negotiation (FK dependencies for contact_reveals)
+    seed_listing(&pool, &listing_id).await?;
+    seed_negotiation(&pool, &negotiation_id, &listing_id).await?;
+
+    // Insert reveal request
     sqlx::query(
-        "INSERT INTO contact_reveals (reveal_id, negotiation_id, listing_id, buyer_agent_id, seller_agent_id, reveal_status, phone_number, request_idempotency_key, created_at)
-         VALUES ($1, $2, $3, $4, $5, 'pending', '+1234567890', 'req_key', '2026-05-12T00:00:00Z')"
+        "INSERT INTO contact_reveals (reveal_id, negotiation_id, listing_id, buyer_agent_id, reveal_status, revealed_phone_reference, request_idempotency_key, created_at)
+         VALUES ($1, $2, $3, $4, 'pending', '+1234567890', $5, '2026-05-12T00:00:00Z')"
     )
     .bind(&reveal_id)
     .bind(&negotiation_id)
     .bind(&listing_id)
     .bind(&buyer_id)
-    .bind("seller_reveal")
+    .bind(format!("req_key_{}", suffix))
     .execute(&pool)
     .await?;
 
     let repo = PostgresContactRevealRepository::new(pool.clone());
 
     // Approve reveal
-    let result = repo.approve_request(&reveal_id, "seller").await?;
+    let result = repo.approve_request(&reveal_id, "2026-05-12T00:01:00Z").await?;
     assert_eq!(result.reveal_id, reveal_id);
     assert_eq!(
         result.reveal_status,
@@ -462,17 +476,21 @@ async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn 
         return Ok(());
     };
     let suffix = unique_suffix();
-    let lease_id = format!("lease_exp_{}", suffix);
     let listing_id = format!("lst_lease_{}", suffix);
+    let negotiation_id = format!("neg_lease_{}", suffix);
+
+    // Seed listing (FK dependency for reservation_leases)
+    seed_listing(&pool, &listing_id).await?;
+    seed_negotiation(&pool, &negotiation_id, &listing_id).await?;
 
     let repo = PostgresReservationLeaseRepository::new(pool.clone());
 
-    // Create lease
+    // Create lease (Postgres auto-generates lease_id via sequence)
     let result = repo
-        .reserve(&listing_id, &lease_id, "user", "2026-05-12T00:00:00Z", 3600)
+        .reserve(&listing_id, &negotiation_id, "user", "2026-05-12T00:00:00Z", 3600)
         .await?;
     assert_eq!(result.listing_id, listing_id);
-    assert_eq!(result.lease_id, lease_id);
+    let actual_lease_id = result.lease_id.clone();
 
     // Check lease exists
     let lease: Option<marketplace_server::models::db::ReservationLeaseRow> =
@@ -480,7 +498,7 @@ async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn 
     assert!(lease.is_some());
 
     // Release lease
-    repo.release(&lease_id, "2026-05-12T01:00:00Z").await?;
+    repo.release(&actual_lease_id, "2026-05-12T01:00:00Z").await?;
 
     // Check lease gone
     let lease_after: Option<marketplace_server::models::db::ReservationLeaseRow> =
@@ -498,13 +516,15 @@ async fn postgres_auth_flow_create_listing_with_valid_seller_role(
     };
     let suffix = unique_suffix();
 
+    let owner = format!("seller_user_{}", suffix);
+
     // Seed seller account
     sqlx::query(
-        "INSERT INTO seller_accounts (seller_account_id, owner_id, quota_remaining, trust_level, created_at, updated_at)
-         VALUES ($1, $2, 100, 'trusted', '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
+        "INSERT INTO seller_accounts (seller_account_id, owner_id, trust_level, status, listings_created, quota_override, created_at, updated_at)
+         VALUES ($1, $2, 'trusted', 'active', 0, 100, '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
     )
     .bind(format!("seller_{}", suffix))
-    .bind("seller_user")
+    .bind(&owner)
     .execute(&pool)
     .await?;
 
@@ -540,10 +560,10 @@ async fn postgres_auth_flow_create_listing_with_valid_seller_role(
     );
 
     let claims = marketplace_auth_core::Claims {
-        sub: "seller_user".to_string(),
+        sub: owner.clone(),
         roles: vec![marketplace_auth_core::Role::SellerListingWriter],
         scopes: vec![marketplace_auth_core::Scope::ListingCreate],
-        seller_account_id: Some("seller_user".to_string()),
+        seller_account_id: Some(format!("seller_{}", suffix)),
         buyer_agent_id: None,
         hardware_id: None,
         exp: Some(1715475600),
@@ -553,7 +573,7 @@ async fn postgres_auth_flow_create_listing_with_valid_seller_role(
         idempotency_key: format!("create_auth_{}", suffix),
         listing: marketplace_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
-            owner_id: "seller_user".to_string(),
+            owner_id: format!("seller_{}", suffix),
             listing_type: marketplace_api_contract::ListingType::Product,
             category: Some(marketplace_api_contract::Category::Laptop),
             title: "Auth Test Laptop".to_string(),
@@ -618,11 +638,11 @@ async fn postgres_seller_account_trust_level_update() -> Result<(), Box<dyn Erro
 
     // Insert seller account
     sqlx::query(
-        "INSERT INTO seller_accounts (seller_account_id, owner_id, quota_remaining, trust_level, created_at, updated_at)
-         VALUES ($1, $2, 100, 'basic', '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
+        "INSERT INTO seller_accounts (seller_account_id, owner_id, trust_level, status, listings_created, quota_override, created_at, updated_at)
+         VALUES ($1, $2, 'verified', 'active', 0, 100, '2026-05-12T00:00:00Z', '2026-05-12T00:00:00Z')"
     )
     .bind(&seller_id)
-    .bind("owner_trust")
+    .bind(format!("owner_trust_{}", suffix))
     .execute(&pool)
     .await?;
 
@@ -633,12 +653,12 @@ async fn postgres_seller_account_trust_level_update() -> Result<(), Box<dyn Erro
 
     // Update trust level
     let updated = repo
-        .update_trust_level(&seller_id, "premium")
+        .update_trust_level(&seller_id, "trusted")
         .await
         .unwrap();
     assert!(updated.is_some());
     let account = updated.unwrap();
-    assert_eq!(account.trust_level, "premium");
+    assert_eq!(account.trust_level, "trusted");
     assert_eq!(account.seller_account_id, seller_id);
 
     // Verify in DB
@@ -647,7 +667,7 @@ async fn postgres_seller_account_trust_level_update() -> Result<(), Box<dyn Erro
         .fetch_one(&pool)
         .await?;
     let db_trust: String = row.try_get("trust_level")?;
-    assert_eq!(db_trust, "premium");
+    assert_eq!(db_trust, "trusted");
 
     Ok(())
 }
@@ -793,9 +813,9 @@ async fn postgres_rejects_wrong_seller_reveal_approval() -> Result<(), Box<dyn E
     let reveal_id = format!("rev_wrongseller_{suffix}");
     sqlx::query(
         "INSERT INTO contact_reveals (
-            reveal_id, negotiation_id, listing_id, buyer_agent_id, seller_agent_id,
-            reveal_status, phone_number, request_idempotency_key, created_at
-        ) VALUES ($1, $2, $3, 'buyer-1', 'seller-1', 'pending', '+1234567890', $4, '2026-05-04T00:00:00Z')",
+            reveal_id, negotiation_id, listing_id, buyer_agent_id,
+            reveal_status, revealed_phone_reference, request_idempotency_key, created_at
+        ) VALUES ($1, $2, $3, 'buyer-1', 'pending', '+1234567890', $4, '2026-05-04T00:00:00Z')",
     )
     .bind(&reveal_id)
     .bind(&negotiation_id)
@@ -1007,11 +1027,11 @@ async fn postgres_open_negotiation_conflict_compensation(
     );
 
     let seller = marketplace_auth_core::Claims {
-        sub: "seller-1".to_string(),
-        roles: vec![marketplace_auth_core::Role::SellerListingWriter],
-        scopes: vec![marketplace_auth_core::Scope::ListingCreate],
-        seller_account_id: Some("seller-1".to_string()),
-        buyer_agent_id: None,
+        sub: "buyer-1".to_string(),
+        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
+        scopes: vec![marketplace_auth_core::Scope::NegotiationCreate],
+        seller_account_id: None,
+        buyer_agent_id: Some("buyer-1".to_string()),
         hardware_id: None,
         exp: Some(1715475600),
     };
@@ -1022,7 +1042,7 @@ async fn postgres_open_negotiation_conflict_compensation(
             &seller,
             &marketplace_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
-                buyer_agent_id: "seller-1".to_string(),
+                buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),
                 offer_amount: 400.0,
                 idempotency_key: format!("open-first-{suffix}"),
@@ -1043,7 +1063,7 @@ async fn postgres_open_negotiation_conflict_compensation(
             &seller,
             &marketplace_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
-                buyer_agent_id: "seller-1".to_string(),
+                buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),
                 offer_amount: 450.0,
                 idempotency_key: format!("open-second-{suffix}"),
