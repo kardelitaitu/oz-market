@@ -47,15 +47,30 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let bind = std::env::var("MARKETPLACE_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
 
-    // Initialize tracing subscriber
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Initialize tracing subscriber — LOG_FORMAT=json for production
+    let log_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info".into());
+    if std::env::var("LOG_FORMAT").ok().as_deref() == Some("json") {
+        tracing_subscriber::registry()
+            .with(log_filter)
+            .with(tracing_subscriber::fmt::layer().json())
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(log_filter)
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+    }
 
     let (pool, audit_repo, outbox_repo) = build_repositories().await?;
+
+    // Auto-run database migrations on startup
+    info!("Running database schema migrations...");
+    crate::bootstrap::apply_schema(&pool).await.map_err(|e| {
+        std::io::Error::other(format!("migration failed: {e}"))
+    })?;
+    info!("Schema migrations complete");
+
     let app = build_app(pool.clone(), audit_repo, outbox_repo);
     let observability = Arc::new(ServerObservability::new());
 
@@ -63,24 +78,27 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map(|value| value != "1" && !value.eq_ignore_ascii_case("true"))
         .unwrap_or(true);
 
-    // Memory-based cache configuration (in MB) - large for high hit rate
+    // Memory-based cache configuration (in MB)
     let listing_cache_max_mb: u64 = std::env::var("LISTING_CACHE_MAX_MB")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(2 * 1024); // Default 2GB
+        .unwrap_or(200); // Default 200MB — ~67K listings at 3KB each
     let search_cache_max_mb: u64 = std::env::var("SEARCH_CACHE_MAX_MB")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(1024); // Default 1GB
+        .unwrap_or(100); // Default 100MB — ~7K search results at 15KB each
+    let listing_cache_max_bytes = listing_cache_max_mb * 1024 * 1024;
+    let search_cache_max_bytes = search_cache_max_mb * 1024 * 1024;
 
-    // Create Moka caches for Actix handlers (store pre-serialized JSON strings)
-    // Simple entry-based cache with large capacity
+    // Create Moka caches — weigher uses string byte length so max_capacity is total bytes
     let listing_cache: Cache<String, String> = Cache::builder()
-        .max_capacity(listing_cache_max_mb * 1024 * 1024) // Convert MB to bytes
+        .weigher(|_key, value: &String| -> u32 { value.len() as u32 })
+        .max_capacity(listing_cache_max_bytes)
         .time_to_live(std::time::Duration::from_secs(30 * 60)) // 30 minutes TTL
         .build();
     let search_cache: Cache<String, String> = Cache::builder()
-        .max_capacity(search_cache_max_mb * 1024 * 1024) // Convert MB to bytes
+        .weigher(|_key, value: &String| -> u32 { value.len() as u32 })
+        .max_capacity(search_cache_max_bytes)
         .time_to_live(std::time::Duration::from_secs(15 * 60)) // 15 minutes TTL
         .build();
 
@@ -95,6 +113,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let listing_cache_data = web::Data::new(listing_cache);
     let search_cache_data = web::Data::new(search_cache);
     let pool_data = web::Data::new(pool);
+    let listing_cache_limit_data = web::Data::new(listing_cache_max_bytes);
+    let search_cache_limit_data = web::Data::new(search_cache_max_bytes);
 
     info!("Starting Actix-web server on {}", bind);
 
@@ -104,8 +124,12 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or_else(|| (num_cpus * 4).clamp(16, 64));
+    let shutdown_timeout: u64 = std::env::var("SHUTDOWN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Compress::default()) // Response compression (gzip)
             .wrap(TracingLogger::default()) // Add tracing middleware
@@ -114,108 +138,37 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(cache_enabled_data.clone())
             .app_data(listing_cache_data.clone())
             .app_data(search_cache_data.clone())
+            .app_data(listing_cache_limit_data.clone())
+            .app_data(search_cache_limit_data.clone())
             .app_data(pool_data.clone())
-            // Redirect to Swagger Editor for interactive docs
+            // OpenAPI docs
             .route("/docs", web::get().to(crate::openapi::serve_swagger_editor))
-            // Serve OpenAPI JSON
             .route(
                 "/api-docs/openapi.json",
                 web::get().to(crate::openapi::serve_openapi_json),
             )
-            // Public API v1 routes - organized by resource type
-            .service(
-                // General listings (search across all types)
-                web::scope("/v1/listings")
-                    .route(
-                        "/search",
-                        web::get().to(crate::http::actix_handlers::search_listings),
-                    )
-                    .route(
-                        "",
-                        web::post().to(crate::http::actix_handlers::create_listing),
-                    )
-                    .route(
-                        "/{listing_id}",
-                        web::get().to(crate::http::actix_handlers::get_listing),
-                    )
-                    .route(
-                        "/{listing_id}/archive",
-                        web::post().to(crate::http::actix_handlers::archive_listing),
-                    ),
-            )
-            .service(
-                // Shared resources (negotiations, contact reveals)
-                web::scope("/v1")
-                    .route(
-                        "/negotiations",
-                        web::post().to(crate::http::actix_handlers::open_negotiation),
-                    )
-                    .route(
-                        "/negotiations/{negotiation_id}",
-                        web::get().to(crate::http::actix_handlers::get_negotiation_status),
-                    )
-                    .route(
-                        "/negotiations/{negotiation_id}/offers",
-                        web::post().to(crate::http::actix_handlers::submit_offer),
-                    )
-                    .route(
-                        "/negotiations/{negotiation_id}/accept",
-                        web::post().to(crate::http::actix_handlers::accept_negotiation),
-                    )
-                    .route(
-                        "/negotiations/{negotiation_id}/reject",
-                        web::post().to(crate::http::actix_handlers::reject_negotiation),
-                    )
-                    .route(
-                        "/negotiations/{negotiation_id}/request-contact-reveal",
-                        web::post().to(crate::http::actix_handlers::request_contact_reveal),
-                    )
-                    .route(
-                        "/contact-reveals/{reveal_id}/approve",
-                        web::post().to(crate::http::actix_handlers::approve_contact_reveal),
-                    ),
-            )
-            // Internal API v1 routes (admin/support)
-            .service(
-                web::scope("/internal/v1")
-                    .route(
-                        "/listings/{listing_id}/archive",
-                        web::post().to(crate::http::actix_handlers::archive_listing),
-                    )
-                    .route(
-                        "/reservations/{lease_id}/release",
-                        web::post().to(crate::http::actix_handlers::release_reservation),
-                    )
-                    .route(
-                        "/sellers/{seller_id}/trust-level",
-                        web::put().to(crate::http::actix_handlers::set_seller_trust_level),
-                    )
-                    .route(
-                        "/sellers/{seller_id}/quota-override",
-                        web::put().to(crate::http::actix_handlers::set_seller_quota_override),
-                    )
-                    .route(
-                        "/sellers/{seller_id}/recalculate-rating",
-                        web::post().to(crate::http::actix_handlers::recalculate_seller_rating),
-                    )
-                    .route(
-                        "/reviews/{review_id}/approve",
-                        web::post().to(crate::http::actix_handlers::approve_review),
-                    )
-                    .route(
-                        "/reviews/{review_id}/reject",
-                        web::post().to(crate::http::actix_handlers::reject_review),
-                    ),
-            )
-            // Metrics endpoint (simple version)
+            // All API routes (listings, negotiations, reveals, internal)
+            .configure(crate::http::actix_handlers::register_api_routes)
+            // Metrics + health
             .route("/metrics", web::get().to(metrics_handler))
-            // Health check (deep)
             .route("/health", web::get().to(health_check))
     })
     .bind(&bind)?
     .workers(actix_workers)
-    .run()
-    .await?;
+    .shutdown_timeout(shutdown_timeout)
+    .run();
+
+    // Handle graceful shutdown on SIGINT/SIGTERM
+    let server_handle = server.handle();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        info!("Shutdown signal received, draining connections...");
+        server_handle.stop(true).await;
+        info!("Server stopped");
+    });
+
+    info!("Server ready — listening on {}", bind);
+    server.await?;
 
     Ok(())
 }
@@ -224,6 +177,8 @@ async fn metrics_handler(
     pool: web::Data<sqlx::postgres::PgPool>,
     listing_cache: web::Data<Cache<String, String>>,
     search_cache: web::Data<Cache<String, String>>,
+    listing_max_bytes: web::Data<u64>,
+    search_max_bytes: web::Data<u64>,
 ) -> impl actix_web::Responder {
     // Connection pool metrics
     let pool_size = pool.size();
@@ -237,23 +192,11 @@ async fn metrics_handler(
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
 
-    // Cache metrics
+    // Cache metrics — derive size from the actual configured limits
+    let listing_weight_capacity = **listing_max_bytes;
+    let search_weight_capacity = **search_max_bytes;
     let listing_count = listing_cache.as_ref().entry_count();
     let search_count = search_cache.as_ref().entry_count();
-    let listing_max_mb: u64 = std::env::var("LISTING_CACHE_MAX_MB")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(10 * 1024);
-    let search_max_mb: u64 = std::env::var("SEARCH_CACHE_MAX_MB")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(6 * 1024);
-    let listing_max_bytes = listing_max_mb * 1024 * 1024;
-    let search_max_bytes = search_max_mb * 1024 * 1024;
-
-    // Estimate memory usage (avg 3KB per listing, 15KB per search result)
-    let listing_memory_bytes = listing_count * 3 * 1024;
-    let search_memory_bytes = search_count * 15 * 1024;
 
     // Calculate utilization percentages
     let active_connections = pool_size.saturating_sub(idle_connections as u32);
@@ -263,13 +206,17 @@ async fn metrics_handler(
         0
     };
 
-    let listing_cache_utilization = if listing_max_bytes > 0 {
-        ((listing_memory_bytes as f64 / listing_max_bytes as f64) * 100.0) as u32
+    // Estimate memory usage (avg 3KB per listing, 15KB per search result)
+    let listing_memory_bytes = listing_count * 3 * 1024;
+    let search_memory_bytes = search_count * 15 * 1024;
+
+    let listing_cache_utilization = if listing_weight_capacity > 0 {
+        ((listing_memory_bytes as f64 / listing_weight_capacity as f64) * 100.0) as u32
     } else {
         0
     };
-    let search_cache_utilization = if search_max_bytes > 0 {
-        ((search_memory_bytes as f64 / search_max_bytes as f64) * 100.0) as u32
+    let search_cache_utilization = if search_weight_capacity > 0 {
+        ((search_memory_bytes as f64 / search_weight_capacity as f64) * 100.0) as u32
     } else {
         0
     };
@@ -278,6 +225,8 @@ async fn metrics_handler(
     let listing_memory_mb = listing_memory_bytes / (1024 * 1024);
     let search_memory_mb = search_memory_bytes / (1024 * 1024);
     let total_cache_mb = listing_memory_mb + search_memory_mb;
+    let listing_max_mb = listing_weight_capacity / (1024 * 1024);
+    let search_max_mb = search_weight_capacity / (1024 * 1024);
 
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
@@ -310,6 +259,7 @@ async fn metrics_handler(
 async fn health_check(pool: web::Data<sqlx::postgres::PgPool>) -> impl actix_web::Responder {
     let mut health = serde_json::json!({
         "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
         "checks": {}
     });
 

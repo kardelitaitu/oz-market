@@ -39,8 +39,9 @@ docs/
 - `backend/mcp`: MCP transport and desktop-agent integration
 - `backend/crates/api-contract`: shared typed contracts derived from the frozen API contract
 - `backend/crates/auth-core`: auth, permission, and identity helpers
-- `mobile/app-android`: Android client
-- `mobile/app-ios`: iOS client
+- `mobile/app-android`: (deprecated — see `mobile/marketplace/`)
+- `mobile/app-ios`: (deprecated — see `mobile/marketplace/`)
+- `mobile/marketplace`: Tauri v2 + Svelte 5 mobile app (Android + iOS)
 
 ## Architecture Rules
 
@@ -67,6 +68,12 @@ For MCP behavior, check:
 
 - `docs/mcp/tool-catalog.md`
 
+## Context Gathering Rule
+
+- before making any code change, spawn multiple file-picker and code-searcher agents in parallel to gather the latest context
+- prefer 2-5 parallel agents to explore different parts of the codebase simultaneously
+- only edit files after gathering sufficient context
+
 ## Implementation Bias
 
 - prefer `Rust` for backend code
@@ -77,9 +84,16 @@ For MCP behavior, check:
 
 ## Change Logging Rule
 
-- after making code changes, summarize the changes briefly in the response
-- after making code changes, append a short journal entry to `JOURNAL.md`
-- journal entries should record what changed and why, not just file names
+- **always** write to `JOURNAL.md` after making any code changes
+- summarize the changes briefly in the response
+- journal entries must record what changed and why, not just file names
+- use a `## YYYY-MM-DD HH:MM` heading matching the existing journal format
+
+## Follow-up Rule
+
+- after completing a task, always suggest 4-5 concrete next moves using `suggest_followups`
+- suggestions should be actionable and relevant (e.g., "Add tests", "Refactor X", "Continue to next step")
+- prefer diverse suggestions covering different directions (testing, polish, next feature, cleanup)
 
 ## Workflow Rules
 

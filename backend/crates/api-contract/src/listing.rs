@@ -297,6 +297,9 @@ pub struct SearchRequest {
     pub user_longitude: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radius_km: Option<f64>,
+    // Owner filter: get listings by specific seller
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
 }
 
 impl Default for SearchRequest {
@@ -329,6 +332,7 @@ impl Default for SearchRequest {
             user_latitude: None,
             user_longitude: None,
             radius_km: None,
+            owner_id: None,
         }
     }
 }

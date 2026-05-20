@@ -107,6 +107,7 @@ fn full_search_request_serde_roundtrip() {
         user_latitude: Some(37.7749),
         user_longitude: Some(-122.4194),
         radius_km: Some(10.0),
+        owner_id: None,
     };
     let json = serde_json::to_value(&req).expect("serialization failed");
     let deserialized: SearchRequest = serde_json::from_value(json).expect("deserialization failed");
@@ -538,6 +539,7 @@ fn negotiation_response_roundtrip() {
         latest_offer_amount: 850.0,
         reservation_lease_id: Some("lease_abc".into()),
         final_offer_amount: None,
+        reveal_id: None,
         offer_history: vec![],
         version: 1,
         updated_at: "2026-05-10T12:00:00Z".into(),

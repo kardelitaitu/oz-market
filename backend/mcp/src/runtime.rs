@@ -455,6 +455,8 @@ impl From<HandlerError> for McpToolError {
                 }
             },
             HandlerError::QuotaExceeded { message } => Self::quota_exceeded(message),
+            HandlerError::Agent(error) => Self::invalid_field(error.to_string()),
+            HandlerError::Validation { message, .. } => Self::invalid_field(message),
         }
     }
 }
@@ -501,6 +503,38 @@ fn load_claims_from_env(
 }
 
 fn load_claims() -> Result<Claims, Box<dyn Error + Send + Sync>> {
+    // Try shared HTTP server API key first
+    if let Ok(key) = std::env::var("MARKETPLACE_API_KEY") {
+        if !key.is_empty() {
+            eprintln!("using MARKETPLACE_API_KEY for MCP agent auth");
+            return Ok(Claims {
+                sub: "mcp-agent".to_string(),
+                roles: vec![
+                    marketplace_auth_core::Role::SellerListingWriter,
+                    marketplace_auth_core::Role::SellerNegotiator,
+                    marketplace_auth_core::Role::SellerContactRevealApprover,
+                    marketplace_auth_core::Role::BuyerSearcher,
+                    marketplace_auth_core::Role::BuyerNegotiator,
+                    marketplace_auth_core::Role::Admin,
+                ],
+                scopes: vec![
+                    marketplace_auth_core::Scope::ListingCreate,
+                    marketplace_auth_core::Scope::ListingRead,
+                    marketplace_auth_core::Scope::ListingSearch,
+                    marketplace_auth_core::Scope::NegotiationCreate,
+                    marketplace_auth_core::Scope::NegotiationRead,
+                    marketplace_auth_core::Scope::NegotiationOfferSubmit,
+                    marketplace_auth_core::Scope::NegotiationRevealRequest,
+                    marketplace_auth_core::Scope::RevealApprove,
+                ],
+                seller_account_id: Some("demo-seller".to_string()),
+                buyer_agent_id: Some("demo-buyer".to_string()),
+                hardware_id: None,
+                exp: None,
+            });
+        }
+    }
+
     load_claims_from_env(
         std::env::var("MARKETPLACE_MCP_CLAIMS_JSON").ok(),
         env_flag_is_truthy("MARKETPLACE_MCP_ALLOW_DEV_CLAIMS"),

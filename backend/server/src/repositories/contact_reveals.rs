@@ -34,6 +34,11 @@ pub trait ContactRevealRepository: Send + Sync {
         &self,
         reveal_id: &str,
     ) -> Result<Option<ContactRevealResponse>, RepositoryError>;
+
+    async fn get_by_negotiation_id(
+        &self,
+        negotiation_id: &str,
+    ) -> Result<Option<ContactRevealResponse>, RepositoryError>;
 }
 
 pub fn conflict(message: impl Into<String>) -> RepositoryError {
@@ -175,6 +180,18 @@ impl ContactRevealRepository for InMemoryContactRevealRepository {
     ) -> Result<Option<ContactRevealResponse>, RepositoryError> {
         let by_reveal = self.by_reveal_id.read().expect("contact reveal read lock");
         Ok(by_reveal.get(reveal_id).map(Self::row_to_response))
+    }
+
+    async fn get_by_negotiation_id(
+        &self,
+        negotiation_id: &str,
+    ) -> Result<Option<ContactRevealResponse>, RepositoryError> {
+        let by_reveal = self.by_reveal_id.read().expect("contact reveal read lock");
+        let by_negotiation = self.by_negotiation_id.read().expect("contact reveal negotiation read lock");
+        Ok(by_negotiation
+            .get(negotiation_id)
+            .and_then(|reveal_id| by_reveal.get(reveal_id.as_str()))
+            .map(Self::row_to_response))
     }
 }
 
@@ -345,6 +362,21 @@ impl ContactRevealRepository for PostgresContactRevealRepository {
             "SELECT reveal_id, negotiation_id, listing_id, buyer_agent_id, request_idempotency_key, reveal_status, revealed_phone_reference, to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS expires_at, to_char(approved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS approved_at, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at FROM contact_reveals WHERE reveal_id = $1",
         )
         .bind(reveal_id)
+        .fetch_optional(self.pool.as_ref())
+        .await
+        .map_err(|error| storage(error.to_string()))?;
+
+        row.as_ref().map(Self::row_to_response).transpose()
+    }
+
+    async fn get_by_negotiation_id(
+        &self,
+        negotiation_id: &str,
+    ) -> Result<Option<ContactRevealResponse>, RepositoryError> {
+        let row = sqlx::query(
+            "SELECT reveal_id, negotiation_id, listing_id, buyer_agent_id, request_idempotency_key, reveal_status, revealed_phone_reference, to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS expires_at, to_char(approved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS approved_at, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at FROM contact_reveals WHERE negotiation_id = $1",
+        )
+        .bind(negotiation_id)
         .fetch_optional(self.pool.as_ref())
         .await
         .map_err(|error| storage(error.to_string()))?;

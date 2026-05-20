@@ -356,7 +356,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n--- Test 5: Get Created Listing ---");
-    if let Some(listing_id) = created_listing_id {
+    if let Some(ref listing_id) = created_listing_id {
         match client.call_tool(
             "get_listing",
             json!({
@@ -416,6 +416,353 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => log_test("get_non_existent_listing", false, &e.to_string()),
+    }
+
+    println!("\n--- Test 7: Open Negotiation ---");
+    let negotiation_id = if let Some(ref listing_id) = created_listing_id {
+        match client.call_tool(
+            "open_negotiation",
+            json!({
+                "listing_id": listing_id,
+                "buyer_agent_id": "buyer-1",
+                "offer_currency": "USD",
+                "offer_amount": 400.00,
+                "idempotency_key": "idem-neg-mcp-1"
+            }),
+        ) {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let neg_id = payload
+                        .get("negotiation_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let status = payload.get("status").and_then(|v| v.as_str());
+                    if let Some(ref neg_id) = neg_id {
+                        log_test(
+                            "open_negotiation",
+                            status == Some("reserved"),
+                            &format!("Opened negotiation {} with status {:?}", neg_id, status),
+                        );
+                    } else {
+                        log_test("open_negotiation", false, "Missing negotiation_id");
+                    }
+                    neg_id
+                }
+                Err(e) => {
+                    log_test("open_negotiation", false, &e.to_string());
+                    None
+                }
+            },
+            Err(e) => {
+                log_test("open_negotiation", false, &e.to_string());
+                None
+            }
+        }
+    } else {
+        log_test(
+            "open_negotiation",
+            false,
+            "Skipping because create_listing failed",
+        );
+        None
+    };
+
+    println!("\n--- Test 8: Submit Offer ---");
+    if let Some(ref neg_id) = negotiation_id {
+        let result = client.call_tool(
+            "submit_offer",
+            json!({
+                "negotiation_id": neg_id,
+                "offer_currency": "USD",
+                "offer_amount": 425.00,
+                "idempotency_key": "idem-offer-mcp-1"
+            }),
+        );
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let status = payload.get("status").and_then(|v| v.as_str());
+                    let latest = payload.get("latest_offer_amount").and_then(|v| v.as_f64());
+                    log_test(
+                        "submit_offer",
+                        status == Some("countered") && latest == Some(425.0),
+                        &format!("Status: {:?}, amount: {:?}", status, latest),
+                    );
+                }
+                Err(e) => log_test("submit_offer", false, &e.to_string()),
+            },
+            Err(e) => log_test("submit_offer", false, &e.to_string()),
+        }
+    } else {
+        log_test(
+            "submit_offer",
+            false,
+            "Skipping because open_negotiation failed",
+        );
+    }
+
+    println!("\n--- Test 9: Reject Negotiation ---");
+    if let Some(ref neg_id) = negotiation_id {
+        let result = client.call_tool(
+            "reject_negotiation",
+            json!({
+                "negotiation_id": neg_id,
+                "idempotency_key": "idem-reject-mcp-1"
+            }),
+        );
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let status = payload.get("status").and_then(|v| v.as_str());
+                    log_test(
+                        "reject_negotiation",
+                        status == Some("cancelled"),
+                        &format!("Status after reject: {:?}", status),
+                    );
+                }
+                Err(e) => log_test("reject_negotiation", false, &e.to_string()),
+            },
+            Err(e) => log_test("reject_negotiation", false, &e.to_string()),
+        }
+    } else {
+        log_test(
+            "reject_negotiation",
+            false,
+            "Skipping because open_negotiation failed",
+        );
+    }
+
+    // Create a second listing for accept + reveal tests
+    println!("\n--- Test 10: Create Second Listing (for accept/reveal) ---");
+    let second_listing_id = match client.call_tool(
+        "create_listing",
+        json!({
+            "idempotency_key": "idem-create-mcp-2",
+            "listing": {
+                "schema_version": "1.0",
+                "owner_id": "seller-1",
+                "listing_type": "product",
+                "category": "laptop",
+                "title": "Second Listing for Accept Test",
+                "condition": "new",
+                "price": { "currency": "USD", "amount": 800.00 },
+                "location": {
+                    "country_code": "US",
+                    "country_name": "United States",
+                    "city": "Austin"
+                },
+                "description": "Listing created for accept+reveal flow test"
+            }
+        }),
+    ) {
+        Ok(result) => match tool_json_value(&result) {
+            Ok(payload) => {
+                let lid = payload
+                    .get("listing_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let status = payload.get("status").and_then(|v| v.as_str());
+                if let Some(ref lid) = lid {
+                    log_test(
+                        "create_second_listing",
+                        status == Some("active"),
+                        &format!("Created listing {}", lid),
+                    );
+                } else {
+                    log_test("create_second_listing", false, "Missing listing_id");
+                }
+                lid
+            }
+            Err(e) => {
+                log_test("create_second_listing", false, &e.to_string());
+                None
+            }
+        },
+        Err(e) => {
+            log_test("create_second_listing", false, &e.to_string());
+            None
+        }
+    };
+
+    println!("\n--- Test 11: Open Negotiation on Second Listing ---");
+    let second_neg_id = if let Some(ref lid) = second_listing_id {
+        let result = client.call_tool(
+            "open_negotiation",
+            json!({
+                "listing_id": lid,
+                "buyer_agent_id": "buyer-1",
+                "offer_currency": "USD",
+                "offer_amount": 750.00,
+                "idempotency_key": "idem-neg-mcp-2"
+            }),
+        );
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let nid = payload
+                        .get("negotiation_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let status = payload.get("status").and_then(|v| v.as_str());
+                    if let Some(ref nid) = nid {
+                        log_test(
+                            "open_negotiation_second",
+                            status == Some("reserved"),
+                            &format!("Opened negotiation {} with status {:?}", nid, status),
+                        );
+                    } else {
+                        log_test("open_negotiation_second", false, "Missing negotiation_id");
+                    }
+                    nid
+                }
+                Err(e) => {
+                    log_test("open_negotiation_second", false, &e.to_string());
+                    None
+                }
+            },
+            Err(e) => {
+                log_test("open_negotiation_second", false, &e.to_string());
+                None
+            }
+        }
+    } else {
+        log_test(
+            "open_negotiation_second",
+            false,
+            "Skipping -- no second listing",
+        );
+        None
+    };
+
+    println!("\n--- Test 12: Submit Offer (second listing) ---");
+    if let Some(ref nid) = second_neg_id {
+        let result = client.call_tool(
+            "submit_offer",
+            json!({
+                "negotiation_id": nid,
+                "offer_currency": "USD",
+                "offer_amount": 775.00,
+                "idempotency_key": "idem-offer-mcp-2"
+            }),
+        );
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let status = payload.get("status").and_then(|v| v.as_str());
+                    let latest = payload.get("latest_offer_amount").and_then(|v| v.as_f64());
+                    log_test(
+                        "submit_offer_second",
+                        status == Some("countered") && latest == Some(775.0),
+                        &format!("Status: {:?}, amount: {:?}", status, latest),
+                    );
+                }
+                Err(e) => log_test("submit_offer_second", false, &e.to_string()),
+            },
+            Err(e) => log_test("submit_offer_second", false, &e.to_string()),
+        }
+    } else {
+        log_test("submit_offer_second", false, "Skipping");
+    }
+
+    println!("\n--- Test 13: Accept Negotiation ---");
+    let accepted_neg_id = if let Some(ref nid) = second_neg_id {
+        let result = client.call_tool(
+            "accept_negotiation",
+            json!({
+                "negotiation_id": nid,
+                "idempotency_key": "idem-accept-mcp-1"
+            }),
+        );
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let status = payload.get("status").and_then(|v| v.as_str());
+                    let final_amount =
+                        payload.get("final_offer_amount").and_then(|v| v.as_f64());
+                    log_test(
+                        "accept_negotiation",
+                        status == Some("closed") && final_amount == Some(775.0),
+                        &format!("Status: {:?}, final amount: {:?}", status, final_amount),
+                    );
+                    Some(nid.clone())
+                }
+                Err(e) => {
+                    log_test("accept_negotiation", false, &e.to_string());
+                    None
+                }
+            },
+            Err(e) => {
+                log_test("accept_negotiation", false, &e.to_string());
+                None
+            }
+        }
+    } else {
+        log_test("accept_negotiation", false, "Skipping");
+        None
+    };
+
+    println!("\n--- Test 14: Request Contact Reveal ---");
+    let reveal_id = if let Some(ref nid) = accepted_neg_id {
+        let result = client.call_tool(
+            "request_contact_reveal",
+            json!({
+                "negotiation_id": nid,
+                "idempotency_key": "idem-reveal-mcp-1"
+            }),
+        );
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let rid = payload
+                        .get("reveal_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    if let Some(ref rid) = rid {
+                        log_test(
+                            "request_contact_reveal",
+                            true,
+                            &format!("Reveal {} requested successfully", rid),
+                        );
+                    } else {
+                        log_test("request_contact_reveal", false, "Missing reveal_id");
+                    }
+                    rid
+                }
+                Err(e) => {
+                    log_test("request_contact_reveal", false, &e.to_string());
+                    None
+                }
+            },
+            Err(e) => {
+                log_test("request_contact_reveal", false, &e.to_string());
+                None
+            }
+        }
+    } else {
+        log_test("request_contact_reveal", false, "Skipping");
+        None
+    };
+
+    println!("\n--- Test 15: Approve Contact Reveal ---");
+    if let Some(ref rid) = reveal_id {
+        let result = client.call_tool("approve_contact_reveal", json!({ "reveal_id": rid }));
+        match result {
+            Ok(result) => match tool_json_value(&result) {
+                Ok(payload) => {
+                    let reveal_status = payload.get("reveal_status").and_then(|v| v.as_str());
+                    let phone = payload.get("revealed_phone_reference").and_then(|v| v.as_str());
+                    log_test(
+                        "approve_contact_reveal",
+                        reveal_status == Some("approved") && phone.is_some(),
+                        &format!("Status: {:?}, phone: {:?}", reveal_status, phone),
+                    );
+                }
+                Err(e) => log_test("approve_contact_reveal", false, &e.to_string()),
+            },
+            Err(e) => log_test("approve_contact_reveal", false, &e.to_string()),
+        }
+    } else {
+        log_test("approve_contact_reveal", false, "Skipping");
     }
 
     println!("\n=== MCP Test Complete ===");

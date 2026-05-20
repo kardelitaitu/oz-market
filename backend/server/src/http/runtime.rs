@@ -20,9 +20,11 @@ use crate::repositories::{
 };
 use crate::services::idempotency::InMemoryIdempotencyRepository;
 use crate::services::rate_limiter::{
-    global_limiter, CONTACT_REVEAL_RATE_MAX, CONTACT_REVEAL_RATE_WINDOW_SECS,
-    CREATE_LISTING_RATE_MAX, CREATE_LISTING_RATE_WINDOW_SECS, OPEN_NEGOTIATION_RATE_MAX,
-    OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS,
+    global_limiter, AGENT_QUERY_RATE_MAX, AGENT_QUERY_RATE_WINDOW_SECS, CONTACT_REVEAL_RATE_MAX,
+    CONTACT_REVEAL_RATE_WINDOW_SECS, CREATE_LISTING_RATE_MAX, CREATE_LISTING_RATE_WINDOW_SECS,
+    NEW_SELLER_DAILY_MAX, NEW_SELLER_HOURLY_MAX, OPEN_NEGOTIATION_RATE_MAX,
+    OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX,
+    SEARCH_RATE_WINDOW_SECS,
 };
 use marketplace_api_contract::{
     AcceptNegotiationRequest, ApiErrorCode, Category, Condition, CreateListingRequest,
@@ -155,6 +157,7 @@ struct HttpResponse {
     status: u16,
     body: Vec<u8>,
     content_type: &'static str,
+    headers: Vec<(String, String)>,
 }
 
 async fn read_request(
@@ -341,6 +344,25 @@ where
                 Err(error) => map_handler_error(&error),
             }
         }
+        ("GET", "/internal/v1/rate-limits") => {
+            if let Err(response) = authorize_internal_read(&claims) {
+                return response;
+            }
+            let buckets = global_limiter().snapshot();
+            let config = serde_json::json!({
+                "search": { "max": SEARCH_RATE_MAX, "window_secs": SEARCH_RATE_WINDOW_SECS },
+                "create_listing": { "max": CREATE_LISTING_RATE_MAX, "window_secs": CREATE_LISTING_RATE_WINDOW_SECS },
+                "open_negotiation": { "max": OPEN_NEGOTIATION_RATE_MAX, "window_secs": OPEN_NEGOTIATION_RATE_WINDOW_SECS },
+                "contact_reveal": { "max": CONTACT_REVEAL_RATE_MAX, "window_secs": CONTACT_REVEAL_RATE_WINDOW_SECS },
+                "agent_query": { "max": AGENT_QUERY_RATE_MAX, "window_secs": AGENT_QUERY_RATE_WINDOW_SECS },
+                "new_seller_daily": { "max": NEW_SELLER_DAILY_MAX },
+                "new_seller_hourly": { "max": NEW_SELLER_HOURLY_MAX },
+            });
+            json_response(200, serde_json::json!({
+                "buckets": buckets,
+                "config": config,
+            }))
+        }
         ("GET", path) if path.starts_with("/internal/v1/contact-reveals/") => {
             if let Err(response) = authorize_internal_read(&claims) {
                 return response;
@@ -475,18 +497,43 @@ where
         }
         ("GET", "/v1/listings/search") => {
             let search_key = format!("search:{}", claims.sub);
-            if !global_limiter().check(&search_key, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "search rate limit exceeded (60/min)",
-                    None,
-                );
+            let rl_search = global_limiter().check(&search_key, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS);
+            if !rl_search.allowed {
+                return rate_limited_response("search rate limit exceeded (60/min)", &rl_search);
             }
             let search = search_request_from_query(&request.query);
             match app.search_listings(Some(&claims), &search).await {
-                Ok(result) => json_response(200, serde_json::to_value(result).unwrap_or_default()),
+                Ok(result) => json_response_with_rl(200, serde_json::to_value(result).unwrap_or_default(), &rl_search),
                 Err(error) => map_handler_error(&error),
+            }
+        }
+        ("POST", "/v1/agent/query") => {
+            let agent_key = format!("agent:{}", claims.sub);
+            let rl_agent = global_limiter().check(
+                &agent_key,
+                AGENT_QUERY_RATE_MAX,
+                AGENT_QUERY_RATE_WINDOW_SECS,
+            );
+            if !rl_agent.allowed {
+                return rate_limited_response("agent query rate limit exceeded (20/min)", &rl_agent);
+            }
+            match serde_json::from_slice::<marketplace_api_contract::AgentQueryRequest>(
+                &request.body,
+            ) {
+                Ok(parsed) => {
+                    match app.agent_query(Some(&claims), &parsed).await {
+                        Ok(result) => {
+                            json_response_with_rl(200, serde_json::to_value(result).unwrap_or_default(), &rl_agent)
+                        }
+                        Err(error) => map_handler_error(&error),
+                    }
+                }
+                Err(error) => api_error_response(
+                    400,
+                    ApiErrorCode::InvalidField,
+                    "invalid agent query body",
+                    Some(error.to_string()),
+                ),
             }
         }
         ("GET", path) if path.starts_with("/v1/listings/") => {
@@ -503,17 +550,13 @@ where
         }
         ("POST", "/v1/listings") => {
             let create_key = format!("create:{}", claims.sub);
-            if !global_limiter().check(
+            let rl_create = global_limiter().check(
                 &create_key,
                 CREATE_LISTING_RATE_MAX,
                 CREATE_LISTING_RATE_WINDOW_SECS,
-            ) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "create listing rate limit exceeded (10/min)",
-                    None,
-                );
+            );
+            if !rl_create.allowed {
+                return rate_limited_response("create listing rate limit exceeded (10/min)", &rl_create);
             }
             match serde_json::from_slice::<CreateListingRequest>(&request.body) {
                 Ok(parsed) => {
@@ -524,10 +567,10 @@ where
                         .await
                     {
                         Ok((created, false)) => {
-                            json_response(201, serde_json::to_value(created).unwrap_or_default())
+                            json_response_with_rl(201, serde_json::to_value(created).unwrap_or_default(), &rl_create)
                         }
                         Ok((created, true)) => {
-                            json_response(200, serde_json::to_value(created).unwrap_or_default())
+                            json_response_with_rl(200, serde_json::to_value(created).unwrap_or_default(), &rl_create)
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -542,17 +585,13 @@ where
         }
         ("POST", "/v1/negotiations") => {
             let negot_key = format!("negotiate:{}", claims.sub);
-            if !global_limiter().check(
+            let rl_negot = global_limiter().check(
                 &negot_key,
                 OPEN_NEGOTIATION_RATE_MAX,
                 OPEN_NEGOTIATION_RATE_WINDOW_SECS,
-            ) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "open negotiation rate limit exceeded (20/min)",
-                    None,
-                );
+            );
+            if !rl_negot.allowed {
+                return rate_limited_response("open negotiation rate limit exceeded (20/min)", &rl_negot);
             }
             match serde_json::from_slice::<OpenNegotiationRequest>(&request.body) {
                 Ok(parsed) => {
@@ -563,10 +602,10 @@ where
                         .await
                     {
                         Ok((created, false)) => {
-                            json_response(201, serde_json::to_value(created).unwrap_or_default())
+                            json_response_with_rl(201, serde_json::to_value(created).unwrap_or_default(), &rl_negot)
                         }
                         Ok((created, true)) => {
-                            json_response(200, serde_json::to_value(created).unwrap_or_default())
+                            json_response_with_rl(200, serde_json::to_value(created).unwrap_or_default(), &rl_negot)
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -593,17 +632,13 @@ where
         }
         ("POST", path) if path.ends_with("/offers") => {
             let negot_key = format!("negotiate:{}", claims.sub);
-            if !global_limiter().check(
+            let rl_offer = global_limiter().check(
                 &negot_key,
                 OPEN_NEGOTIATION_RATE_MAX,
                 OPEN_NEGOTIATION_RATE_WINDOW_SECS,
-            ) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "offer submit rate limit exceeded (20/min)",
-                    None,
-                );
+            );
+            if !rl_offer.allowed {
+                return rate_limited_response("offer submit rate limit exceeded (20/min)", &rl_offer);
             }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
@@ -618,7 +653,7 @@ where
                         .await
                     {
                         Ok(response) => {
-                            json_response(200, serde_json::to_value(response).unwrap_or_default())
+                            json_response_with_rl(200, serde_json::to_value(response).unwrap_or_default(), &rl_offer)
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -633,17 +668,13 @@ where
         }
         ("POST", path) if path.ends_with("/accept") => {
             let negot_key = format!("negotiate:{}", claims.sub);
-            if !global_limiter().check(
+            let rl_accept = global_limiter().check(
                 &negot_key,
                 OPEN_NEGOTIATION_RATE_MAX,
                 OPEN_NEGOTIATION_RATE_WINDOW_SECS,
-            ) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "accept rate limit exceeded (20/min)",
-                    None,
-                );
+            );
+            if !rl_accept.allowed {
+                return rate_limited_response("accept rate limit exceeded (20/min)", &rl_accept);
             }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
@@ -664,7 +695,7 @@ where
                         .await
                     {
                         Ok(response) => {
-                            json_response(200, serde_json::to_value(response).unwrap_or_default())
+                            json_response_with_rl(200, serde_json::to_value(response).unwrap_or_default(), &rl_accept)
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -679,17 +710,13 @@ where
         }
         ("POST", path) if path.ends_with("/reject") => {
             let negot_key = format!("negotiate:{}", claims.sub);
-            if !global_limiter().check(
+            let rl_reject = global_limiter().check(
                 &negot_key,
                 OPEN_NEGOTIATION_RATE_MAX,
                 OPEN_NEGOTIATION_RATE_WINDOW_SECS,
-            ) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "reject rate limit exceeded (20/min)",
-                    None,
-                );
+            );
+            if !rl_reject.allowed {
+                return rate_limited_response("reject rate limit exceeded (20/min)", &rl_reject);
             }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
@@ -710,7 +737,7 @@ where
                         .await
                     {
                         Ok(response) => {
-                            json_response(200, serde_json::to_value(response).unwrap_or_default())
+                            json_response_with_rl(200, serde_json::to_value(response).unwrap_or_default(), &rl_reject)
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -725,17 +752,13 @@ where
         }
         ("POST", path) if path.ends_with("/request-contact-reveal") => {
             let reveal_key = format!("reveal:{}", claims.sub);
-            if !global_limiter().check(
+            let rl_reveal = global_limiter().check(
                 &reveal_key,
                 CONTACT_REVEAL_RATE_MAX,
                 CONTACT_REVEAL_RATE_WINDOW_SECS,
-            ) {
-                return api_error_response(
-                    429,
-                    ApiErrorCode::RateLimited,
-                    "contact reveal rate limit exceeded (10/min)",
-                    None,
-                );
+            );
+            if !rl_reveal.allowed {
+                return rate_limited_response("contact reveal rate limit exceeded (10/min)", &rl_reveal);
             }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
@@ -756,7 +779,7 @@ where
                         .await
                     {
                         Ok(reveal) => {
-                            json_response(202, serde_json::to_value(reveal).unwrap_or_default())
+                            json_response_with_rl(202, serde_json::to_value(reveal).unwrap_or_default(), &rl_reveal)
                         }
                         Err(error) => map_handler_error(&error),
                     }
@@ -772,12 +795,21 @@ where
         ("POST", path)
             if path.starts_with("/v1/contact-reveals/") && path.ends_with("/approve") =>
         {
+            let approve_key = format!("approve:{}", claims.sub);
+            let rl_approve = global_limiter().check(
+                &approve_key,
+                CONTACT_REVEAL_RATE_MAX,
+                CONTACT_REVEAL_RATE_WINDOW_SECS,
+            );
+            if !rl_approve.allowed {
+                return rate_limited_response("contact reveal rate limit exceeded (10/min)", &rl_approve);
+            }
             let reveal_id = path
                 .trim_start_matches("/v1/contact-reveals/")
                 .trim_end_matches("/approve")
                 .trim_end_matches('/');
             match app.approve_contact_reveal(&claims, reveal_id).await {
-                Ok(reveal) => json_response(200, serde_json::to_value(reveal).unwrap_or_default()),
+                Ok(reveal) => json_response_with_rl(200, serde_json::to_value(reveal).unwrap_or_default(), &rl_approve),
                 Err(error) => map_handler_error(&error),
             }
         }
@@ -798,22 +830,70 @@ async fn write_response(
         404 => "Not Found",
         409 => "Conflict",
         500 => "Internal Server Error",
+        429 => "Too Many Requests",
         _ => "OK",
     };
-    let header = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+    let mut header = format!(
+        "HTTP/1.1 {} {}\r
+Content-Type: {}\r
+Content-Length: {}\r
+",
         response.status,
         status_text,
         response.content_type,
         response.body.len()
     );
+    for (name, value) in &response.headers {
+        header.push_str(&format!("{name}: {value}\r\n"));
+    }
+    header.push_str("Connection: close\r\n\r\n");
     stream.write_all(header.as_bytes()).await?;
     stream.write_all(&response.body).await?;
     stream.flush().await?;
     Ok(())
 }
 
+/// If MARKETPLACE_API_KEY env is set, match against x-marketplace-api-key header
+/// and return full-access demo Claims. Makes agent auth zero-config.
+fn api_key_to_claims(headers: &HashMap<String, String>) -> Option<Claims> {
+    let expected = std::env::var("MARKETPLACE_API_KEY").ok()?;
+    let actual = headers.get("x-marketplace-api-key")?;
+    if *actual == expected {
+        Some(Claims {
+            sub: "demo-agent".to_string(),
+            roles: vec![
+                marketplace_auth_core::Role::SellerListingWriter,
+                marketplace_auth_core::Role::SellerNegotiator,
+                marketplace_auth_core::Role::SellerContactRevealApprover,
+                marketplace_auth_core::Role::BuyerSearcher,
+                marketplace_auth_core::Role::BuyerNegotiator,
+                marketplace_auth_core::Role::Admin,
+            ],
+            scopes: vec![
+                marketplace_auth_core::Scope::ListingCreate,
+                marketplace_auth_core::Scope::ListingRead,
+                marketplace_auth_core::Scope::ListingSearch,
+                marketplace_auth_core::Scope::NegotiationCreate,
+                marketplace_auth_core::Scope::NegotiationRead,
+                marketplace_auth_core::Scope::NegotiationOfferSubmit,
+                marketplace_auth_core::Scope::NegotiationRevealRequest,
+                marketplace_auth_core::Scope::RevealApprove,
+            ],
+            seller_account_id: Some("demo-seller".to_string()),
+            buyer_agent_id: Some("demo-buyer".to_string()),
+            hardware_id: None,
+            exp: None,
+        })
+    } else {
+        None
+    }
+}
+
 fn claims_from_headers(headers: &HashMap<String, String>) -> Result<Claims, HttpResponse> {
+    // Try API key first — set MARKETPLACE_API_KEY env for zero-config agent auth
+    if let Some(claims) = api_key_to_claims(headers) {
+        return Ok(claims);
+    }
     match headers.get("x-marketplace-claims") {
         Some(raw) => serde_json::from_str(raw).map_err(|error| {
             api_error_response(
@@ -940,6 +1020,7 @@ fn search_request_from_query(query: &HashMap<String, String>) -> SearchRequest {
         property_transaction_type: None,
         property_sub_type: None,
         service_type: None,
+        owner_id: query.get("owner_id").cloned(),
     }
 }
 
@@ -1051,6 +1132,7 @@ fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {
     HttpResponse {
         status,
         content_type: "application/json",
+        headers: Vec::new(),
         body: serde_json::to_vec(&body).unwrap_or_else(|error| {
             serde_json::to_vec(&serde_json::json!({
                 "error": {
@@ -1062,6 +1144,39 @@ fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {
             .unwrap_or_default()
         }),
     }
+}
+
+fn append_rate_limit_headers(resp: &mut HttpResponse, rl: &crate::services::rate_limiter::RateLimitStatus) {
+    resp.headers.push(("X-RateLimit-Limit".to_string(), rl.limit.to_string()));
+    resp.headers.push(("X-RateLimit-Remaining".to_string(), rl.remaining.to_string()));
+    resp.headers.push(("X-RateLimit-Reset".to_string(), rl.reset_after_secs.to_string()));
+}
+
+fn json_response_with_rl(status: u16, body: serde_json::Value, rl: &crate::services::rate_limiter::RateLimitStatus) -> HttpResponse {
+    let mut resp = json_response(status, body);
+    append_rate_limit_headers(&mut resp, rl);
+    resp
+}
+
+fn rate_limited_response(message: &str, rl: &crate::services::rate_limiter::RateLimitStatus) -> HttpResponse {
+    let mut resp = json_response(
+        429,
+        serde_json::json!({
+            "error": {
+                "code": "rate_limited",
+                "message": message,
+                "field": null,
+            }
+        }),
+    );
+    append_rate_limit_headers(&mut resp, rl);
+    // Override remaining to 0 for 429 responses (always exhausted)
+    if let Some(last) = resp.headers.last_mut() {
+        if last.0 == "X-RateLimit-Remaining" {
+            last.1 = "0".to_string();
+        }
+    }
+    resp
 }
 
 fn api_error_response(
@@ -1102,6 +1217,9 @@ fn map_handler_error(error: &crate::http::handlers::HandlerError) -> HttpRespons
                 api_error_response(500, ApiErrorCode::Conflict, inner.message.clone(), None)
             }
         },
+        crate::http::handlers::HandlerError::Agent(inner) => {
+            api_error_response(400, ApiErrorCode::InvalidField, inner.to_string(), None)
+        }
         crate::http::handlers::HandlerError::Search(inner) => match inner {
             crate::services::search::SearchError::Authz(authz) => match authz.kind {
                 crate::auth::AuthzErrorKind::MissingScope
@@ -1149,6 +1267,9 @@ fn map_handler_error(error: &crate::http::handlers::HandlerError) -> HttpRespons
         },
         crate::http::handlers::HandlerError::QuotaExceeded { message } => {
             api_error_response(403, ApiErrorCode::Forbidden, message.clone(), None)
+        }
+        crate::http::handlers::HandlerError::Validation { field, message } => {
+            api_error_response(400, ApiErrorCode::InvalidField, message.clone(), Some(field.clone()))
         }
     }
 }
@@ -1202,14 +1323,31 @@ mod tests {
         let content_length = body.len();
         if claims.is_some() {
             format!(
-                "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-Marketplace-Claims: {claims_header}\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n{body}"
+                "{method} {path} HTTP/1.1\r
+Host: localhost\r
+Content-Type: application/json\r
+X-Marketplace-Claims: {claims_header}\r
+Content-Length: {content_length}\r
+Connection: close\r
+\r
+{body}"
             )
         } else if content_length > 0 {
             format!(
-                "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n{body}"
+                "{method} {path} HTTP/1.1\r
+Host: localhost\r
+Content-Type: application/json\r
+Content-Length: {content_length}\r
+Connection: close\r
+\r
+{body}"
             )
         } else {
-            format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            format!("{method} {path} HTTP/1.1\r
+Host: localhost\r
+Connection: close\r
+\r
+")
         }
     }
 
@@ -1324,7 +1462,11 @@ mod tests {
 
         let health = round_trip(
             &address,
-            "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+            "GET /health HTTP/1.1\r
+Host: localhost\r
+Connection: close\r
+\r
+",
         )
         .await;
         assert!(health.contains("\"status\":\"ok\""));
@@ -1332,7 +1474,14 @@ mod tests {
         let create = round_trip(
             &address,
             &format!(
-                "POST /v1/listings HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-Marketplace-Claims: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "POST /v1/listings HTTP/1.1\r
+Host: localhost\r
+Content-Type: application/json\r
+X-Marketplace-Claims: {}\r
+Content-Length: {}\r
+Connection: close\r
+\r
+{}",
                 claims_header(),
                 create_body().len(),
                 create_body()
@@ -1344,7 +1493,12 @@ mod tests {
         let get = round_trip(
             &address,
             &format!(
-                "GET /v1/listings/lst_000001 HTTP/1.1\r\nHost: localhost\r\nX-Marketplace-Claims: {}\r\nConnection: close\r\n\r\n",
+                "GET /v1/listings/lst_000001 HTTP/1.1\r
+Host: localhost\r
+X-Marketplace-Claims: {}\r
+Connection: close\r
+\r
+",
                 claims_header()
             ),
         )
@@ -1355,7 +1509,14 @@ mod tests {
         let open = round_trip(
             &address,
             &format!(
-                "POST /v1/negotiations HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-Marketplace-Claims: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "POST /v1/negotiations HTTP/1.1\r
+Host: localhost\r
+Content-Type: application/json\r
+X-Marketplace-Claims: {}\r
+Content-Length: {}\r
+Connection: close\r
+\r
+{}",
                 claims_header(),
                 serde_json::json!({
                     "idempotency_key": "idem-open-1",
@@ -1382,7 +1543,14 @@ mod tests {
         let reveal = round_trip(
             &address,
             &format!(
-                "POST /v1/negotiations/neg_000001/request-contact-reveal HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nX-Marketplace-Claims: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "POST /v1/negotiations/neg_000001/request-contact-reveal HTTP/1.1\r
+Host: localhost\r
+Content-Type: application/json\r
+X-Marketplace-Claims: {}\r
+Content-Length: {}\r
+Connection: close\r
+\r
+{}",
                 claims_header(),
                 serde_json::json!({
                     "idempotency_key": "idem-reveal-1",
@@ -1494,7 +1662,12 @@ mod tests {
 
             &address,
             &format!(
-                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r\nHost: localhost\r\nX-Marketplace-Claims: {}\r\nConnection: close\r\n\r\n",
+                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
+Host: localhost\r
+X-Marketplace-Claims: {}\r
+Connection: close\r
+\r
+",
                 serde_json::to_string(&reviewer_claims()).unwrap()
             ),
         )
@@ -1504,7 +1677,12 @@ mod tests {
         let denied = round_trip(
             &address,
             &format!(
-                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r\nHost: localhost\r\nX-Marketplace-Claims: {}\r\nConnection: close\r\n\r\n",
+                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
+Host: localhost\r
+X-Marketplace-Claims: {}\r
+Connection: close\r
+\r
+",
                 claims_header()
             ),
         )
@@ -1515,7 +1693,14 @@ mod tests {
         let release = round_trip(
             &address,
             &format!(
-                "POST /internal/v1/listings/lst_000001/release-reservation HTTP/1.1\r\nHost: localhost\r\nX-Marketplace-Claims: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "POST /internal/v1/listings/lst_000001/release-reservation HTTP/1.1\r
+Host: localhost\r
+X-Marketplace-Claims: {}\r
+Content-Type: application/json\r
+Content-Length: {}\r
+Connection: close\r
+\r
+{}",
                 serde_json::to_string(&admin_claims()).unwrap(),
                 release_body.len(),
                 release_body
@@ -1540,7 +1725,11 @@ mod tests {
 
         let response = round_trip(
             &address,
-            "GET /v1/listings/search HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+            "GET /v1/listings/search HTTP/1.1\r
+Host: localhost\r
+Connection: close\r
+\r
+",
         )
         .await;
 
@@ -1563,7 +1752,12 @@ mod tests {
         let response = round_trip(
             &address,
             &format!(
-                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r\nHost: localhost\r\nX-Marketplace-Claims: {}\r\nConnection: close\r\n\r\n",
+                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
+Host: localhost\r
+X-Marketplace-Claims: {}\r
+Connection: close\r
+\r
+",
                 claims_header()
             ),
         )
@@ -1724,6 +1918,126 @@ mod tests {
         .await;
 
         assert!(response.contains("\"items\":[]"));
+    }
+
+    #[tokio::test]
+    async fn test_runtime_rate_limit_headers_on_success() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &http_request("POST", "/v1/listings", Some(&claims()), Some(&create_body())),
+        )
+        .await;
+
+        // Should be 200 (idempotent replay) or 201 (fresh create)
+        let status_line = response.lines().next().unwrap_or("");
+        assert!(
+            status_line.starts_with("HTTP/1.1 200") || status_line.starts_with("HTTP/1.1 201"),
+            "Expected 200/201 but got: {status_line}"
+        );
+        assert!(
+            response.contains("X-RateLimit-Limit: "),
+            "missing X-RateLimit-Limit header: {response}"
+        );
+        assert!(
+            response.contains("X-RateLimit-Remaining: "),
+            "missing X-RateLimit-Remaining header: {response}"
+        );
+        assert!(
+            response.contains("X-RateLimit-Reset: "),
+            "missing X-RateLimit-Reset header: {response}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_rate_limit_headers_on_429() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            for _ in 0..12 {
+                let (stream, _) = listener.accept().await.unwrap();
+                let observability = Arc::new(ServerObservability::new());
+                let app = Arc::clone(&accept_app);
+                tokio::spawn(async move {
+                    let _ = handle_connection(stream, app, observability).await;
+                });
+            }
+        });
+
+        // Use unique claims to avoid interference from other tests sharing the global rate limiter
+        let mut rate_test_claims = claims();
+        rate_test_claims.sub = "rate-429-test-sub".to_string();
+        rate_test_claims.seller_account_id = Some("rate-429-test-seller".to_string());
+
+        let mut last_response = String::new();
+        for i in 1..=12 {
+            // Unique idempotency key per request
+            let body =
+                create_body().replace("\"idem-create-1\"", &format!("\"idem-rate-429-{i}\""));
+            last_response = round_trip(
+                &address,
+                &http_request("POST", "/v1/listings", Some(&rate_test_claims), Some(&body)),
+            )
+            .await;
+
+            if last_response.starts_with("HTTP/1.1 429") {
+                break;
+            }
+        }
+
+        assert!(
+            last_response.starts_with("HTTP/1.1 429"),
+            "Expected 429 rate limited response but got first line: {:?}",
+            last_response.lines().next()
+        );
+        assert!(last_response.contains("X-RateLimit-Limit: "));
+        assert!(last_response.contains("X-RateLimit-Remaining: 0"));
+        assert!(last_response.contains("X-RateLimit-Reset: "));
+        assert!(last_response.contains("\"code\":\"rate_limited\""));
+    }
+
+    #[tokio::test]
+    async fn runtime_rate_limits_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let app = build_runtime_app_for_test();
+        let accept_app = Arc::clone(&app);
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let observability = Arc::new(ServerObservability::new());
+            let _ = handle_connection(stream, accept_app, observability).await;
+        });
+
+        let response = round_trip(
+            &address,
+            &http_request(
+                "GET",
+                "/internal/v1/rate-limits",
+                Some(&admin_claims()),
+                None,
+            ),
+        )
+        .await;
+
+        assert!(
+            response.starts_with("HTTP/1.1 200"),
+            "Expected 200 but got: {}",
+            response.lines().next().unwrap_or("")
+        );
+        assert!(response.contains("\"buckets\":["), "missing buckets array");
+        assert!(response.contains("\"config\":{"), "missing config object");
+        assert!(response.contains("\"max\":60"), "missing search max");
     }
 
     #[tokio::test]

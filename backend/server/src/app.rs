@@ -7,6 +7,8 @@ use crate::repositories::{
     ListingRepository, OutboxEventRepository, RepositoryError, RepositoryErrorKind,
     ReservationLeaseRepository, SellerAccountRepository,
 };
+use crate::domain::listing_validation::validate_listing_payload;
+use crate::services::agent::AgentService;
 use crate::services::audit_events::AuditEventService;
 use crate::services::contact_reveals::ContactRevealService;
 use crate::services::idempotency::IdempotencyGuard;
@@ -17,10 +19,11 @@ use crate::services::rate_limiter::{
 use crate::services::reservations::ReservationLeaseService;
 use crate::services::search::SearchService;
 use marketplace_api_contract::{
-    AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, CreateListingResponse,
-    ListingStatus, ListingSummary, NegotiationHistoryEntry, NegotiationHistoryEntryType,
-    NegotiationResponse, NegotiationStatus, OpenNegotiationRequest, RejectNegotiationRequest,
-    RequestContactRevealRequest, SearchRequest, SearchResponse, SubmitOfferRequest,
+    AcceptNegotiationRequest, AgentQueryRequest, AgentQueryResponse, ContactRevealResponse,
+    CreateListingRequest, CreateListingResponse, ListingStatus, ListingSummary,
+    NegotiationHistoryEntry, NegotiationHistoryEntryType, NegotiationResponse, NegotiationStatus,
+    OpenNegotiationRequest, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
+    SearchResponse, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role};
 use serde_json::json;
@@ -47,6 +50,7 @@ fn default_quota(trust_level: &str) -> i32 {
 pub struct MarketplaceApp<LR, IR, RR, CR> {
     listing_repository: Arc<LR>,
     search: SearchService<LR>,
+    agent: AgentService<LR>,
     idempotency: IdempotencyGuard<IR>,
     reservations: ReservationLeaseService<RR>,
     contact_reveals: ContactRevealService<CR>,
@@ -80,7 +84,8 @@ where
         let contact_reveal_repository = Arc::new(contact_reveal_repository);
         Self {
             listing_repository: Arc::clone(&listing_repository),
-            search: SearchService::new(listing_repository),
+            search: SearchService::new(Arc::clone(&listing_repository)),
+            agent: AgentService::new(SearchService::new(listing_repository)),
             idempotency: IdempotencyGuard::new(idempotency_repository),
             reservations: ReservationLeaseService::new(reservation_repository),
             contact_reveals: ContactRevealService::new(contact_reveal_repository),
@@ -105,6 +110,17 @@ where
         listing_id: &str,
     ) -> Result<Option<ListingSummary>, crate::http::handlers::HandlerError> {
         get_listing(&self.search, claims, listing_id).await
+    }
+
+    pub async fn agent_query(
+        &self,
+        claims: Option<&Claims>,
+        request: &AgentQueryRequest,
+    ) -> Result<AgentQueryResponse, crate::http::handlers::HandlerError> {
+        self.agent
+            .query(claims, request)
+            .await
+            .map_err(crate::http::handlers::HandlerError::Agent)
     }
 
     pub async fn begin_create_listing(
@@ -249,6 +265,7 @@ where
                     latest_offer_amount: request.offer_amount,
                     reservation_lease_id: Some(reservation.lease_id.clone()),
                     final_offer_amount: None,
+                    reveal_id: None,
                     offer_history: vec![NegotiationHistoryEntry {
                         entry_id: format!("{negotiation_id}-offer-1"),
                         entry_type: NegotiationHistoryEntryType::Offer,
@@ -386,6 +403,12 @@ where
             .get_active_by_listing(&response.listing_id)
             .await?;
         response.reservation_lease_id = reservation.map(|lease| lease.lease_id);
+
+        let reveal = self
+            .contact_reveals
+            .get_by_negotiation_id(negotiation_id)
+            .await?;
+        response.reveal_id = reveal.map(|r| r.reveal_id);
         Ok(response)
     }
 
@@ -805,6 +828,9 @@ where
     ) -> Result<(CreateListingResponse, bool), crate::http::handlers::HandlerError> {
         crate::services::authz::authorize_create_listing(claims, &request.listing.owner_id)?;
 
+        // Domain validation before any side effects
+        validate_listing_payload(&request.listing).map_err(crate::http::handlers::HandlerError::from)?;
+
         // Check quota before proceeding
         let owner_id = &request.listing.owner_id;
         let seller_account = self
@@ -830,7 +856,7 @@ where
             if is_new_seller(&account.trust_level) {
                 let daily_key = format!("daily:seller:{}", account.seller_account_id);
                 let hourly_key = format!("hourly:seller:{}", account.seller_account_id);
-                if !global_limiter().check(&daily_key, NEW_SELLER_DAILY_MAX as usize, 86400) {
+                if !global_limiter().check(&daily_key, NEW_SELLER_DAILY_MAX as usize, 86400).allowed {
                     return Err(crate::http::handlers::HandlerError::QuotaExceeded {
                         message: format!(
                             "new seller daily limit: {} listings/day",
@@ -838,7 +864,7 @@ where
                         ),
                     });
                 }
-                if !global_limiter().check(&hourly_key, NEW_SELLER_HOURLY_MAX as usize, 3600) {
+                if !global_limiter().check(&hourly_key, NEW_SELLER_HOURLY_MAX as usize, 3600).allowed {
                     return Err(crate::http::handlers::HandlerError::QuotaExceeded {
                         message: format!(
                             "new seller hourly limit: {} listing/hour",
@@ -1020,6 +1046,13 @@ where
                     now_rfc3339,
                 )
                 .await?;
+                self.negotiations
+                    .update_status(
+                        negotiation_id,
+                        marketplace_api_contract::NegotiationStatus::ContactRequested,
+                        now_rfc3339,
+                    )
+                    .await?;
                 Ok(response)
             }
             crate::services::idempotency::IdempotencyDecision::ReplayAccepted {
@@ -1110,6 +1143,13 @@ where
             &now,
         )
         .await?;
+        self.negotiations
+            .update_status(
+                &negotiation.negotiation_id,
+                marketplace_api_contract::NegotiationStatus::ContactRevealed,
+                &now,
+            )
+            .await?;
         Ok(response)
     }
 

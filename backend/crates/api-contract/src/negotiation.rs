@@ -87,6 +87,8 @@ pub struct NegotiationResponse {
     pub reservation_lease_id: Option<ResourceId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_offer_amount: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reveal_id: Option<ResourceId>,
     #[serde(default)]
     pub offer_history: Vec<NegotiationHistoryEntry>,
     pub version: u64,

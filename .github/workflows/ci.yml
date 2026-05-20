@@ -5,9 +5,77 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  cargo-check:
-    name: Cargo Check
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Format check
+        working-directory: backend
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: backend
+        run: cargo clippy --workspace -D warnings
+
+      - name: Cargo check
+        working-directory: backend
+        run: cargo check --workspace
+
+      - name: Lib tests
+        working-directory: backend
+        run: cargo test --lib
+
+  server-postgres:
+    name: Server Postgres Integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: marketplace
+          POSTGRES_USER: marketplace
+          POSTGRES_PASSWORD: marketplace
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U marketplace -d marketplace"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Bootstrap schema
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://marketplace:marketplace@127.0.0.1:${{ job.services.postgres.ports[5432] }}/marketplace?sslmode=disable"
+        run: cargo run -p marketplace-server --bin bootstrap_schema
+
+      - name: Postgres integration tests
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql://marketplace:marketplace@127.0.0.1:${{ job.services.postgres.ports[5432] }}/marketplace?sslmode=disable"
+        run: cargo test -p marketplace-server --test postgres_flows -- --nocapture
+
+  mcp-smoke:
+    name: MCP Smoke Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +85,10 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Cargo check
+      - name: MCP tool smoke test
         working-directory: backend
-        run: cargo check
+        env:
+          MARKETPLACE_MCP_ALLOW_DEV_CLAIMS: "1"
+        run: |
+          cargo run --release -p marketplace-mcp --bin mcp_tester 2>&1 | tee mcp-test.log
+          grep -q "\[FAIL\]" mcp-test.log && echo "FAILURES DETECTED" && exit 1 || echo "ALL PASS"

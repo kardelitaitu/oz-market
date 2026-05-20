@@ -47,6 +47,16 @@ where
     ) -> Result<Option<ContactRevealResponse>, RepositoryError> {
         self.repository.as_ref().get_by_reveal_id(reveal_id).await
     }
+
+    pub async fn get_by_negotiation_id(
+        &self,
+        negotiation_id: &str,
+    ) -> Result<Option<ContactRevealResponse>, RepositoryError> {
+        self.repository
+            .as_ref()
+            .get_by_negotiation_id(negotiation_id)
+            .await
+    }
 }
 
 pub type InMemoryContactRevealService = ContactRevealService<InMemoryContactRevealRepository>;

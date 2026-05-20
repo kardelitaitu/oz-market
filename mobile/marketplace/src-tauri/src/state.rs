@@ -1,0 +1,22 @@
+use crate::client::rate_limit::RateLimitTracker;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+pub struct AppState {
+    pub client: reqwest::Client,
+    pub base_url: Arc<RwLock<String>>,
+    pub rate_limiter: Arc<RwLock<RateLimitTracker>>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("Failed to create HTTP client"),
+            base_url: Arc::new(RwLock::new("http://127.0.0.1:3000".to_string())),
+            rate_limiter: Arc::new(RwLock::new(RateLimitTracker::new())),
+        }
+    }
+}

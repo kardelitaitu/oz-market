@@ -189,6 +189,70 @@ Baseline artifacts:
 
 ---
 
+## Database Migrations: SQLx Naming Convention
+
+All schema changes are managed via `sqlx::migrate!()` in the `bootstrap` module.
+Migration files live in `backend/server/migrations/`.
+
+### Naming Rule
+
+Each migration file **must** follow this format:
+
+```
+{VERSION}_{description}.sql
+```
+
+- `VERSION` — sequential integer, zero-padded to 4 digits (e.g., `0001`, `0012`)
+- `description` — snake_case summary of the change
+- The version number is **everything before the first underscore**
+
+### Why Split Files Don't Work
+
+SQLx resolves the migration version by parsing the numeric prefix before the first underscore.
+This means `0006_01_create_reviews_table.sql` and `0006_02_triggers.sql` **both** resolve to
+version `6`, producing a duplicate primary key error at runtime.
+
+```sql
+-- ❌ BAD: both resolve to version 6
+0006_01_create_reviews_table.sql
+0006_02_triggers.sql
+
+-- ✅ GOOD: each gets a unique version
+0006_create_reviews_table.sql
+0007_add_coordinates.sql
+```
+
+### How to Handle Helper Scripts
+
+Scripts that are not standalone migrations (e.g., trigger setup, data seeding, manual
+backfills) **must not** live in the `migrations/` directory, where `sqlx::migrate!()`
+scans them at compile time. Place them in `backend/server/scripts/` instead.
+
+```
+backend/server/migrations/
+├── 0001_init.sql
+├── 0002_add_seller_quota_fields.sql
+├── ...
+├── 0006_create_reviews_table.sql        # Real migration
+└── 0007_add_coordinates.sql             # Real migration
+
+backend/server/scripts/
+├── reviews_triggers.sql                 # Manual: CREATE OR REPLACE triggers
+└── seed_coordinates.sql                # Manual: populates coordinates on existing data
+```
+
+### Checksum Safety
+
+Renaming a migration file (while keeping the same content) preserves its checksum.
+SQLx matches by version number and checksum, not filename — so existing databases
+will not flag a checksum mismatch after a rename that preserves content.
+
+Note that the filename is stored as `description` in `_sqlx_migrations` and is
+**not** updated on rename — an existing database will retain the old filename in
+the migration log. This is cosmetic only; correctness is unaffected.
+
+---
+
 ## Production Hardening
 
 The server includes:

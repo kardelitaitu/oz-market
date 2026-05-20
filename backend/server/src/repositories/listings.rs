@@ -359,6 +359,12 @@ fn matches_filters(listing: &ListingSummary, request: &SearchRequest) -> bool {
         }
     }
 
+    if let Some(ref owner_id) = request.owner_id {
+        if listing.listing.owner_id != *owner_id {
+            return false;
+        }
+    }
+
     // Seller filters
     if let Some(min_rating) = request.min_seller_rating {
         if let Some(rating) = listing.seller_rating {
@@ -823,6 +829,16 @@ impl PostgresListingRepository {
                 where_added = true;
             }
             builder.push("s.verified_at IS NOT NULL");
+        }
+
+        if let Some(ref owner_id) = request.owner_id {
+            if where_added {
+                builder.push(" AND ");
+            } else {
+                builder.push(" WHERE ");
+                where_added = true;
+            }
+            builder.push("l.owner_id = ").push_bind(owner_id);
         }
 
         // Phase D: Geolocation search ("near me")

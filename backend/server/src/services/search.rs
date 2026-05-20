@@ -54,6 +54,15 @@ pub enum SearchError {
     Storage(RepositoryError),
 }
 
+impl std::fmt::Display for SearchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchError::Authz(error) => write!(f, "authz: {error}"),
+            SearchError::Storage(error) => write!(f, "storage: {error}"),
+        }
+    }
+}
+
 impl From<AuthzError> for SearchError {
     fn from(value: AuthzError) -> Self {
         Self::Authz(value)

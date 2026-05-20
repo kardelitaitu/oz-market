@@ -1,6 +1,6 @@
 -- Migration: Create reviews table
 -- Date: 2026-05-08
--- Description: Add reviews table (triggers must be applied manually via 0006_triggers.sql)
+-- Description: Add reviews table (triggers applied separately via server/scripts/reviews_triggers.sql)
 
 CREATE TABLE IF NOT EXISTS reviews (
     review_id TEXT PRIMARY KEY,

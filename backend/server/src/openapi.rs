@@ -7,13 +7,13 @@ use serde_json;
 use serde_yaml;
 use std::fs;
 use std::path::PathBuf;
+use actix_web::HttpRequest;
 
 /// Try to locate the openapi.yaml file
 fn find_openapi_yaml() -> Option<PathBuf> {
     let candidates = vec![
         PathBuf::from("docs/specs/openapi.yaml"),
         PathBuf::from("../../docs/specs/openapi.yaml"), // from backend/server/
-        PathBuf::from("C:/My Script/project-the-marketplace/docs/specs/openapi.yaml"),
     ];
     candidates.into_iter().find(|p| p.exists())
 }
@@ -65,19 +65,25 @@ pub async fn serve_openapi_json() -> impl actix_web::Responder {
 }
 
 /// Serve a simple HTML page that redirects to Swagger Editor with our spec
-pub async fn serve_swagger_editor() -> impl actix_web::Responder {
-    let html = r#"
-<!DOCTYPE html>
+pub async fn serve_swagger_editor(req: HttpRequest) -> impl actix_web::Responder {
+    let host = req
+        .headers()
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:3000");
+    let spec_url = format!("http://{host}/api-docs/openapi.json");
+    let html = format!(
+        r#"<!DOCTYPE html>
 <html>
 <head>
     <title>Marketplace API Docs</title>
-    <meta http-equiv="refresh" content="0; url=https://editor.swagger.io/?url=http://localhost:3003/api-docs/openapi.json">
+    <meta http-equiv="refresh" content="0; url=https://editor.swagger.io/?url={spec_url}">
 </head>
 <body>
-    <p>Redirecting to Swagger Editor... <a href="https://editor.swagger.io/?url=http://localhost:3003/api-docs/openapi.json">click here</a> if not redirected.</p>
+    <p>Redirecting to Swagger Editor... <a href="https://editor.swagger.io/?url={spec_url}">click here</a> if not redirected.</p>
 </body>
-</html>
-"#;
+</html>"#
+    );
     actix_web::HttpResponse::Ok()
         .content_type("text/html")
         .body(html)

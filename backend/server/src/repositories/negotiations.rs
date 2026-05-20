@@ -48,6 +48,13 @@ pub trait NegotiationRepository: Send + Sync {
         actor_role: &str,
         now_rfc3339: &str,
     ) -> Result<NegotiationResponse, RepositoryError>;
+
+    async fn update_status(
+        &self,
+        negotiation_id: &str,
+        status: NegotiationStatus,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError>;
 }
 
 pub fn conflict(message: impl Into<String>) -> RepositoryError {
@@ -342,6 +349,24 @@ impl NegotiationRepository for InMemoryNegotiationRepository {
         update_reject_state(current, request, actor_subject, actor_role, now_rfc3339);
         Ok(current.clone())
     }
+
+    async fn update_status(
+        &self,
+        negotiation_id: &str,
+        status: NegotiationStatus,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        let mut write = self
+            .negotiations
+            .write()
+            .expect("negotiation in-memory write lock");
+        let current = write
+            .get_mut(negotiation_id)
+            .ok_or_else(|| not_found("negotiation not found"))?;
+        current.status = status;
+        current.updated_at = now_rfc3339.to_string();
+        Ok(current.clone())
+    }
 }
 
 pub struct PostgresNegotiationRepository {
@@ -391,6 +416,7 @@ impl PostgresNegotiationRepository {
                 .try_get("final_offer_amount")
                 .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?,
             offer_history,
+            reveal_id: None,
             version: row
                 .try_get::<i64, _>("version")
                 .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?
@@ -455,9 +481,9 @@ impl NegotiationRepository for PostgresNegotiationRepository {
                 status,
                 offer_currency,
                 latest_offer_amount,
-                reservation_lease_id,
-                final_offer_amount,
-                offer_history,
+            reservation_lease_id,
+            final_offer_amount,
+            offer_history,
                 version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
              FROM negotiations
@@ -494,9 +520,9 @@ impl NegotiationRepository for PostgresNegotiationRepository {
                 status,
                 offer_currency,
                 latest_offer_amount,
-                reservation_lease_id,
-                final_offer_amount,
-                offer_history,
+            reservation_lease_id,
+            final_offer_amount,
+            offer_history,
                 version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
              FROM negotiations
@@ -572,9 +598,9 @@ impl NegotiationRepository for PostgresNegotiationRepository {
                 status,
                 offer_currency,
                 latest_offer_amount,
-                reservation_lease_id,
-                final_offer_amount,
-                offer_history,
+            reservation_lease_id,
+            final_offer_amount,
+            offer_history,
                 version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
              FROM negotiations
@@ -646,9 +672,9 @@ impl NegotiationRepository for PostgresNegotiationRepository {
                 status,
                 offer_currency,
                 latest_offer_amount,
-                reservation_lease_id,
-                final_offer_amount,
-                offer_history,
+            reservation_lease_id,
+            final_offer_amount,
+            offer_history,
                 version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
              FROM negotiations
@@ -695,6 +721,41 @@ impl NegotiationRepository for PostgresNegotiationRepository {
             .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?;
         Ok(response)
     }
+
+    async fn update_status(
+        &self,
+        negotiation_id: &str,
+        status: NegotiationStatus,
+        now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        let row = sqlx::query(
+            "UPDATE negotiations
+             SET status = $2,
+                 updated_at = $3::timestamptz
+             WHERE negotiation_id = $1
+             RETURNING
+                 negotiation_id,
+                 listing_id,
+                 buyer_agent_id,
+                 status,
+                 offer_currency,
+                 latest_offer_amount,
+                 reservation_lease_id,
+                 final_offer_amount,
+                 offer_history,
+                 version,
+                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at",
+        )
+        .bind(negotiation_id)
+        .bind(status_to_db(status))
+        .bind(now_rfc3339)
+        .fetch_optional(self.pool.as_ref())
+        .await
+        .map_err(|e| RepositoryError::new(RepositoryErrorKind::Storage, e.to_string()))?
+        .ok_or_else(|| not_found("negotiation not found"))?;
+
+        Self::row_to_response(&row)
+    }
 }
 
 #[cfg(test)]
@@ -712,6 +773,7 @@ mod tests {
             latest_offer_amount: 100.0,
             reservation_lease_id: None,
             final_offer_amount: None,
+            reveal_id: None,
             offer_history: vec![],
             version: 1,
             updated_at: "2023-01-01T00:00:00Z".to_string(),

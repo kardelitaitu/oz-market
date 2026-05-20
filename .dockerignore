@@ -1,0 +1,11 @@
+target/
+.git/
+.gitignore
+*.md
+*.ps1
+*.py
+tmp-*.log
+.env
+.env.example
+mobile/
+archive/
