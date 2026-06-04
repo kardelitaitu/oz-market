@@ -1248,6 +1248,99 @@ pub async fn reject_review(
 }
 
 // ---------------------------------------------------------------------------
+// Agent Health API — circuit breaker status
+// ---------------------------------------------------------------------------
+
+use crate::services::agent_metrics::AgentMetricsCollector;
+use crate::services::agent_registry::AgentRegistry;
+use crate::services::circuit_breaker::{collect_health_summaries, CircuitBreakerRegistry};
+use crate::services::latency_scorer::LatencyScorer;
+
+pub async fn get_agents_health(
+    breaker_registry: web::Data<CircuitBreakerRegistry>,
+    registry: web::Data<AgentRegistry>,
+    metrics_collector: web::Data<AgentMetricsCollector>,
+) -> impl Responder {
+    let scorer = LatencyScorer::default();
+    let summaries = collect_health_summaries(
+        registry.get_ref(),
+        breaker_registry.get_ref(),
+        metrics_collector.get_ref(),
+        &scorer,
+    );
+
+    let list: Vec<serde_json::Value> = summaries
+        .into_iter()
+        .map(|s| {
+            serde_json::json!({
+                "agent_id": s.agent_id,
+                "state": s.state,
+                "failure_count": s.failure_count,
+                "cooldown_remaining_secs": s.cooldown_remaining_secs,
+                "score": {
+                    "ewma_latency_ms": s.score.ewma_latency_ms,
+                    "ewma_error_rate": s.score.ewma_error_rate,
+                },
+            })
+        })
+        .collect();
+
+    HttpResponse::Ok().json(serde_json::json!({ "agents": list }))
+}
+
+pub async fn get_agent_health_detail(
+    breaker_registry: web::Data<CircuitBreakerRegistry>,
+    registry: web::Data<AgentRegistry>,
+    metrics_collector: web::Data<AgentMetricsCollector>,
+    agent_id: web::Path<Uuid>,
+) -> impl Responder {
+    let agent_id = agent_id.into_inner();
+    let agent = registry.get_agent(&agent_id);
+
+    let agent_meta = match agent {
+        Some(a) => a,
+        None => {
+            return error_json(404, "not_found", "Agent not found");
+        }
+    };
+
+    let scorer = LatencyScorer::default();
+    let summaries = collect_health_summaries(
+        registry.get_ref(),
+        breaker_registry.get_ref(),
+        metrics_collector.get_ref(),
+        &scorer,
+    );
+
+    let detail = summaries.into_iter().find(|s| s.agent_id == agent_id);
+
+    match detail {
+        Some(s) => HttpResponse::Ok().json(serde_json::json!({
+            "agent_id": s.agent_id,
+            "endpoint": agent_meta.endpoint,
+            "capabilities": agent_meta.capabilities,
+            "state": s.state,
+            "failure_count": s.failure_count,
+            "cooldown_remaining_secs": s.cooldown_remaining_secs,
+            "score": {
+                "ewma_latency_ms": s.score.ewma_latency_ms,
+                "ewma_error_rate": s.score.ewma_error_rate,
+            },
+        })),
+        None => HttpResponse::Ok().json(serde_json::json!({
+            "agent_id": agent_id,
+            "state": "Closed",
+            "failure_count": 0,
+            "cooldown_remaining_secs": 0,
+            "score": {
+                "ewma_latency_ms": 200.0,
+                "ewma_error_rate": 0.0,
+            },
+        })),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Shared route registration — called by both production runtime and tests
 // ---------------------------------------------------------------------------
 
@@ -1361,6 +1454,12 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
         web::post().to(create_review),
     )
     .route("/v1/agent/query", web::post().to(agent_query))
+    // Agent health API
+    .route("/v1/health/agents", web::get().to(get_agents_health))
+    .route(
+        "/v1/health/agents/{agent_id}",
+        web::get().to(get_agent_health_detail),
+    )
     .route(
         "/v1/listings/{listing_id}/reviews",
         web::get().to(list_reviews_for_listing),
@@ -1762,6 +1861,10 @@ mod tests {
 
     macro_rules! init_actix_app {
         () => {{
+            use crate::services::agent_metrics::AgentMetricsCollector;
+            use crate::services::agent_registry::AgentRegistry;
+            use crate::services::circuit_breaker::CircuitBreakerRegistry;
+
             let (app_data, event_bus, cache_enabled, listing_cache, search_cache, ledger_cache) =
                 make_test_app_data();
             actix_web::test::init_service(
@@ -1772,6 +1875,9 @@ mod tests {
                     .app_data(listing_cache)
                     .app_data(search_cache)
                     .app_data(ledger_cache)
+                    .app_data(web::Data::new(CircuitBreakerRegistry::default()))
+                    .app_data(web::Data::new(AgentRegistry::default()))
+                    .app_data(web::Data::new(AgentMetricsCollector::default()))
                     .configure(register_api_routes),
             )
             .await

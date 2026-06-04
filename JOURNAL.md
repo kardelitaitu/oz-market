@@ -1040,3 +1040,16 @@ new line
   - **11 unit tests**: cold start, custom defaults, single sample, single error, EWMA convergence, alpha=0 (ignore new), alpha=1 (only newest), bounded error rate, mixed success/failure, NaN/Inf clamp, JSON serialization.
   - All 6 gates PASS (325 tests, clean clippy, clean fmt).
   - Moved spec from `_active/0016-*` to `_done/0016-*`. Active specs remaining: 0017, 0018.
+
+## 2026-06-05 04:40
+
+- **Executed Spec 0017 (Agent Circuit Breaker + Health API)**:
+  - **`services/circuit_breaker.rs`**: `AgentCircuitBreaker` state machine (`Closed`/`Open`/`HalfOpen`) with 5-failure or slow-latency (>2000ms) trip condition, 30s cooldown for Open→HalfOpen transition, HalfOpen success closes else reopens. `CircuitBreakerRegistry` wrapping `DashMap<Uuid, Arc<Mutex<AgentCircuitBreaker>>>` for thread-safe per-agent management.
+  - **Health API endpoints** in `actix_handlers.rs`:
+    - `GET /v1/health/agents` — list all registered agents with circuit state, failure count, cooldown remaining, EWMA scores.
+    - `GET /v1/health/agents/{agent_id}` — detailed status for a single agent (includes endpoint, capabilities).
+  - **Route registration**: Added to `register_api_routes` alongside existing `/v1/agent/query` route.
+  - **Test infrastructure**: Added `CircuitBreakerRegistry`, `AgentRegistry`, `AgentMetricsCollector` as `web::Data` in `init_actix_app!` macro (default instances).
+  - **12 circuit breaker tests** (initial state, success resets, 5-fail trip, slow response, HalfOpen success closes, HalfOpen failure reopens, Open ignores, cooldown remaining, registry create/record/reset, state serialization).
+  - All 6 gates PASS (337 tests, clean clippy, clean fmt).
+  - Moved spec from `_active/0017-*` to `_done/0017-*`. Active specs remaining: 0018.

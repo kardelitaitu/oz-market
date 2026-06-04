@@ -5,6 +5,7 @@ pub mod agent_registry;
 pub mod async_committer;
 pub mod audit_events;
 pub mod authz;
+pub mod circuit_breaker;
 pub mod contact_reveals;
 pub mod idempotency;
 pub mod latency_scorer;
