@@ -2,6 +2,7 @@ pub mod agent;
 pub mod agent_dispatcher;
 pub mod agent_metrics;
 pub mod agent_registry;
+pub mod agent_routing;
 pub mod async_committer;
 pub mod audit_events;
 pub mod authz;

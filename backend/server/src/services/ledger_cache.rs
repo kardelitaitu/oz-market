@@ -365,4 +365,169 @@ mod tests {
         let db_calls = mock.get_balance_calls.load(Ordering::SeqCst);
         assert_eq!(db_calls, 0);
     }
+
+    #[tokio::test]
+    async fn invalidate_all_evicts_every_entry() {
+        let mock = Arc::new(MockRepo::new(Decimal::new(500, 4)));
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
+
+        let b1 = cache.get_balance("agent-1").await.unwrap();
+        let b2 = cache.get_balance("agent-2").await.unwrap();
+        let c1 = mock.get_balance_calls.load(Ordering::SeqCst);
+        assert_eq!(c1, 2);
+
+        cache.invalidate_all();
+
+        let _ = cache.get_balance("agent-1").await.unwrap();
+        let _ = cache.get_balance("agent-2").await.unwrap();
+        let c2 = mock.get_balance_calls.load(Ordering::SeqCst);
+        assert_eq!(c2, 4);
+        let _ = b1;
+        let _ = b2;
+    }
+
+    #[tokio::test]
+    async fn apply_during_concurrent_get_balance_keeps_cache_consistent() {
+        let mock = Arc::new(MockRepo::new(Decimal::ZERO));
+        let cache = Arc::new(LedgerCache::with_ttl(mock.clone(), LONG_TTL));
+
+        let writer = {
+            let cache = Arc::clone(&cache);
+            tokio::spawn(async move {
+                for _ in 0..100 {
+                    let tx = make_tx("agent-x", Decimal::new(100, 4));
+                    cache.apply_transaction(&tx).await.unwrap();
+                }
+            })
+        };
+
+        let reader = {
+            let cache = Arc::clone(&cache);
+            tokio::spawn(async move {
+                for _ in 0..200 {
+                    let _ = cache.get_balance("agent-x").await;
+                }
+            })
+        };
+
+        writer.await.unwrap();
+        reader.await.unwrap();
+
+        let final_balance = cache.get_balance("agent-x").await.unwrap();
+        assert_eq!(final_balance.balance_credits, Decimal::new(10000, 4));
+    }
+
+    #[tokio::test]
+    async fn ttl_boundary_entry_returned_immediately_within_window() {
+        let mock = Arc::new(MockRepo::new(Decimal::new(4242, 4)));
+        let cache = LedgerCache::with_ttl(mock.clone(), Duration::from_secs(3600));
+
+        let _ = cache.get_balance("agent-1").await.unwrap();
+        assert_eq!(mock.get_balance_calls.load(Ordering::SeqCst), 1);
+
+        tokio::time::sleep(Duration::from_millis(5)).await;
+
+        let _ = cache.get_balance("agent-1").await.unwrap();
+        assert_eq!(
+            mock.get_balance_calls.load(Ordering::SeqCst),
+            1,
+            "second call within TTL must be a cache hit"
+        );
+    }
+
+    #[tokio::test]
+    async fn apply_transaction_failure_does_not_corrupt_other_keys() {
+        let mock = Arc::new(MockRepo::new(Decimal::new(5000, 4)));
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
+
+        cache.balances.insert(
+            "agent-keep".into(),
+            CachedEntry {
+                account: CreditAccount {
+                    agent_id: "agent-keep".into(),
+                    balance_credits: Decimal::new(9999, 4),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                },
+                inserted_at: Instant::now(),
+            },
+        );
+        cache.balances.insert(
+            "agent-fail".into(),
+            CachedEntry {
+                account: CreditAccount {
+                    agent_id: "agent-fail".into(),
+                    balance_credits: Decimal::new(1234, 4),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                },
+                inserted_at: Instant::now(),
+            },
+        );
+
+        mock.set_fail(true);
+        let tx = make_tx("agent-fail", Decimal::new(1000, 4));
+        let result = cache.apply_transaction(&tx).await;
+        assert!(result.is_err());
+
+        assert!(cache.balances.get("agent-fail").is_none());
+        assert!(
+            cache.balances.get("agent-keep").is_some(),
+            "other agents must not be touched on a single-key failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn invalidate_all_handles_many_agents() {
+        let mock = Arc::new(MockRepo::new(Decimal::new(100, 4)));
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
+
+        for i in 0..500 {
+            cache.balances.insert(
+                format!("agent-{i}"),
+                CachedEntry {
+                    account: CreditAccount {
+                        agent_id: format!("agent-{i}"),
+                        balance_credits: Decimal::new(100, 4),
+                        updated_at: chrono::Utc::now().to_rfc3339(),
+                    },
+                    inserted_at: Instant::now(),
+                },
+            );
+        }
+        assert_eq!(cache.balances.len(), 500);
+
+        cache.invalidate_all();
+        assert_eq!(cache.balances.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn ledger_cache_new_reads_ledger_cache_ttl_secs_env_var() {
+        // SAFETY: This test temporarily mutates the LEDGER_CACHE_TTL_SECS env var.
+        // It runs in the same process as other tests, so we restore the var
+        // before returning. We accept the inherent flakiness of env-var tests
+        // in parallel runs.
+        let original = std::env::var("LEDGER_CACHE_TTL_SECS").ok();
+
+        std::env::set_var("LEDGER_CACHE_TTL_SECS", "7");
+        let mock = Arc::new(MockRepo::new(Decimal::ZERO));
+        let cache = LedgerCache::new(mock);
+        assert_eq!(cache.ttl, Duration::from_secs(7));
+
+        std::env::set_var("LEDGER_CACHE_TTL_SECS", "not-a-number");
+        let mock = Arc::new(MockRepo::new(Decimal::ZERO));
+        let cache_bad = LedgerCache::new(mock);
+        assert_eq!(
+            cache_bad.ttl,
+            Duration::from_secs(DEFAULT_TTL_SECS),
+            "invalid env value must fall back to default"
+        );
+
+        std::env::remove_var("LEDGER_CACHE_TTL_SECS");
+        let mock = Arc::new(MockRepo::new(Decimal::ZERO));
+        let cache_default = LedgerCache::new(mock);
+        assert_eq!(cache_default.ttl, Duration::from_secs(DEFAULT_TTL_SECS));
+
+        if let Some(val) = original {
+            std::env::set_var("LEDGER_CACHE_TTL_SECS", val);
+        }
+    }
 }

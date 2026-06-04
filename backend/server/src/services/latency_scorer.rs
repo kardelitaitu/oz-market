@@ -198,4 +198,126 @@ mod tests {
         assert!(json.contains("150.5"));
         assert!(json.contains("0.05"));
     }
+
+    #[test]
+    fn default_scorer_uses_alpha_0_2_and_default_200ms() {
+        // Verify defaults so spec 0016's behavior is pinned.
+        let scorer = LatencyScorer::default();
+        // alpha=0.2, default_latency=200: a single 300ms sample → 300 (i=0).
+        let s1 = scorer.calculate_score(&[sample(300, true)]);
+        assert!((s1.ewma_latency_ms - 300.0).abs() < 0.001);
+
+        // i=1: 0.2*200 + 0.8*300 = 40 + 240 = 280.
+        let s2 = scorer.calculate_score(&[sample(300, true), sample(200, true)]);
+        assert!((s2.ewma_latency_ms - 280.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn ewma_converges_to_steady_state_value() {
+        // With constant input, the EWMA should converge to the input value
+        // regardless of starting state.
+        let scorer = LatencyScorer::new(0.3, 999.0);
+        let samples: Vec<_> = (0..100).map(|_| sample(150, true)).collect();
+        let score = scorer.calculate_score(&samples);
+        assert!(
+            (score.ewma_latency_ms - 150.0).abs() < 0.001,
+            "got {}",
+            score.ewma_latency_ms
+        );
+    }
+
+    #[test]
+    fn ewma_alpha_0_5_oscillating_samples_oscillates_around_mean() {
+        // With alternating 100/200 inputs and alpha=0.5 the EWMA oscillates
+        // between 133.33 (last=100) and 166.67 (last=200) — never the arithmetic
+        // mean of 150. Pin this behavior so future refactors don't drift.
+        let scorer = LatencyScorer::new(0.5, 0.0);
+        let samples: Vec<_> = (0..50)
+            .map(|i| sample(if i % 2 == 0 { 100 } else { 200 }, true))
+            .collect();
+        let score = scorer.calculate_score(&samples);
+        assert!(
+            score.ewma_latency_ms > 100.0 && score.ewma_latency_ms < 200.0,
+            "got {} (expected 100 < x < 200)",
+            score.ewma_latency_ms
+        );
+        // Last sample is 200 (i=49 is odd), so EWMA should be > 150.
+        assert!(
+            score.ewma_latency_ms > 150.0,
+            "expected EWMA > 150 (last sample is 200), got {}",
+            score.ewma_latency_ms
+        );
+    }
+
+    #[test]
+    fn latency_never_negative_even_with_zero_duration_samples() {
+        let scorer = LatencyScorer::new(0.5, 0.0);
+        let samples: Vec<_> = (0..10).map(|_| sample(0, true)).collect();
+        let score = scorer.calculate_score(&samples);
+        assert_eq!(score.ewma_latency_ms, 0.0);
+        assert!(score.ewma_latency_ms.is_finite());
+    }
+
+    #[test]
+    fn large_sample_count_remains_finite() {
+        let scorer = LatencyScorer::new(0.1, 200.0);
+        let samples: Vec<_> = (0..10_000)
+            .map(|i| sample(50 + (i % 100) as u64, i % 10 != 0))
+            .collect();
+        let score = scorer.calculate_score(&samples);
+        assert!(score.ewma_latency_ms.is_finite());
+        assert!(score.ewma_error_rate.is_finite());
+        assert!(score.ewma_latency_ms > 0.0);
+        assert!(score.ewma_error_rate > 0.0 && score.ewma_error_rate < 1.0);
+    }
+
+    #[test]
+    fn error_rate_0_when_all_samples_succeed() {
+        let scorer = LatencyScorer::new(0.5, 200.0);
+        let samples: Vec<_> = (0..20).map(|_| sample(100, true)).collect();
+        let score = scorer.calculate_score(&samples);
+        assert_eq!(score.ewma_error_rate, 0.0);
+    }
+
+    #[test]
+    fn error_rate_1_when_all_samples_fail() {
+        let scorer = LatencyScorer::new(0.5, 200.0);
+        let samples: Vec<_> = (0..20).map(|_| sample(100, false)).collect();
+        let score = scorer.calculate_score(&samples);
+        assert!(
+            (score.ewma_error_rate - 1.0).abs() < 0.001,
+            "got {}",
+            score.ewma_error_rate
+        );
+    }
+
+    #[test]
+    fn agent_score_clone_preserves_values() {
+        let score = AgentScore {
+            ewma_latency_ms: 42.5,
+            ewma_error_rate: 0.33,
+        };
+        let cloned = score.clone();
+        assert_eq!(cloned.ewma_latency_ms, 42.5);
+        assert_eq!(cloned.ewma_error_rate, 0.33);
+    }
+
+    #[test]
+    fn agent_score_serde_field_names_match_spec() {
+        // The spec for the agent health API requires these field names; pin them.
+        let score = AgentScore {
+            ewma_latency_ms: 12.5,
+            ewma_error_rate: 0.07,
+        };
+        let json = serde_json::to_string(&score).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(
+            v.get("ewma_latency_ms").is_some(),
+            "missing ewma_latency_ms"
+        );
+        assert!(
+            v.get("ewma_error_rate").is_some(),
+            "missing ewma_error_rate"
+        );
+    }
 }

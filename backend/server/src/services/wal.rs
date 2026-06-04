@@ -309,4 +309,98 @@ mod tests {
         wal.recover(&*repo).await.unwrap();
         // No panic = success
     }
+
+    #[tokio::test]
+    async fn recover_skips_entries_with_unknown_tx_type() {
+        let (wal, _dir) = temp_wal();
+        let repo = Arc::new(InMemoryCreditLedgerRepository::new());
+
+        wal.append(&make_entry("agent-valid", "100.0000", "deposit"))
+            .unwrap();
+        wal.append(&make_entry("agent-bogus", "50.0000", "transfer"))
+            .unwrap();
+        wal.append(&make_entry("agent-valid", "25.0000", "deposit"))
+            .unwrap();
+
+        wal.recover(&*repo).await.unwrap();
+
+        let valid = repo.get_balance("agent-valid").await.unwrap();
+        assert_eq!(
+            valid.balance_credits,
+            Decimal::new(1250000, 4),
+            "two valid deposits totaling 125.0000"
+        );
+        assert!(
+            repo.get_balance("agent-bogus").await.is_err(),
+            "unknown tx_type must not create a balance row"
+        );
+    }
+
+    #[tokio::test]
+    async fn recover_skips_entries_with_unparseable_amount() {
+        let (wal, _dir) = temp_wal();
+        let repo = Arc::new(InMemoryCreditLedgerRepository::new());
+
+        wal.append(&make_entry("agent-good", "10.0000", "deposit"))
+            .unwrap();
+        wal.append(&make_entry("agent-bad", "not-a-decimal", "deposit"))
+            .unwrap();
+
+        wal.recover(&*repo).await.unwrap();
+
+        let good = repo.get_balance("agent-good").await.unwrap();
+        assert_eq!(good.balance_credits, Decimal::new(100000, 4));
+        assert!(repo.get_balance("agent-bad").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn recover_spend_overdraw_is_silently_swallowed() {
+        let (wal, _dir) = temp_wal();
+        let repo = Arc::new(InMemoryCreditLedgerRepository::new());
+
+        // No prior balance; spend will be rejected by the repo.
+        wal.append(&make_entry("agent-broke", "-100.0000", "spend"))
+            .unwrap();
+        wal.append(&make_entry("agent-broke", "50.0000", "deposit"))
+            .unwrap();
+
+        // Recovery must not propagate the InsufficientCredits error.
+        wal.recover(&*repo).await.expect("recover must not fail");
+
+        // WAL is truncated regardless.
+        assert_eq!(wal.read_all().unwrap().len(), 0);
+
+        // The valid deposit still applied.
+        let bal = repo.get_balance("agent-broke").await.unwrap();
+        assert_eq!(bal.balance_credits, Decimal::new(500000, 4));
+    }
+
+    #[tokio::test]
+    async fn recover_does_not_double_apply_when_db_already_has_transaction() {
+        let (wal, _dir) = temp_wal();
+        let repo = Arc::new(InMemoryCreditLedgerRepository::new());
+
+        let entry = make_entry("agent-once", "500.0000", "deposit");
+
+        // Apply via the repo directly first (simulating a successful prior commit).
+        let pre_tx = NewTransaction {
+            id: entry.transaction_id,
+            agent_id: entry.agent_id.clone(),
+            amount: "500.0000".parse().unwrap(),
+            tx_type: TransactionType::Deposit,
+            idempotency_key: entry.idempotency_key.clone(),
+        };
+        repo.apply_transaction(&pre_tx).await.unwrap();
+
+        // Then append + recover — must NOT double-apply.
+        wal.append(&entry).unwrap();
+        wal.recover(&*repo).await.unwrap();
+
+        let bal = repo.get_balance("agent-once").await.unwrap();
+        assert_eq!(
+            bal.balance_credits,
+            Decimal::new(5000000, 4),
+            "balance must remain 500.0000 (single application via idempotency)"
+        );
+    }
 }

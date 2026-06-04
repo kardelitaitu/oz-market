@@ -189,4 +189,134 @@ mod tests {
 
         assert_eq!(collector.sample_count(&agent_id), 50);
     }
+
+    #[test]
+    fn capacity_zero_evicts_after_first_sample() {
+        // With capacity=0 the queue evicts after every push, so nothing is retained.
+        // This pins the ">" semantics (not ">=") used in record_sample.
+        let collector = AgentMetricsCollector::new(0);
+        let agent_id = Uuid::new_v4();
+        collector.record_sample(agent_id, Duration::from_millis(10), true);
+        collector.record_sample(agent_id, Duration::from_millis(20), false);
+        collector.record_sample(agent_id, Duration::from_millis(30), true);
+
+        assert_eq!(
+            collector.sample_count(&agent_id),
+            0,
+            "capacity 0 must not retain any samples"
+        );
+    }
+
+    #[test]
+    fn capacity_one_keeps_only_latest_sample() {
+        let collector = AgentMetricsCollector::new(1);
+        let agent_id = Uuid::new_v4();
+        // i=0 success, i=1 failure, i=2 success, i=3 failure, i=4 success.
+        for i in 0..5 {
+            let is_success = i % 2 == 0;
+            collector.record_sample(agent_id, Duration::from_millis(i * 100), is_success);
+        }
+        let samples = collector.get_samples(&agent_id);
+        assert_eq!(samples.len(), 1);
+        assert_eq!(samples[0].duration, Duration::from_millis(400));
+        assert!(
+            samples[0].is_success,
+            "i=4 is even, so the last sample is a success"
+        );
+    }
+
+    #[test]
+    fn clear_metrics_preserves_other_agents_samples() {
+        let collector = AgentMetricsCollector::new(10);
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        collector.record_sample(a, Duration::from_millis(50), true);
+        collector.record_sample(b, Duration::from_millis(60), false);
+
+        collector.clear_metrics(&a);
+        assert_eq!(collector.sample_count(&a), 0);
+        assert_eq!(
+            collector.sample_count(&b),
+            1,
+            "clearing agent A must not affect agent B's samples"
+        );
+        assert_eq!(collector.total_agents(), 1);
+    }
+
+    #[test]
+    fn total_agents_decreases_after_clear_metrics() {
+        let collector = AgentMetricsCollector::new(10);
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let c = Uuid::new_v4();
+        collector.record_sample(a, Duration::from_millis(1), true);
+        collector.record_sample(b, Duration::from_millis(2), true);
+        collector.record_sample(c, Duration::from_millis(3), true);
+        assert_eq!(collector.total_agents(), 3);
+
+        collector.clear_metrics(&b);
+        assert_eq!(collector.total_agents(), 2);
+    }
+
+    #[test]
+    fn record_sample_creates_agent_entry_lazily() {
+        let collector = AgentMetricsCollector::new(10);
+        let agent_id = Uuid::new_v4();
+        assert_eq!(collector.total_agents(), 0);
+        assert!(collector.get_samples(&agent_id).is_empty());
+
+        collector.record_sample(agent_id, Duration::from_millis(1), true);
+        assert_eq!(collector.total_agents(), 1);
+        assert_eq!(collector.sample_count(&agent_id), 1);
+    }
+
+    #[test]
+    fn get_samples_returns_independent_clones() {
+        let collector = AgentMetricsCollector::new(10);
+        let agent_id = Uuid::new_v4();
+        collector.record_sample(agent_id, Duration::from_millis(1), true);
+
+        let snap1 = collector.get_samples(&agent_id);
+        collector.record_sample(agent_id, Duration::from_millis(2), false);
+        let snap2 = collector.get_samples(&agent_id);
+
+        assert_eq!(
+            snap1.len(),
+            1,
+            "first snapshot must not see the second record"
+        );
+        assert_eq!(snap2.len(), 2, "second snapshot sees both records");
+    }
+
+    #[test]
+    fn concurrent_clear_during_record_does_not_panic() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let collector = Arc::new(AgentMetricsCollector::new(100));
+        let agent_id = Uuid::new_v4();
+        let writer = Arc::clone(&collector);
+        let writer_id = agent_id;
+
+        let writer_handle = thread::spawn(move || {
+            for i in 0..200 {
+                writer.record_sample(writer_id, Duration::from_millis(i), true);
+            }
+        });
+
+        let clearer = Arc::clone(&collector);
+        let clearer_id = agent_id;
+        let clearer_handle = thread::spawn(move || {
+            for _ in 0..10 {
+                clearer.clear_metrics(&clearer_id);
+            }
+        });
+
+        writer_handle.join().expect("writer panicked");
+        clearer_handle.join().expect("clearer panicked");
+        // No assertion on final count — the invariant we care about is no panic
+        // and the final state is internally consistent.
+        let final_count = collector.sample_count(&agent_id);
+        assert!(final_count <= 100, "capacity must still be respected");
+    }
 }

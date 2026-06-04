@@ -170,4 +170,77 @@ mod tests {
 
         assert_eq!(registry.agent_count(), 10);
     }
+
+    #[test]
+    fn register_overwrites_existing_agent_with_same_id() {
+        let registry = AgentRegistry::new();
+        let id = Uuid::new_v4();
+
+        registry.register_agent(make_agent(id, vec!["old".into()], true));
+        registry.register_agent(make_agent(id, vec!["new".into(), "search".into()], false));
+
+        let stored = registry.get_agent(&id).expect("agent should still exist");
+        assert_eq!(
+            stored.capabilities,
+            vec!["new".to_string(), "search".to_string()]
+        );
+        assert!(
+            !stored.is_active,
+            "re-registration must overwrite the old record"
+        );
+        assert_eq!(registry.agent_count(), 1);
+    }
+
+    #[test]
+    fn list_agents_includes_inactive_agents() {
+        let registry = AgentRegistry::new();
+        let active = Uuid::new_v4();
+        let inactive = Uuid::new_v4();
+        registry.register_agent(make_agent(active, vec![], true));
+        registry.register_agent(make_agent(inactive, vec![], false));
+
+        let all = registry.list_agents();
+        assert_eq!(all.len(), 2);
+        assert!(
+            all.iter().any(|a| a.id == active && a.is_active),
+            "active agent should appear with is_active=true"
+        );
+        assert!(
+            all.iter().any(|a| a.id == inactive && !a.is_active),
+            "inactive agent should still appear in list_agents"
+        );
+    }
+
+    #[test]
+    fn agent_count_zero_after_deregister_all() {
+        let registry = AgentRegistry::new();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        registry.register_agent(make_agent(a, vec![], true));
+        registry.register_agent(make_agent(b, vec![], true));
+        assert_eq!(registry.agent_count(), 2);
+
+        registry.deregister_agent(&a);
+        registry.deregister_agent(&b);
+        assert_eq!(registry.agent_count(), 0);
+        assert!(registry.list_agents().is_empty());
+    }
+
+    #[test]
+    fn get_matching_agents_with_empty_query_capabilities_returns_all_active() {
+        let registry = AgentRegistry::new();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let c = Uuid::new_v4();
+        registry.register_agent(make_agent(a, vec!["search".into()], true));
+        registry.register_agent(make_agent(b, vec!["chat".into()], true));
+        registry.register_agent(make_agent(c, vec!["search".into()], false));
+
+        let matched = registry.get_matching_agents(&[]);
+        assert_eq!(
+            matched.len(),
+            2,
+            "empty query capabilities means 'no constraint' so all active agents match"
+        );
+    }
 }

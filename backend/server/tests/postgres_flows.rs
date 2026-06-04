@@ -2,15 +2,22 @@ use marketplace_api_contract::{
     AcceptNegotiationRequest, NegotiationHistoryEntryType, NegotiationStatus,
     RejectNegotiationRequest, RequestContactRevealRequest, SubmitOfferRequest,
 };
+use marketplace_server::domain::ledger::{
+    CreditLedgerError, CreditLedgerRepository, NewTransaction, TransactionType,
+};
 use marketplace_server::repositories::{
+    ledger::PostgresCreditLedgerRepository,
     negotiations::{NegotiationRepository, PostgresNegotiationRepository},
     ContactRevealRepository, PostgresContactRevealRepository, PostgresReservationLeaseRepository,
     ReservationLeaseRepository, SellerAccountRepository,
 };
+use rust_decimal::Decimal;
 use serde_json::json;
 use sqlx::{postgres::PgPoolOptions, types::Json, PgPool, Row};
 use std::error::Error;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 async fn live_pool() -> Result<Option<PgPool>, Box<dyn Error + Send + Sync>> {
     let Some(database_url) = std::env::var("DATABASE_URL").ok() else {
@@ -1177,5 +1184,236 @@ async fn postgres_open_negotiation_inactive_listing_commits_idempotency_failure(
         "open-negotiation on sold listing should fail"
     );
 
+    Ok(())
+}
+
+// =============================================================================
+// Spec 0010 — Credit Ledger Postgres repository (PostgresCreditLedgerRepository)
+// =============================================================================
+//
+// These tests cover the Postgres-backed implementation of CreditLedgerRepository,
+// which is the production path but had no integration tests prior to this batch.
+// They run only when DATABASE_URL is set; otherwise they skip cleanly.
+
+#[tokio::test]
+async fn postgres_credit_ledger_deposit_creates_balance_and_persists_transaction(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let agent_id = format!("ledger_deposit_{suffix}");
+
+    let repo = PostgresCreditLedgerRepository::new(pool.clone());
+
+    // Initial balance must be NotFound.
+    match repo.get_balance(&agent_id).await {
+        Err(CreditLedgerError::AgentNotFound(_)) => {}
+        other => panic!("expected AgentNotFound, got {other:?}"),
+    }
+
+    let tx = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("100.0000").unwrap(),
+        tx_type: TransactionType::Deposit,
+        idempotency_key: format!("dep-{suffix}"),
+    };
+    let account = repo.apply_transaction(&tx).await?;
+    assert_eq!(account.agent_id, agent_id);
+    assert_eq!(
+        account.balance_credits,
+        Decimal::from_str("100.0000").unwrap()
+    );
+
+    // Re-read confirms persistence.
+    let reread = repo.get_balance(&agent_id).await?;
+    assert_eq!(
+        reread.balance_credits,
+        Decimal::from_str("100.0000").unwrap()
+    );
+
+    // Row in credit_transactions must exist.
+    let row = sqlx::query("SELECT amount, transaction_type FROM credit_transactions WHERE id = ")
+        .bind(tx.id)
+        .fetch_one(&pool)
+        .await?;
+    let stored_amount: Decimal = row.try_get("amount")?;
+    let stored_type: String = row.try_get("transaction_type")?;
+    assert_eq!(stored_amount, Decimal::from_str("100.0000").unwrap());
+    assert_eq!(stored_type, "deposit");
+
+    // Cleanup.
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_credit_ledger_spend_decrements_existing_balance(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let agent_id = format!("ledger_spend_{suffix}");
+
+    let repo = PostgresCreditLedgerRepository::new(pool.clone());
+
+    // Seed via deposit.
+    let dep = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("50.0000").unwrap(),
+        tx_type: TransactionType::Deposit,
+        idempotency_key: format!("dep-{suffix}"),
+    };
+    repo.apply_transaction(&dep).await?;
+
+    // Spend 30.0000 → remaining 20.0000.
+    let spend = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("-30.0000").unwrap(),
+        tx_type: TransactionType::Spend,
+        idempotency_key: format!("spend-{suffix}"),
+    };
+    let after = repo.apply_transaction(&spend).await?;
+    assert_eq!(after.balance_credits, Decimal::from_str("20.0000").unwrap());
+
+    // Cleanup.
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_credit_ledger_spend_overdraw_returns_insufficient_credits(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let agent_id = format!("ledger_overdraw_{suffix}");
+
+    let repo = PostgresCreditLedgerRepository::new(pool.clone());
+
+    // Seed 10.0000.
+    let dep = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("10.0000").unwrap(),
+        tx_type: TransactionType::Deposit,
+        idempotency_key: format!("dep-{suffix}"),
+    };
+    repo.apply_transaction(&dep).await?;
+
+    // Attempt to spend 50.0000 (more than balance).
+    let overspend = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("-50.0000").unwrap(),
+        tx_type: TransactionType::Spend,
+        idempotency_key: format!("over-{suffix}"),
+    };
+    let result = repo.apply_transaction(&overspend).await;
+    match result {
+        Err(CreditLedgerError::InsufficientCredits {
+            requested,
+            available,
+        }) => {
+            assert_eq!(requested, Decimal::from_str("-50.0000").unwrap());
+            assert_eq!(available, Decimal::from_str("10.0000").unwrap());
+        }
+        other => panic!("expected InsufficientCredits, got {other:?}"),
+    }
+
+    // Balance must be unchanged on the overdraw attempt.
+    let bal = repo.get_balance(&agent_id).await?;
+    assert_eq!(bal.balance_credits, Decimal::from_str("10.0000").unwrap());
+
+    // Cleanup.
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_credit_ledger_idempotency_key_replay_returns_existing_balance(
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(pool) = live_bootstrapped_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let agent_id = format!("ledger_idem_{suffix}");
+
+    let repo = PostgresCreditLedgerRepository::new(pool.clone());
+
+    // First deposit with idempotency_key K.
+    let dep1 = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("25.0000").unwrap(),
+        tx_type: TransactionType::Deposit,
+        idempotency_key: format!("idem-{suffix}"),
+    };
+    let first = repo.apply_transaction(&dep1).await?;
+    assert_eq!(first.balance_credits, Decimal::from_str("25.0000").unwrap());
+
+    // Replay with the same idempotency_key but a different transaction id.
+    // The UNIQUE(idempotency_key) constraint must reject the second insert
+    // and the function must return the existing balance (idempotency contract).
+    let dep2 = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.clone(),
+        amount: Decimal::from_str("25.0000").unwrap(),
+        tx_type: TransactionType::Deposit,
+        idempotency_key: format!("idem-{suffix}"),
+    };
+    let second = repo.apply_transaction(&dep2).await?;
+    assert_eq!(
+        second.balance_credits,
+        Decimal::from_str("25.0000").unwrap(),
+        "idempotency replay must not double-apply"
+    );
+
+    // Exactly one row in credit_transactions for that agent.
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM credit_transactions WHERE agent_id = ")
+            .bind(&agent_id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(
+        count, 1,
+        "replay must not insert a duplicate transaction row"
+    );
+
+    // Cleanup.
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+        .bind(&agent_id)
+        .execute(&pool)
+        .await?;
     Ok(())
 }

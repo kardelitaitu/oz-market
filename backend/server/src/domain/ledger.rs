@@ -218,4 +218,35 @@ mod tests {
         assert_eq!(tx.tx_type, TransactionType::Deposit);
         assert_eq!(tx.idempotency_key, "key-1");
     }
+
+    #[test]
+    fn decimal_max_numeric_precision_boundary() {
+        use std::str::FromStr;
+        // NUMERIC(20,4) accepts up to 9999999999999999.9999 (16 digits + 4 decimal places).
+        let max = Decimal::from_str("9999999999999999.9999").expect("must parse max NUMERIC(20,4)");
+        let tx = NewTransaction {
+            id: Uuid::new_v4(),
+            agent_id: "agent-max".into(),
+            amount: max,
+            tx_type: TransactionType::Deposit,
+            idempotency_key: "max-key".into(),
+        };
+        assert_eq!(tx.amount, max);
+        assert_eq!(tx.amount.scale(), 4);
+        assert_eq!(tx.amount.to_string(), "9999999999999999.9999");
+    }
+
+    #[test]
+    fn decimal_amount_serialization_preserves_scale() {
+        use std::str::FromStr;
+        // Strings with explicit scale and integers should produce identical Decimal values.
+        let from_string = Decimal::from_str("100.0000").unwrap();
+        let from_int = Decimal::new(1_000_000, 4); // 100.0000
+        assert_eq!(from_string, from_int);
+        // Scale precision survives arithmetic.
+        let summed = from_string + from_int;
+        assert_eq!(summed, Decimal::from_str("200.0000").unwrap());
+        // String formatting preserves trailing zeros up to declared scale.
+        assert_eq!(format!("{summed:.4}"), "200.0000");
+    }
 }

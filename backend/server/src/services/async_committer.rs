@@ -254,4 +254,65 @@ mod tests {
 
         assert_eq!(wal.read_all().unwrap().len(), 0);
     }
+
+    #[tokio::test]
+    async fn batch_committer_mixed_spend_and_refund_nets_to_correct_balance() {
+        let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
+        let wal = temp_wal();
+        let (tx, committer) = batch_channel(repo.clone(), wal);
+
+        // 100 + 100 + 100 - 200 + 100 = 200.0000
+        tx.send(make_entry("agent-mix", "100.0000", "deposit"))
+            .await
+            .unwrap();
+        tx.send(make_entry("agent-mix", "100.0000", "deposit"))
+            .await
+            .unwrap();
+        tx.send(make_entry("agent-mix", "100.0000", "deposit"))
+            .await
+            .unwrap();
+        tx.send(make_entry("agent-mix", "-200.0000", "spend"))
+            .await
+            .unwrap();
+        tx.send(make_entry("agent-mix", "100.0000", "refund"))
+            .await
+            .unwrap();
+
+        committer.start();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let account = repo.get_balance("agent-mix").await.unwrap();
+        assert_eq!(account.balance_credits, "200.0000".parse().unwrap());
+    }
+
+    #[tokio::test]
+    async fn batch_committer_large_batch_triggers_size_flush() {
+        let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
+        let wal = temp_wal();
+        let (tx, committer) = batch_channel(repo.clone(), wal);
+
+        // Default batch size is 100; sending 250 must flush at least twice.
+        // Use 250 distinct agents so the per-agent consolidation doesn't mask the size-trigger.
+        for i in 0..250 {
+            tx.send(make_entry(&format!("agent-{i}"), "1.0000", "deposit"))
+                .await
+                .unwrap();
+        }
+
+        committer.start();
+
+        // Wait long enough for both size-triggered and tick-triggered flushes.
+        tokio::time::sleep(Duration::from_millis(800)).await;
+
+        let mut total = Decimal::ZERO;
+        for i in 0..250 {
+            let a = repo.get_balance(&format!("agent-{i}")).await.unwrap();
+            total += a.balance_credits;
+        }
+        assert_eq!(
+            total,
+            Decimal::new(2500000, 4),
+            "250 deposits of 1.0000 must total 250.0000"
+        );
+    }
 }

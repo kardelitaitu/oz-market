@@ -221,6 +221,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::services::agent_registry::AgentMetadata;
 
     fn breaker() -> AgentCircuitBreaker {
         AgentCircuitBreaker::new(0.2, 2000.0, Duration::from_secs(30))
@@ -355,6 +356,164 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&CircuitState::HalfOpen).unwrap(),
             "\"HalfOpen\""
+        );
+    }
+
+    #[test]
+    fn collect_health_summaries_returns_all_agents_with_state_and_score() {
+        let registry = AgentRegistry::new();
+        let breaker_registry = CircuitBreakerRegistry::default();
+        let metrics = AgentMetricsCollector::default();
+        let scorer = LatencyScorer::default();
+
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id: id_a,
+            endpoint: "http://a.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+        registry.register_agent(AgentMetadata {
+            id: id_b,
+            endpoint: "http://b.local".into(),
+            capabilities: vec!["translate".into()],
+            is_active: true,
+        });
+
+        for _ in 0..5 {
+            breaker_registry.record_result(id_a, false, 100.0);
+        }
+        metrics.record_sample(id_a, Duration::from_millis(200), false);
+
+        let summaries = collect_health_summaries(&registry, &breaker_registry, &metrics, &scorer);
+        assert_eq!(summaries.len(), 2);
+
+        let a = summaries.iter().find(|s| s.agent_id == id_a).unwrap();
+        assert_eq!(a.state, CircuitState::Open);
+        assert_eq!(a.failure_count, 5);
+        assert!(a.score.ewma_latency_ms > 0.0);
+
+        let b = summaries.iter().find(|s| s.agent_id == id_b).unwrap();
+        assert_eq!(b.state, CircuitState::Closed);
+        assert_eq!(b.failure_count, 0);
+    }
+
+    #[test]
+    fn registry_reset_removes_breaker_and_next_record_starts_fresh() {
+        let registry = CircuitBreakerRegistry::default();
+        let id = Uuid::new_v4();
+        for _ in 0..5 {
+            registry.record_result(id, false, 100.0);
+        }
+        assert!(registry.is_open(id));
+        assert_eq!(registry.breaker_count(), 1);
+
+        registry.reset(&id);
+        assert_eq!(registry.breaker_count(), 0);
+
+        // A few failures after reset must NOT trip the breaker
+        // (4 < 5 threshold since the breaker is freshly created).
+        for _ in 0..4 {
+            registry.record_result(id, false, 100.0);
+        }
+        assert!(
+            !registry.is_open(id),
+            "after reset, breaker must start from 0 failures"
+        );
+    }
+
+    #[test]
+    fn record_result_increments_failure_count_on_failure() {
+        let mut b = AgentCircuitBreaker::new(0.2, 2000.0, Duration::from_secs(60));
+        b.record_result(false, 100.0);
+        b.record_result(false, 100.0);
+        assert_eq!(b.failure_count, 2);
+        assert_eq!(
+            b.state,
+            CircuitState::Closed,
+            "below threshold stays closed"
+        );
+    }
+
+    #[test]
+    fn record_result_success_keeps_breaker_closed() {
+        let mut b = AgentCircuitBreaker::new(0.2, 2000.0, Duration::from_secs(60));
+        for _ in 0..10 {
+            b.record_result(true, 50.0);
+        }
+        assert_eq!(b.state, CircuitState::Closed);
+        assert_eq!(
+            b.failure_count, 0,
+            "success must not increment failure_count"
+        );
+    }
+
+    #[test]
+    fn registry_state_returns_closed_for_unknown_agent() {
+        let registry = CircuitBreakerRegistry::default();
+        let id = Uuid::new_v4();
+        assert_eq!(registry.state(id), CircuitState::Closed);
+        // The registry lazily creates a breaker on first access.
+        assert_eq!(registry.breaker_count(), 1);
+    }
+
+    #[test]
+    fn is_open_returns_false_for_breaker_with_zero_failures() {
+        let registry = CircuitBreakerRegistry::default();
+        let id = Uuid::new_v4();
+        registry.record_result(id, true, 50.0);
+        assert!(!registry.is_open(id));
+    }
+
+    #[test]
+    fn cooldown_remaining_is_full_period_for_fresh_breaker() {
+        // Note: cooldown_remaining() does not gate on state — for a fresh
+        // breaker (last_state_change = now) it returns the full cooldown period.
+        let b = AgentCircuitBreaker::new(0.2, 2000.0, Duration::from_secs(60));
+        let remaining = b.cooldown_remaining();
+        assert!(remaining > Duration::from_secs(59));
+        assert!(remaining <= Duration::from_secs(60));
+    }
+
+    #[test]
+    fn peek_state_does_not_transition_breaker() {
+        let mut b = AgentCircuitBreaker::new(0.2, 2000.0, Duration::from_millis(100));
+        for _ in 0..5 {
+            b.record_result(false, 100.0);
+        }
+        assert_eq!(b.state, CircuitState::Open);
+
+        // Force a peek — must not trigger a state transition.
+        for _ in 0..100 {
+            assert_eq!(b.peek_state(), CircuitState::Open);
+        }
+        assert_eq!(b.state, CircuitState::Open);
+    }
+
+    #[test]
+    fn error_threshold_pct_is_accepted_but_consults_consecutive_failures_only() {
+        // Per decisions.md (Decision 3), the `error_threshold_pct` parameter
+        // is stored but not consulted. The breaker trips only on
+        // 5 consecutive failures. Pin this contract so a future change
+        // to error-rate-based tripping requires a deliberate test update.
+        let mut b = AgentCircuitBreaker::new(0.01, 2000.0, Duration::from_secs(3600));
+        // 1 success + 4 failures = 80% error rate, which would exceed 0.01,
+        // but the consecutive-failure policy must NOT trip.
+        b.record_result(true, 50.0);
+        b.record_result(false, 50.0);
+        b.record_result(false, 50.0);
+        b.record_result(false, 50.0);
+        b.record_result(false, 50.0);
+        assert_eq!(
+            b.peek_state(),
+            CircuitState::Closed,
+            "5 results of which only 4 are consecutive failures must not trip"
+        );
+        assert_eq!(
+            b.failure_count(),
+            4,
+            "counter reflects the current 4-failure streak (not the 80% error rate)"
         );
     }
 }

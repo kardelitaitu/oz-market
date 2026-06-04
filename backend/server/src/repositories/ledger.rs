@@ -530,4 +530,58 @@ mod tests {
         let history = repo.get_transaction_history("nobody", 10, 0).await.unwrap();
         assert!(history.is_empty());
     }
+
+    #[tokio::test]
+    async fn in_memory_concurrent_spends_no_overdraw() {
+        use std::sync::Arc;
+        // Spec 0010 validation checklist: "concurrent deposit/spend actions to
+        // verify database transaction rollbacks". The in-memory repo's RwLock is
+        // the closest analogue we can test without a real Postgres.
+        let repo = Arc::new(InMemoryCreditLedgerRepository::new());
+
+        // Seed balance = 100 (10 credits per spend, 50 concurrent attempts).
+        let seed = NewTransaction {
+            id: Uuid::new_v4(),
+            agent_id: "agent-race".into(),
+            amount: Decimal::new(1000000, 4), // 100.0000
+            tx_type: TransactionType::Deposit,
+            idempotency_key: "seed".into(),
+        };
+        repo.apply_transaction(&seed).await.unwrap();
+
+        let mut handles = Vec::new();
+        for i in 0..50 {
+            let r = Arc::clone(&repo);
+            handles.push(tokio::spawn(async move {
+                let tx = NewTransaction {
+                    id: Uuid::new_v4(),
+                    agent_id: "agent-race".into(),
+                    amount: Decimal::new(-100000, 4), // -10.0000
+                    tx_type: TransactionType::Spend,
+                    idempotency_key: format!("spend-{i}"),
+                };
+                r.apply_transaction(&tx).await
+            }));
+        }
+
+        let mut ok = 0;
+        let mut insufficient = 0;
+        for h in handles {
+            match h.await.unwrap() {
+                Ok(_) => ok += 1,
+                Err(CreditLedgerError::InsufficientCredits { .. }) => insufficient += 1,
+                Err(e) => panic!("unexpected error: {e}"),
+            }
+        }
+
+        assert_eq!(ok, 10, "exactly 10 spends should succeed");
+        assert_eq!(insufficient, 40, "remaining 40 should be rejected");
+
+        let final_balance = repo.get_balance("agent-race").await.unwrap();
+        assert_eq!(
+            final_balance.balance_credits,
+            Decimal::ZERO,
+            "final balance must be exactly zero — no overdraw, no leftover"
+        );
+    }
 }
