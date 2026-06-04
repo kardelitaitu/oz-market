@@ -1225,3 +1225,25 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
   - Spec 0013 §4 says the metrics route is `/v1/metrics`; code exposes it at `/metrics`. This is the existing audit MINOR item m3. Route name change is a separate decision; not making it as part of M3.
 - **Net diff**: 4 files, +149 / −13 lines, no schema migration, no mobile/MCP changes, no spec/doc changes.
 - **Next**: TODO.md M4 — pure spec drift (spec 0017 health-api behavior). Plus the 5 MINOR spec drifts (m1 idempotency status code, m2 `owner_id` query, m4 `X-RateLimit-*` already done in M2, m6 SSE payload format, m7 `CreateReviewRequest` not bound). Most are openapi.yaml edits only.
+
+
+## 2026-06-05 11:15 - M4: Resolve spec 0017 parity-report staleness (audit MAJOR item, M2 already covered the OpenAPI half)
+
+- **Goal**: TODO.md MAJOR item M4 - reconcile spec 0017 with the codebase. After M2, the OpenAPI half is done (3 paths added). The remaining work was a stale `parity-report.md` showing all 3 items as PENDING despite the spec living in `_done/` and the implementation being genuinely complete.
+- **Verification of implementation state** (before any edits):
+  - `backend/server/src/services/circuit_breaker.rs` exists.
+  - All 3 health handlers exist in `actix_handlers.rs:1391/1393/1397` (`get_agents_health`, `get_agent_health_detail`, plus a `POST /v1/health/agents/{agent_id}/reset` reset route).
+  - All 3 paths exist in `openapi.yaml:775/798/821` (added by M2, commit `d5cdf75`).
+  - `decisions.md` records the 5-consecutive-failures vs 20%-error-rate design choice with rationale.
+- **Decision: delete the parity-report**, not update it. Reasons:
+  - 0017 is the ONLY done-spec in the repo with a parity-report (`rg` against `docs/specs/_done/` and `docs/specs/_active/` confirms no other spec has one). So it's a one-off artifact, not a maintained convention.
+  - The historical PENDING -> DONE audit trail is already preserved in `git log` and the spec's own `decisions.md` + `implementation-notes.md`.
+  - Other done specs (0010/0011/0012/0013) have no parity-report and are not adversely affected.
+- **What changed (1 file, -7 lines, pure delete)**:
+  - Deleted `docs/specs/_done/0017-agent-circuit-breaker-health-api/parity-report.md` (7 lines, all 3 status cells were PENDING).
+  - No code change. No spec change. No OpenAPI change (M2 already did it).
+- **Out of scope (deliberate, kept for followups)**:
+  - 0017 README.md frontmatter still says `status: active`. Same pattern is seen in 0011/0012/0013 (only 0010 has `status: done`). This is pre-existing convention-drift across 4 specs, not a M4 issue. Will address as a small batch in a follow-up if desired.
+- **Verified**: `check.ps1` 6/6 pass (the journal-append-only guard and active-spec governance guard both pass - the latter only scans `_active/`, not `_done/`, so the file deletion is invisible to it).
+- **Net diff**: 1 file deleted, 0 added.
+- **Next**: TODO.md M5 - flip the 6 admin endpoint response codes from `200` to `204` in `openapi.yaml`. One-line edits per path, no code change.
