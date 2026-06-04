@@ -1012,3 +1012,13 @@ new line
 
 - **Created Active Spec 0018 (Update Affected Documents)**: Added all 10 specification files under docs/specs/_active/0018-update-affected-documents/ to establish requirements, checklists, and plan for syncing checklists in TODO.md, mapping indexes in docs/specs/README.md, and references in docs/DOCS-README.md.
 - Verified that all active spec structures conform to repo governance rules and check.ps1 runs clean.
+
+## 2026-06-05 03:45
+
+- **Executed Spec 0014 (Agent Routing Dispatch Core)**:
+  - **`services/agent_registry.rs`**: `AgentRegistry` struct backed by `DashMap<Uuid, AgentMetadata>`. Methods: `register_agent`, `deregister_agent`, `get_agent`, `get_matching_agents(capabilities)` (filters by active + all capabilities match), `list_agents`, `agent_count`. 7 tests covering registration, retrieval, deregistration, capability matching, inactive exclusion, listing, and concurrent registration.
+  - **`services/agent_dispatcher.rs`**: `AgentDispatcher` async trait with `dispatch_query(&self, agent, payload) -> Result<Vec<u8>, DispatchError>`. `DispatchError` enum with `Network`, `Timeout`, `Parse`, `Registry` variants (manual `Display + Error` impl, no `thiserror`). `HttpAgentDispatcher` using shared `reqwest::Client` with configurable timeout, maps `is_timeout` to `Timeout` variant. `MockAgentDispatcher` with `DashMap<Uuid, Result<Vec<u8>, DispatchError>>` and `with_response`/`with_error` constructors. 6 tests covering success, unregistered agent, timeout error, network error, parse error, and `Display` output.
+  - **`services/mod.rs`**: Added `pub mod agent_dispatcher` and `pub mod agent_registry`.
+  - Avoided adding `thiserror` dependency — manual `Display + Error` impl consistent with project convention.
+  - All 6 gates PASS (306 tests, +13 new, clean clippy, clean fmt).
+  - Moved spec from `_active/0014-*` to `_done/0014-*`. Active specs remaining: 0015, 0016, 0017, 0018.
