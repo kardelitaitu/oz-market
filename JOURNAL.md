@@ -1030,3 +1030,13 @@ new line
   - 8 tests: record+retrieve, unknown agent returns empty, capacity eviction (3→5 fills evicts 2 oldest), clear metrics, clear nonexistent noop, multiple agents isolated, default capacity=100, concurrent record.
   - All 6 gates PASS (314 tests, +8, clean clippy, clean fmt).
   - Moved spec from `_active/0015-*` to `_done/0015-*`. Active specs remaining: 0016, 0017, 0018.
+
+## 2026-06-05 04:15
+
+- **Executed Spec 0016 (Predictive Latency Scoring)**:
+  - **`services/latency_scorer.rs`**: `LatencyScorer` struct with configurable `alpha` (default 0.2) and `default_latency_ms` (default 200.0). `AgentScore` struct with `ewma_latency_ms: f64` and `ewma_error_rate: f64` (0.0–1.0). `calculate_score(samples)` iterates samples: first sample seeds both EWMA values, subsequent samples blend via `alpha * new_val + (1 - alpha) * current`. Empty samples returns cold-start defaults (200ms, 0% error).
+  - **Clamping**: `clamp_non_negative` and `clamp_zero_to_one` guard against NaN/Inf propagation, per quality rules.
+  - **`Default` impl**: `alpha=0.2`, `default_latency_ms=200.0`.
+  - **11 unit tests**: cold start, custom defaults, single sample, single error, EWMA convergence, alpha=0 (ignore new), alpha=1 (only newest), bounded error rate, mixed success/failure, NaN/Inf clamp, JSON serialization.
+  - All 6 gates PASS (325 tests, clean clippy, clean fmt).
+  - Moved spec from `_active/0016-*` to `_done/0016-*`. Active specs remaining: 0017, 0018.
