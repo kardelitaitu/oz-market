@@ -258,6 +258,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     let expected = [
+                        "agent_query",
                         "create_listing",
                         "search_listings",
                         "get_listing",

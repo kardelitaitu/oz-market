@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use marketplace_api_contract::{
-    AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, NegotiationResponse,
-    OpenNegotiationRequest, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
-    SearchResponse, SubmitOfferRequest,
+    AcceptNegotiationRequest, AgentQueryRequest, AgentQueryResponse, ContactRevealResponse,
+    CreateListingRequest, NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
+    RequestContactRevealRequest, SearchRequest, SearchResponse, SubmitOfferRequest,
 };
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
@@ -167,6 +167,22 @@ where
             let response: SearchResponse = self
                 .app
                 .search_listings(Some(self.claims()), &request)
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
+    }
+
+    #[tool(description = "Query the marketplace with natural language")]
+    async fn agent_query(
+        &self,
+        Parameters(request): Parameters<AgentQueryRequest>,
+    ) -> Result<String, McpToolError> {
+        self.run_with_timeout(async {
+            let response: AgentQueryResponse = self
+                .app
+                .agent_query(Some(self.claims()), &request)
                 .await
                 .map_err(McpToolError::from)?;
             json_string(&response)
@@ -750,8 +766,9 @@ mod tests {
             .map(|tool| tool.name.to_string())
             .collect();
 
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 11);
         assert!(names.contains(&"create_listing".to_string()));
+        assert!(names.contains(&"agent_query".to_string()));
         assert!(names.contains(&"accept_negotiation".to_string()));
         assert!(names.contains(&"reject_negotiation".to_string()));
         assert!(names.contains(&"approve_contact_reveal".to_string()));
@@ -1023,5 +1040,159 @@ mod tests {
 
         client.cancel().await.unwrap();
         server_task.await.unwrap().unwrap();
+    }
+
+    // ---------------------------------------------------------------------
+    // Coverage added during the spec 0006-0017 audit.
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn env_flag_is_truthy_accepts_canonical_truthy_values() {
+        // Use a unique env var per test to avoid cross-test pollution
+        // (env vars are process-global and cargo runs tests in parallel).
+        for value in ["1", "true", "TRUE", "yes", "on"] {
+            std::env::set_var("MCP_TEST_FLAG_TRUTHY", value);
+            assert!(
+                env_flag_is_truthy("MCP_TEST_FLAG_TRUTHY"),
+                "{value:?} must be truthy"
+            );
+        }
+        std::env::remove_var("MCP_TEST_FLAG_TRUTHY");
+    }
+
+    #[test]
+    fn env_flag_is_truthy_rejects_empty_and_other_values() {
+        for value in ["", "0", "false", "no", "off", "enabled"] {
+            std::env::set_var("MCP_TEST_FLAG_FALSY", value);
+            assert!(
+                !env_flag_is_truthy("MCP_TEST_FLAG_FALSY"),
+                "{value:?} must be falsy"
+            );
+        }
+        std::env::remove_var("MCP_TEST_FLAG_FALSY");
+    }
+
+    #[test]
+    fn env_flag_is_truthy_rejects_unset() {
+        std::env::remove_var("MCP_TEST_FLAG_UNSET_XYZ");
+        assert!(!env_flag_is_truthy("MCP_TEST_FLAG_UNSET_XYZ"));
+    }
+
+    #[test]
+    fn parse_claims_payload_rejects_invalid_json() {
+        let result = parse_claims_payload("MARKETPLACE_MCP_CLAIMS_JSON", "not json");
+        assert!(result.is_err());
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("MARKETPLACE_MCP_CLAIMS_JSON"));
+    }
+
+    #[test]
+    fn parse_claims_payload_accepts_valid_json() {
+        let claims_json = serde_json::to_string(&crate::dev_launcher_claims()).unwrap();
+        let claims = parse_claims_payload("MARKETPLACE_MCP_CLAIMS_JSON", &claims_json).unwrap();
+        assert_eq!(claims.sub, "mcp-agent-dev");
+    }
+
+    #[test]
+    fn mcp_tool_error_display_includes_code_and_message() {
+        let err = McpToolError::new("custom_code", "custom message");
+        let s = format!("{err}");
+        assert_eq!(s, "custom_code: custom message");
+    }
+
+    #[test]
+    fn mcp_tool_error_into_contents_serializes_json_envelope() {
+        let err = McpToolError::with_details(
+            "conflict",
+            "duplicate",
+            serde_json::json!({"source": "idempotency"}),
+        );
+        let contents = <McpToolError as rmcp::model::IntoContents>::into_contents(err);
+        assert_eq!(contents.len(), 1);
+        let text = match &contents[0].raw {
+            rmcp::model::RawContent::Text(t) => t.text.clone(),
+            _ => panic!("expected text content"),
+        };
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["error"]["code"], "conflict");
+        assert_eq!(parsed["error"]["message"], "duplicate");
+        assert_eq!(parsed["error"]["details"]["source"], "idempotency");
+    }
+
+    #[test]
+    fn mcp_tool_error_into_contents_with_no_details_serializes_null() {
+        let err = McpToolError::forbidden("denied");
+        let contents = <McpToolError as rmcp::model::IntoContents>::into_contents(err);
+        let text = match &contents[0].raw {
+            rmcp::model::RawContent::Text(t) => t.text.clone(),
+            _ => panic!("expected text content"),
+        };
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["error"]["code"], "forbidden");
+        assert!(parsed["error"]["details"].is_null());
+    }
+
+    #[test]
+    fn mcp_tool_error_from_repository_error_maps_variants() {
+        use marketplace_server::repositories::{RepositoryError, RepositoryErrorKind};
+        let cases: Vec<(RepositoryErrorKind, &str)> = vec![
+            (RepositoryErrorKind::Conflict, "conflict"),
+            (RepositoryErrorKind::NotFound, "not_found"),
+            (RepositoryErrorKind::PermissionDenied, "forbidden"),
+            (RepositoryErrorKind::Validation, "invalid_field"),
+        ];
+        for (kind, expected) in cases {
+            let repo_err = RepositoryError::new(kind, format!("test {expected}"));
+            let mcp_err: McpToolError = HandlerError::Repository(repo_err).into();
+            assert_eq!(mcp_err.code, expected, "kind {kind:?}");
+            assert!(mcp_err.message.contains(expected));
+        }
+    }
+
+    #[test]
+    fn mcp_tool_error_from_repository_storage_maps_to_internal() {
+        use marketplace_server::repositories::{RepositoryError, RepositoryErrorKind};
+        let repo_err = RepositoryError::new(RepositoryErrorKind::Storage, "db down");
+        let mcp_err: McpToolError = HandlerError::Repository(repo_err).into();
+        assert_eq!(mcp_err.code, "internal_error");
+        assert_eq!(mcp_err.message, "db down");
+    }
+
+    #[test]
+    fn mcp_tool_error_from_quota_exceeded_preserves_message() {
+        let handler_err = HandlerError::QuotaExceeded {
+            message: "limit hit".to_string(),
+        };
+        let mcp_err: McpToolError = handler_err.into();
+        assert_eq!(mcp_err.code, "quota_exceeded");
+        assert_eq!(mcp_err.message, "limit hit");
+    }
+
+    #[test]
+    fn get_info_includes_timeout_in_instructions() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let agent = MarketplaceMcpAgent::with_timeout(
+            app,
+            crate::dev_launcher_claims(),
+            Duration::from_millis(7500),
+        );
+        let info = agent.get_info();
+        let instructions = info.instructions.expect("instructions should be set");
+        assert!(
+            instructions.contains("7500ms"),
+            "instructions must mention tool timeout, got: {instructions}"
+        );
+        assert!(instructions.contains("MCP_TOOL_TIMEOUT_MS"));
+        // Tools capability must be enabled.
+        assert!(info.capabilities.tools.is_some());
     }
 }

@@ -124,6 +124,7 @@ fn marketplace_mcp_boots_and_lists_the_public_tool_catalog() {
         .collect();
 
     let expected = [
+        "agent_query",
         "create_listing",
         "search_listings",
         "get_listing",

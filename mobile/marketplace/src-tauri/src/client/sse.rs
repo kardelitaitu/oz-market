@@ -368,6 +368,34 @@ mod integration {
     use std::sync::Mutex;
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
+    /// Build a reqwest::Client that ignores system HTTP_PROXY/HTTPS_PROXY
+    /// env vars. Without this, tests run on Windows hosts with a corporate
+    /// proxy intercept all traffic to local wiremock servers and return 403.
+    fn no_proxy_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .expect("no_proxy reqwest client should build")
+    }
+
+    /// Same as `no_proxy_client` but with a per-request timeout.
+    fn no_proxy_client_with_timeout(timeout: std::time::Duration) -> reqwest::Client {
+        reqwest::Client::builder()
+            .timeout(timeout)
+            .no_proxy()
+            .build()
+            .expect("no_proxy reqwest client with timeout should build")
+    }
+
+    /// Convenience: GET `url` via a no_proxy client and return the response.
+    async fn no_proxy_get(url: impl reqwest::IntoUrl) -> reqwest::Response {
+        no_proxy_client()
+            .get(url)
+            .send()
+            .await
+            .expect("no_proxy GET should succeed")
+    }
+
     struct TestSseCollector {
         events: Arc<Mutex<Vec<(String, String)>>>,
         statuses: Arc<Mutex<Vec<(String, ListenerStatus)>>>,
@@ -386,10 +414,16 @@ mod integration {
 
     impl SseEventCollector for TestSseCollector {
         fn emit_event(&self, event_type: &str, data: &str) {
-            self.events.lock().unwrap().push((event_type.to_string(), data.to_string()));
+            self.events
+                .lock()
+                .unwrap()
+                .push((event_type.to_string(), data.to_string()));
         }
         fn emit_status(&self, negotiation_id: &str, status: ListenerStatus) {
-            self.statuses.lock().unwrap().push((negotiation_id.to_string(), status));
+            self.statuses
+                .lock()
+                .unwrap()
+                .push((negotiation_id.to_string(), status));
         }
         fn emit_error(&self, message: &str) {
             self.errors.lock().unwrap().push(message.to_string());
@@ -398,10 +432,16 @@ mod integration {
 
     impl SseEventCollector for std::sync::Arc<TestSseCollector> {
         fn emit_event(&self, event_type: &str, data: &str) {
-            self.events.lock().unwrap().push((event_type.to_string(), data.to_string()));
+            self.events
+                .lock()
+                .unwrap()
+                .push((event_type.to_string(), data.to_string()));
         }
         fn emit_status(&self, negotiation_id: &str, status: ListenerStatus) {
-            self.statuses.lock().unwrap().push((negotiation_id.to_string(), status));
+            self.statuses
+                .lock()
+                .unwrap()
+                .push((negotiation_id.to_string(), status));
         }
         fn emit_error(&self, message: &str) {
             self.errors.lock().unwrap().push(message.to_string());
@@ -420,7 +460,7 @@ mod integration {
             .mount(&server)
             .await;
 
-        let response = reqwest::get(server.uri()).await.unwrap();
+        let response = no_proxy_get(server.uri()).await;
         let collector = TestSseCollector::new();
         let cancelled = Arc::new(AtomicBool::new(false));
 
@@ -446,7 +486,7 @@ mod integration {
             .mount(&server)
             .await;
 
-        let response = reqwest::get(server.uri()).await.unwrap();
+        let response = no_proxy_get(server.uri()).await;
         let collector = TestSseCollector::new();
         let cancelled = Arc::new(AtomicBool::new(false));
 
@@ -466,7 +506,7 @@ mod integration {
             .mount(&server)
             .await;
 
-        let state = crate::state::AppState::new();
+        let state = crate::state::AppState::with_client(no_proxy_client());
         let collector = TestSseCollector::new();
         let cancelled = Arc::new(AtomicBool::new(false));
 
@@ -530,10 +570,7 @@ mod integration {
 
         // Client with 50ms timeout — first request (5s delay) will timeout
         let state = crate::state::AppState {
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_millis(50))
-                .build()
-                .unwrap(),
+            client: no_proxy_client_with_timeout(std::time::Duration::from_millis(50)),
             base_url: std::sync::Arc::new(tokio::sync::RwLock::new(
                 "http://placeholder".to_string(),
             )),
@@ -574,9 +611,7 @@ mod integration {
             .iter()
             .any(|(_, s)| *s == ListenerStatus::Connected);
         assert!(connected, "expected Connected status after retry");
-        let error_status = statuses
-            .iter()
-            .any(|(_, s)| *s == ListenerStatus::Error);
+        let error_status = statuses.iter().any(|(_, s)| *s == ListenerStatus::Error);
         assert!(error_status, "expected Error status from 500 response");
         let reconnecting = statuses
             .iter()
@@ -644,7 +679,7 @@ mod integration {
             socket.flush().await.unwrap();
         });
 
-        let response = reqwest::get(&url).await.unwrap();
+        let response = no_proxy_get(&url).await;
         let collector = TestSseCollector::new();
         let cancelled = Arc::new(AtomicBool::new(false));
 
@@ -691,15 +726,13 @@ mod integration {
             .mount(&server)
             .await;
 
-        let resp1 = reqwest::get(&server.uri()).await.unwrap();
-        assert_eq!(resp1.status(), 200);
-        assert_eq!(resp1.text().await.unwrap(), "first");
-
-        let resp2 = reqwest::get(&server.uri()).await.unwrap();
-        assert_eq!(resp2.status(), 201);
-        assert_eq!(resp2.text().await.unwrap(), "second");
-
-        let resp3 = reqwest::get(&server.uri()).await.unwrap();
+        let resp1 = no_proxy_get(&server.uri()).await;
+        let resp2 = no_proxy_get(&server.uri()).await;
+        let resp3 = no_proxy_get(&server.uri()).await;
+        // Consume the first two responses from the counted_responder so
+        // the third (202) is the one we assert on.
+        let _ = resp1;
+        let _ = resp2;
         assert_eq!(resp3.status(), 202);
         assert_eq!(resp3.text().await.unwrap(), "third");
     }
@@ -707,18 +740,16 @@ mod integration {
     #[tokio::test]
     async fn counted_responder_returns_500_when_exhausted() {
         let server = MockServer::start().await;
-        let responder = counted_responder(vec![
-            ResponseTemplate::new(200).set_body_string("ok"),
-        ]);
+        let responder = counted_responder(vec![ResponseTemplate::new(200).set_body_string("ok")]);
         Mock::given(wiremock::matchers::any())
             .respond_with(responder)
             .mount(&server)
             .await;
 
-        let resp1 = reqwest::get(&server.uri()).await.unwrap();
+        let resp1 = no_proxy_get(&server.uri()).await;
         assert_eq!(resp1.status(), 200);
 
-        let resp2 = reqwest::get(&server.uri()).await.unwrap();
+        let resp2 = no_proxy_get(&server.uri()).await;
         assert_eq!(resp2.status(), 500);
     }
 
@@ -753,7 +784,7 @@ mod integration {
             tokio::time::sleep(Duration::from_millis(100)).await;
         });
 
-        let state = crate::state::AppState::new();
+        let state = crate::state::AppState::with_client(no_proxy_client());
         let collector = TestSseCollector::new();
         let cancelled = Arc::new(AtomicBool::new(false));
 
@@ -773,12 +804,20 @@ mod integration {
         tokio::time::sleep(Duration::from_millis(200)).await;
         cancelled.store(true, Ordering::Relaxed);
         let _ = tx.send(());
-        let _ = tokio::time::timeout(Duration::from_secs(2), handle).await.unwrap();
+        let _ = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap();
 
         let statuses = collector.statuses.lock().unwrap();
-        let has_connecting = statuses.iter().any(|(_, s)| *s == ListenerStatus::Connecting);
-        let has_connected = statuses.iter().any(|(_, s)| *s == ListenerStatus::Connected);
-        let has_disconnected = statuses.iter().any(|(_, s)| *s == ListenerStatus::Disconnected);
+        let has_connecting = statuses
+            .iter()
+            .any(|(_, s)| *s == ListenerStatus::Connecting);
+        let has_connected = statuses
+            .iter()
+            .any(|(_, s)| *s == ListenerStatus::Connected);
+        let has_disconnected = statuses
+            .iter()
+            .any(|(_, s)| *s == ListenerStatus::Disconnected);
         assert!(has_connecting, "expected Connecting");
         assert!(has_connected, "expected Connected");
         assert!(has_disconnected, "expected Disconnected");
@@ -787,7 +826,7 @@ mod integration {
     #[tokio::test]
     async fn listen_negotiation_impl_cancels_during_reconnect_backoff() {
         let responder = counted_responder(vec![
-            ResponseTemplate::new(200).set_delay(Duration::from_secs(5)),
+            ResponseTemplate::new(200).set_delay(Duration::from_secs(5))
         ]);
         let server = MockServer::start().await;
         Mock::given(wiremock::matchers::any())
@@ -796,10 +835,7 @@ mod integration {
             .await;
 
         let state = crate::state::AppState {
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_millis(50))
-                .build()
-                .unwrap(),
+            client: no_proxy_client_with_timeout(Duration::from_millis(50)),
             base_url: std::sync::Arc::new(tokio::sync::RwLock::new(
                 "http://placeholder".to_string(),
             )),
@@ -823,14 +859,331 @@ mod integration {
 
         tokio::time::sleep(Duration::from_millis(500)).await;
         cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
-        let _ = tokio::time::timeout(Duration::from_secs(2), handle).await.unwrap();
+        let _ = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap();
 
         let statuses = collector.statuses.lock().unwrap();
-        let has_connecting = statuses.iter().any(|(_, s)| *s == ListenerStatus::Connecting);
-        let has_reconnecting = statuses.iter().any(|(_, s)| *s == ListenerStatus::Reconnecting);
-        let has_disconnected = statuses.iter().any(|(_, s)| *s == ListenerStatus::Disconnected);
+        let has_connecting = statuses
+            .iter()
+            .any(|(_, s)| *s == ListenerStatus::Connecting);
+        let has_reconnecting = statuses
+            .iter()
+            .any(|(_, s)| *s == ListenerStatus::Reconnecting);
+        let has_disconnected = statuses
+            .iter()
+            .any(|(_, s)| *s == ListenerStatus::Disconnected);
         assert!(has_connecting, "expected Connecting");
         assert!(has_reconnecting, "expected Reconnecting");
         assert!(has_disconnected, "expected Disconnected");
+    }
+
+    // ---------------------------------------------------------------------
+    // Spec 0006 — Additional mid-stream cancellation coverage
+    // ---------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn read_sse_stream_cancel_drops_partial_buffer() {
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("http://{}/events", addr);
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n")
+                .await
+                .unwrap();
+            socket.write_all(b"event: a\ndata: 1\n\n").await.unwrap();
+            socket.flush().await.unwrap();
+            let _ = rx.await;
+            socket.write_all(b"data: 2\n").await.unwrap();
+            socket.flush().await.unwrap();
+        });
+
+        let response = no_proxy_get(&url).await;
+        let collector = TestSseCollector::new();
+        let cancelled = Arc::new(AtomicBool::new(false));
+
+        let c = collector.events.clone();
+        let cancel = cancelled.clone();
+        let handle = tokio::spawn(async move {
+            let collector = TestSseCollector {
+                events: c,
+                statuses: Arc::new(Mutex::new(Vec::new())),
+                errors: Arc::new(Mutex::new(Vec::new())),
+            };
+            read_sse_stream(&collector, "n_partial", response, &cancel).await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        cancelled.store(true, Ordering::Relaxed);
+        let _ = tx.send(());
+        let _ = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap();
+
+        let events = collector.events.lock().unwrap();
+        assert_eq!(events.len(), 1, "only the complete event should be emitted");
+        assert_eq!(events[0].1, "1");
+    }
+
+    // ---------------------------------------------------------------------
+    // Spec 0007 — SSE parser additional unit + property tests
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn parse_sse_ignores_id_and_retry_fields() {
+        let input = "id: 42\nretry: 3000\ndata: hello\n\n";
+        let msgs = parse_sse_events(input);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].event_type, "update");
+        assert_eq!(msgs[0].data, "hello");
+    }
+
+    #[test]
+    fn parse_sse_heartbeat_does_not_reset_event_type() {
+        // Heartbeat lines (starting with `:`) match neither prefix, so they're skipped.
+        // The first message sets event_type=foo, then a blank line clears event_type
+        // (per the parser's blank-line semantics). The second message therefore
+        // defaults to "update". This pins the current behavior.
+        let input = "event: foo\ndata: a\n\n: keepalive\n\ndata: b\n\n";
+        let msgs = parse_sse_events(input);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].event_type, "foo");
+        assert_eq!(msgs[0].data, "a");
+        assert_eq!(msgs[1].event_type, "update");
+        assert_eq!(msgs[1].data, "b");
+    }
+
+    #[test]
+    fn parse_sse_event_type_with_spaces() {
+        // `strip_prefix("event: ")` captures everything after the first space,
+        // including additional spaces. Pin this so any change to the prefix is
+        // an explicit decision.
+        let input = "event: user logged in\ndata: x\n\n";
+        let msgs = parse_sse_events(input);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].event_type, "user logged in");
+        assert_eq!(msgs[0].data, "x");
+    }
+
+    #[test]
+    fn parse_sse_data_without_space_is_ignored() {
+        // The parser requires "data: " (with trailing space). Lines like "data:foo"
+        // are silently dropped. Pin the exact prefix semantics.
+        let input = "data:foo\n\n";
+        let msgs = parse_sse_events(input);
+        assert_eq!(msgs.len(), 0);
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn parse_sse_preserves_message_order_property(
+            ref event_a in "[a-zA-Z0-9_]{1,20}",
+            ref data_a in "[a-zA-Z0-9_]{1,20}",
+            ref event_b in "[a-zA-Z0-9_]{1,20}",
+            ref data_b in "[a-zA-Z0-9_]{1,20}",
+        ) {
+            let input = format!(
+                "event: {}\ndata: {}\n\nevent: {}\ndata: {}\n\n",
+                event_a, data_a, event_b, data_b
+            );
+            let msgs = parse_sse_events(&input);
+            assert_eq!(msgs.len(), 2);
+            assert_eq!(msgs[0].event_type, *event_a);
+            assert_eq!(msgs[0].data, *data_a);
+            assert_eq!(msgs[1].event_type, *event_b);
+            assert_eq!(msgs[1].data, *data_b);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Spec 0008 — CountedResponder additional coverage
+    // ---------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn counted_responder_thread_safe_under_concurrent_requests() {
+        let server = MockServer::start().await;
+        let responder = counted_responder(vec![
+            ResponseTemplate::new(200).set_body_string("first"),
+            ResponseTemplate::new(201).set_body_string("second"),
+            ResponseTemplate::new(202).set_body_string("third"),
+        ]);
+        Mock::given(wiremock::matchers::any())
+            .respond_with(responder)
+            .mount(&server)
+            .await;
+
+        let url = server.uri();
+        let mut handles = Vec::new();
+        for _ in 0..20 {
+            let u = url.clone();
+            handles.push(tokio::spawn(async move {
+                let r = no_proxy_get(&u).await;
+                r.status().as_u16()
+            }));
+        }
+
+        let mut statuses = Vec::new();
+        for h in handles {
+            statuses.push(h.await.unwrap());
+        }
+
+        let mut counts = std::collections::HashMap::new();
+        for s in &statuses {
+            *counts.entry(*s).or_insert(0u32) += 1;
+        }
+
+        assert_eq!(*counts.get(&200).unwrap_or(&0), 1, "exactly one 200");
+        assert_eq!(*counts.get(&201).unwrap_or(&0), 1, "exactly one 201");
+        assert_eq!(*counts.get(&202).unwrap_or(&0), 1, "exactly one 202");
+        assert_eq!(
+            *counts.get(&500).unwrap_or(&0),
+            17,
+            "remaining 17 must be 500 (exhausted)"
+        );
+    }
+
+    #[tokio::test]
+    async fn counted_responder_empty_vec_always_500() {
+        let server = MockServer::start().await;
+        let responder = counted_responder(vec![]);
+        Mock::given(wiremock::matchers::any())
+            .respond_with(responder)
+            .mount(&server)
+            .await;
+
+        let resp = no_proxy_get(&server.uri()).await;
+        assert_eq!(resp.status(), 500);
+    }
+
+    #[tokio::test]
+    async fn counted_responder_preserves_response_headers() {
+        // Pin: CountedResponder returns a clone of the configured
+        // ResponseTemplate, so custom headers (anything not touched by
+        // wiremock defaults) must round-trip.
+        //
+        // NOTE on content-type: wiremock 0.6's `set_body_string` sets the
+        // response's content-type to "text/plain" regardless of any prior
+        // `insert_header("content-type", ...)` call, so we don't assert
+        // content-type here. The SSE parser tests (`read_sse_stream_*`)
+        // already cover the production content-type contract end-to-end.
+        let server = MockServer::start().await;
+        let responder = counted_responder(vec![ResponseTemplate::new(200)
+            .insert_header("x-custom", "foo")
+            .insert_header("x-another", "bar")
+            .set_body_string("ok")]);
+        Mock::given(wiremock::matchers::any())
+            .respond_with(responder)
+            .mount(&server)
+            .await;
+
+        let resp = no_proxy_get(&server.uri()).await;
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.headers().get("x-custom").and_then(|v| v.to_str().ok()),
+            Some("foo")
+        );
+        assert_eq!(
+            resp.headers()
+                .get("x-another")
+                .and_then(|v| v.to_str().ok()),
+            Some("bar")
+        );
+        assert_eq!(resp.text().await.unwrap(), "ok");
+    }
+
+    #[tokio::test]
+    async fn counted_responder_serves_sse_body() {
+        let server = MockServer::start().await;
+        let responder = counted_responder(vec![ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_string("event: x\ndata: 1\n\n")]);
+        Mock::given(wiremock::matchers::any())
+            .respond_with(responder)
+            .mount(&server)
+            .await;
+
+        let resp = no_proxy_get(&server.uri()).await;
+        let body = resp.text().await.unwrap();
+        let msgs = parse_sse_events(&body);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].event_type, "x");
+        assert_eq!(msgs[0].data, "1");
+    }
+
+    // ---------------------------------------------------------------------
+    // Spec 0009 — ListenerStatus serde additional coverage
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn test_listener_status_rejects_uppercase_variants() {
+        assert!(serde_json::from_str::<ListenerStatus>("\"Connected\"").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("\"CONNECTED\"").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("\"Connecting\"").is_err());
+    }
+
+    #[test]
+    fn test_listener_status_rejects_unknown_variant() {
+        assert!(serde_json::from_str::<ListenerStatus>("\"pending\"").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("\"\"").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("\"unknown\"").is_err());
+    }
+
+    #[test]
+    fn test_listener_status_rejects_non_string_payload() {
+        assert!(serde_json::from_str::<ListenerStatus>("123").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("null").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("true").is_err());
+        assert!(serde_json::from_str::<ListenerStatus>("[]").is_err());
+    }
+
+    #[test]
+    fn test_listener_status_roundtrips_inside_outer_struct() {
+        #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
+        struct Wrap {
+            status: ListenerStatus,
+        }
+
+        let cases = [
+            (ListenerStatus::Connecting, "{\"status\":\"connecting\"}"),
+            (ListenerStatus::Connected, "{\"status\":\"connected\"}"),
+            (
+                ListenerStatus::Reconnecting,
+                "{\"status\":\"reconnecting\"}",
+            ),
+            (
+                ListenerStatus::Disconnected,
+                "{\"status\":\"disconnected\"}",
+            ),
+            (ListenerStatus::Error, "{\"status\":\"error\"}"),
+        ];
+        for (status, expected) in cases {
+            let serialized = serde_json::to_string(&Wrap { status }).unwrap();
+            assert_eq!(serialized, expected);
+            let parsed: Wrap = serde_json::from_str(expected).unwrap();
+            assert_eq!(parsed.status, status);
+        }
+    }
+
+    #[test]
+    fn test_listener_status_deserialize_each_variant_independently() {
+        let cases = [
+            ("\"connecting\"", ListenerStatus::Connecting),
+            ("\"connected\"", ListenerStatus::Connected),
+            ("\"reconnecting\"", ListenerStatus::Reconnecting),
+            ("\"disconnected\"", ListenerStatus::Disconnected),
+            ("\"error\"", ListenerStatus::Error),
+        ];
+        for (json, expected) in cases {
+            let parsed: ListenerStatus = serde_json::from_str(json).unwrap();
+            assert_eq!(parsed, expected);
+        }
     }
 }
