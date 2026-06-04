@@ -49,6 +49,12 @@ impl HttpAgentDispatcher {
                 .expect("reqwest::Client::builder().build() should not fail with default settings"),
         }
     }
+
+    /// Construct a dispatcher with a caller-provided reqwest client.
+    /// Useful in tests that need to bypass system proxies.
+    pub fn with_client(client: reqwest::Client) -> Self {
+        Self { client }
+    }
 }
 
 #[async_trait]
@@ -246,5 +252,125 @@ mod tests {
             DispatchError::Registry("not found".into()).to_string(),
             "Registry error: not found"
         );
+    }
+
+    // ----- Local HTTP test server helpers (no third-party mocking libs) -----
+
+    use std::time::Duration as StdDuration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// Spawn a one-shot HTTP server that always responds with the given status
+    /// and body. The first request completes the response and the listener
+    /// then closes — fine for single-shot tests.
+    async fn start_one_shot_http_server(
+        status: u16,
+        body: &'static str,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        start_one_shot_http_server_delayed(status, body, StdDuration::ZERO).await
+    }
+
+    async fn start_one_shot_http_server_delayed(
+        status: u16,
+        body: &'static str,
+        delay: StdDuration,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("http://{addr}/");
+
+        let handle = tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 8192];
+                let _ = socket.read(&mut buf).await;
+                if !delay.is_zero() {
+                    tokio::time::sleep(delay).await;
+                }
+                let response = format!(
+                    "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(response.as_bytes()).await;
+                let _ = socket.shutdown().await;
+            }
+        });
+        (url, handle)
+    }
+
+    #[tokio::test]
+    async fn http_dispatcher_returns_response_body_on_200() {
+        let (url, _handle) = start_one_shot_http_server(200, "{\"ok\":true}").await;
+        let client = reqwest::Client::builder()
+            .timeout(StdDuration::from_secs(2))
+            .no_proxy()
+            .build()
+            .unwrap();
+        let dispatcher = HttpAgentDispatcher::with_client(client);
+        let agent = make_agent(Uuid::new_v4());
+        let mut agent = agent;
+        agent.endpoint = url;
+
+        let result = dispatcher.dispatch_query(&agent, b"{}").await.unwrap();
+        assert_eq!(result, b"{\"ok\":true}".to_vec());
+    }
+
+    #[tokio::test]
+    async fn http_dispatcher_returns_network_error_on_500() {
+        let (url, _handle) = start_one_shot_http_server(500, "boom").await;
+        let client = reqwest::Client::builder()
+            .timeout(StdDuration::from_secs(2))
+            .no_proxy()
+            .build()
+            .unwrap();
+        let dispatcher = HttpAgentDispatcher::with_client(client);
+        let agent = make_agent(Uuid::new_v4());
+        let mut agent = agent;
+        agent.endpoint = url;
+
+        let result = dispatcher.dispatch_query(&agent, b"{}").await;
+        match result.unwrap_err() {
+            DispatchError::Network(msg) => assert!(msg.contains("500"), "got: {msg}"),
+            other => panic!("expected Network(500), got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn http_dispatcher_timeout_returns_timeout_error() {
+        let (url, _handle) =
+            start_one_shot_http_server_delayed(200, "late", StdDuration::from_millis(500)).await;
+        let dispatcher = HttpAgentDispatcher::new(StdDuration::from_millis(50));
+        let agent = make_agent(Uuid::new_v4());
+        let mut agent = agent;
+        agent.endpoint = url;
+
+        let result = dispatcher.dispatch_query(&agent, b"{}").await;
+        match result.unwrap_err() {
+            DispatchError::Timeout => {}
+            other => panic!("expected Timeout, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn mock_dispatcher_concurrent_calls_are_safe() {
+        use std::sync::Arc;
+
+        let id = Uuid::new_v4();
+        let dispatcher = Arc::new(MockAgentDispatcher::with_response(id, b"shared".to_vec()));
+        let agent = Arc::new(make_agent(id));
+
+        let mut handles = Vec::new();
+        for _ in 0..32 {
+            let d = Arc::clone(&dispatcher);
+            let a = Arc::clone(&agent);
+            handles.push(tokio::spawn(async move {
+                d.dispatch_query(&a, b"ping").await.unwrap()
+            }));
+        }
+
+        for h in handles {
+            let result = h.await.unwrap();
+            assert_eq!(result, b"shared".to_vec());
+        }
     }
 }

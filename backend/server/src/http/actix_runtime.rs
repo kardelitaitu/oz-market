@@ -13,6 +13,7 @@ use crate::repositories::{
     AuditEventRepository, OutboxEventRepository, PostgresIdempotencyKeyRepository,
     SellerAccountRepository,
 };
+use crate::services::agent_dispatcher::{AgentDispatcher, HttpAgentDispatcher};
 use crate::services::agent_metrics::AgentMetricsCollector;
 use crate::services::agent_registry::AgentRegistry;
 use crate::services::async_committer::batch_channel;
@@ -145,6 +146,11 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let agent_registry = web::Data::new(AgentRegistry::default());
     let metrics_collector = web::Data::new(AgentMetricsCollector::default());
 
+    // HTTP dispatcher for routing queries to registered agents
+    let agent_dispatcher: Arc<dyn AgentDispatcher> =
+        Arc::new(HttpAgentDispatcher::new(std::time::Duration::from_secs(30)));
+    let dispatcher_data = web::Data::new(agent_dispatcher);
+
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
     let cache_enabled_data = web::Data::new(cache_enabled);
@@ -185,6 +191,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(breaker_registry.clone())
             .app_data(agent_registry.clone())
             .app_data(metrics_collector.clone())
+            .app_data(dispatcher_data.clone())
             // OpenAPI docs
             .route("/docs", web::get().to(crate::openapi::serve_swagger_editor))
             .route(

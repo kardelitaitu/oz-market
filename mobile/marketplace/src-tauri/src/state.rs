@@ -23,4 +23,17 @@ impl AppState {
             negotiation_listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+
+    /// Construct an `AppState` with a custom HTTP client. Used by tests to
+    /// bypass system `HTTP_PROXY` env vars (which would otherwise intercept
+    /// 127.0.0.1 mock-server traffic and return 403).
+    #[cfg(test)]
+    pub fn with_client(client: reqwest::Client) -> Self {
+        Self {
+            client,
+            base_url: Arc::new(RwLock::new("http://127.0.0.1:3000".to_string())),
+            rate_limiter: Arc::new(RwLock::new(RateLimitTracker::new())),
+            negotiation_listeners: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
 }

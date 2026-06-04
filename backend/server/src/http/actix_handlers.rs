@@ -34,7 +34,12 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::domain::ledger::{CreditLedgerError, NewTransaction, TransactionType};
+use crate::services::agent_dispatcher::AgentDispatcher;
+use crate::services::agent_metrics::AgentMetricsCollector;
+use crate::services::agent_registry::AgentRegistry;
+use crate::services::agent_routing;
 use crate::services::async_committer::BatchSender;
+use crate::services::circuit_breaker::CircuitBreakerRegistry;
 use crate::services::ledger_cache::LedgerCache;
 use crate::services::wal::WalEntry;
 
@@ -533,7 +538,11 @@ pub async fn create_listing(
 // --- Agent handler ---
 
 pub async fn agent_query(
-    app: web::Data<ActixApp>,
+    _app: web::Data<ActixApp>,
+    breaker_registry: web::Data<CircuitBreakerRegistry>,
+    agent_registry: web::Data<AgentRegistry>,
+    metrics_collector: web::Data<AgentMetricsCollector>,
+    dispatcher: web::Data<Arc<dyn AgentDispatcher>>,
     req: HttpRequest,
     body: web::Json<AgentQueryRequest>,
 ) -> impl Responder {
@@ -550,13 +559,25 @@ pub async fn agent_query(
     if !rl_agent.allowed {
         return rate_limited("agent query rate limit exceeded (20/min)", &rl_agent);
     }
-    match app.agent_query(Some(&claims), &body).await {
+    match agent_routing::route_agent_query(
+        agent_registry.get_ref(),
+        breaker_registry.get_ref(),
+        metrics_collector.get_ref(),
+        dispatcher.get_ref().as_ref(),
+        &body,
+        agent_routing::DEFAULT_AGENT_TIMEOUT,
+    )
+    .await
+    {
         Ok(result) => HttpResponse::Ok()
             .insert_header(("X-RateLimit-Limit", rl_agent.limit.to_string()))
             .insert_header(("X-RateLimit-Remaining", rl_agent.remaining.to_string()))
             .insert_header(("X-RateLimit-Reset", rl_agent.reset_after_secs.to_string()))
             .json(result),
-        Err(e) => map_handler_error(&e),
+        Err(agent_routing::RoutingError::NoAgentsAvailable) => {
+            error_json(503, "no_agents", "No available agents to process the query")
+        }
+        Err(e) => error_json(502, "dispatch_error", &e.to_string()),
     }
 }
 
@@ -1253,9 +1274,7 @@ pub async fn reject_review(
 // Agent Health API — circuit breaker status
 // ---------------------------------------------------------------------------
 
-use crate::services::agent_metrics::AgentMetricsCollector;
-use crate::services::agent_registry::AgentRegistry;
-use crate::services::circuit_breaker::{collect_health_summaries, CircuitBreakerRegistry};
+use crate::services::circuit_breaker::collect_health_summaries;
 use crate::services::latency_scorer::LatencyScorer;
 
 pub async fn get_agents_health(
@@ -1342,6 +1361,21 @@ pub async fn get_agent_health_detail(
     }
 }
 
+/// POST /v1/health/agents/{agent_id}/reset — manually reset a circuit breaker.
+pub async fn reset_agent_breaker(
+    breaker_registry: web::Data<CircuitBreakerRegistry>,
+    metrics_collector: web::Data<AgentMetricsCollector>,
+    agent_id: web::Path<Uuid>,
+) -> impl Responder {
+    let id = agent_id.into_inner();
+    agent_routing::reset_agent_breaker(
+        breaker_registry.get_ref(),
+        metrics_collector.get_ref(),
+        &id,
+    );
+    HttpResponse::Ok().json(serde_json::json!({ "status": "reset" }))
+}
+
 // ---------------------------------------------------------------------------
 // Shared route registration — called by both production runtime and tests
 // ---------------------------------------------------------------------------
@@ -1350,11 +1384,18 @@ pub async fn get_agent_health_detail(
 /// Called by `actix_runtime` in production and by integration tests.
 /// App data (MarketplaceApp, caches, etc.) must be set before calling this.
 pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
-    // Agent health API — must be before /v1 scope to avoid scope interception
-    cfg.route("/v1/health/agents", web::get().to(get_agents_health))
+    // Agent query route — registered before the /v1 scope so the scope
+    // doesn't intercept and 404 it.
+    cfg.route("/v1/agent/query", web::post().to(agent_query))
+        // Agent health API — must be before /v1 scope to avoid scope interception
+        .route("/v1/health/agents", web::get().to(get_agents_health))
         .route(
             "/v1/health/agents/{agent_id}",
             web::get().to(get_agent_health_detail),
+        )
+        .route(
+            "/v1/health/agents/{agent_id}/reset",
+            web::post().to(reset_agent_breaker),
         )
         // Deprecated listing-type redirects (Spec 0001)
         .route(
@@ -1461,7 +1502,6 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
             "/v1/listings/{listing_id}/reviews",
             web::post().to(create_review),
         )
-        .route("/v1/agent/query", web::post().to(agent_query))
         .route(
             "/v1/listings/{listing_id}/reviews",
             web::get().to(list_reviews_for_listing),
@@ -1838,6 +1878,7 @@ mod tests {
         web::Data<Cache<String, String>>,
         web::Data<LedgerCache>,
         web::Data<BatchSender>,
+        web::Data<Arc<dyn AgentDispatcher>>,
     ) {
         use crate::domain::ledger::CreditLedgerRepository;
         use crate::repositories::audit_events::InMemoryAuditEventRepository;
@@ -1868,6 +1909,9 @@ mod tests {
             Arc::new(InMemoryCreditLedgerRepository::new());
         let ledger_cache = LedgerCache::with_ttl(ledger_repo, Duration::from_secs(3600));
 
+        let dispatcher: Arc<dyn AgentDispatcher> =
+            Arc::new(crate::services::agent_dispatcher::MockAgentDispatcher::default());
+
         (
             web::Data::new(Arc::new(app)),
             web::Data::new(event_tx),
@@ -1876,6 +1920,7 @@ mod tests {
             web::Data::new(cache),
             web::Data::new(ledger_cache),
             web::Data::new(batch_tx),
+            web::Data::new(dispatcher),
         )
     }
 
@@ -1893,6 +1938,7 @@ mod tests {
                 search_cache,
                 ledger_cache,
                 batch_tx,
+                dispatcher,
             ) = make_test_app_data();
             actix_web::test::init_service(
                 actix_web::App::new()
@@ -1903,6 +1949,7 @@ mod tests {
                     .app_data(search_cache)
                     .app_data(ledger_cache)
                     .app_data(batch_tx)
+                    .app_data(dispatcher)
                     .app_data(web::Data::new(CircuitBreakerRegistry::default()))
                     .app_data(web::Data::new(AgentRegistry::default()))
                     .app_data(web::Data::new(AgentMetricsCollector::default()))
@@ -2311,6 +2358,7 @@ mod tests {
             _search_cache,
             _ledger_cache,
             _batch_tx,
+            _dispatcher,
         ) = make_test_app_data();
         let sender = event_bus.get_ref().clone();
         let mut brx = sender.subscribe();
@@ -2426,5 +2474,678 @@ mod tests {
         let body: serde_json::Value = read_body_json(resp).await;
         assert_eq!(body["error"]["code"], "not_found");
         assert_eq!(body["error"]["message"], "Agent not found");
+    }
+
+    #[actix_web::test]
+    async fn reset_agent_breaker_returns_200() {
+        use crate::services::agent_metrics::AgentMetricsCollector;
+        use crate::services::agent_registry::AgentRegistry;
+        use crate::services::circuit_breaker::CircuitBreakerRegistry;
+        use uuid::Uuid;
+
+        let breaker_registry = CircuitBreakerRegistry::default();
+        let agent_registry = AgentRegistry::default();
+        let metrics_collector = AgentMetricsCollector::default();
+
+        let agent_id = Uuid::new_v4();
+        agent_registry.register_agent(crate::services::agent_registry::AgentMetadata {
+            id: agent_id,
+            endpoint: format!("http://agent-{agent_id}.local"),
+            capabilities: vec!["test".into()],
+            is_active: true,
+        });
+
+        for _ in 0..5 {
+            breaker_registry.record_result(agent_id, false, 100.0);
+        }
+        assert!(breaker_registry.is_open(agent_id));
+
+        let cb = web::Data::new(breaker_registry);
+        let ar = web::Data::new(agent_registry);
+        let mc = web::Data::new(metrics_collector);
+
+        let (
+            app_data,
+            event_bus,
+            cache_enabled,
+            listing_cache,
+            search_cache,
+            ledger_cache,
+            batch_tx,
+            dispatcher,
+        ) = make_test_app_data();
+
+        let app = actix_web::test::init_service(
+            actix_web::App::new()
+                .app_data(app_data)
+                .app_data(event_bus)
+                .app_data(cache_enabled)
+                .app_data(listing_cache)
+                .app_data(search_cache)
+                .app_data(ledger_cache)
+                .app_data(batch_tx)
+                .app_data(dispatcher)
+                .app_data(cb.clone())
+                .app_data(ar.clone())
+                .app_data(mc.clone())
+                .configure(register_api_routes),
+        )
+        .await;
+
+        let req = TestRequest::post()
+            .uri(&format!("/v1/health/agents/{agent_id}/reset"))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["status"], "reset");
+
+        assert!(!cb.is_open(agent_id));
+    }
+
+    // -----------------------------------------------------------------------
+    // Spec 0014 — Agent HTTP integration
+    // -----------------------------------------------------------------------
+
+    use crate::services::agent_dispatcher::MockAgentDispatcher;
+
+    /// Build an actix app with custom agent registry, breaker registry,
+    /// metrics collector, and dispatcher. Mirrors `init_actix_app!` but
+    /// allows injecting agent state for routing/health tests.
+    macro_rules! init_agent_app {
+        ($registry:expr, $breakers:expr, $metrics:expr, $dispatcher:expr) => {{
+            let (
+                app_data,
+                event_bus,
+                cache_enabled,
+                listing_cache,
+                search_cache,
+                ledger_cache,
+                batch_tx,
+                _default_dispatcher_unused,
+            ) = make_test_app_data();
+            let dispatcher = web::Data::new($dispatcher);
+            let cb = web::Data::new($breakers);
+            let ar = web::Data::new($registry);
+            let mc = web::Data::new($metrics);
+            actix_web::test::init_service(
+                actix_web::App::new()
+                    .app_data(app_data)
+                    .app_data(event_bus)
+                    .app_data(cache_enabled)
+                    .app_data(listing_cache)
+                    .app_data(search_cache)
+                    .app_data(ledger_cache)
+                    .app_data(batch_tx)
+                    .app_data(cb)
+                    .app_data(ar)
+                    .app_data(mc)
+                    .app_data(dispatcher)
+                    .configure(register_api_routes),
+            )
+            .await
+        }};
+    }
+
+    fn make_agent_claims_header() -> (&'static str, String) {
+        let claims = crate::test_support::seller_claims();
+        (
+            "x-marketplace-claims",
+            serde_json::to_string(&claims).unwrap(),
+        )
+    }
+
+    #[actix_web::test]
+    async fn agent_query_returns_200_with_mock_dispatch() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let agent_id = Uuid::new_v4();
+        let registry = AgentRegistry::default();
+        registry.register_agent(AgentMetadata {
+            id: agent_id,
+            endpoint: "http://agent.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> = Arc::new(
+            MockAgentDispatcher::with_response(agent_id, b"agent-reply".to_vec()),
+        );
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+        let (key, val) = make_agent_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .insert_header((key, val))
+            .set_json(serde_json::json!({
+                "query": "search listings",
+                "conversation_id": "conv-1",
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["conversation_id"], "conv-1");
+        assert!(body["message"]
+            .as_str()
+            .unwrap()
+            .contains("Dispatched to 1 agent(s)"));
+    }
+
+    #[actix_web::test]
+    async fn agent_query_returns_503_when_no_agents_registered() {
+        use crate::services::agent_registry::AgentRegistry;
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+        let (key, val) = make_agent_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .insert_header((key, val))
+            .set_json(serde_json::json!({ "query": "hello" }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 503);
+
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["error"]["code"], "no_agents");
+    }
+
+    #[actix_web::test]
+    async fn agent_query_returns_400_on_missing_query_field() {
+        use crate::services::agent_registry::AgentRegistry;
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+        let (key, val) = make_agent_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .insert_header((key, val))
+            .set_json(serde_json::json!({ "conversation_id": "x" }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 400, "missing required 'query' field");
+    }
+
+    #[actix_web::test]
+    async fn agent_query_returns_401_without_claims_header() {
+        use crate::services::agent_registry::AgentRegistry;
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .set_json(serde_json::json!({ "query": "hello" }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        let status = resp.status();
+        if status == 404 {
+            eprintln!(
+                "agent_query 404: route not registered? body={:?}",
+                resp.into_body()
+            );
+        }
+        assert_eq!(status, 401);
+    }
+
+    #[actix_web::test]
+    async fn agent_query_preserves_supplied_conversation_id() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let agent_id = Uuid::new_v4();
+        let registry = AgentRegistry::default();
+        registry.register_agent(AgentMetadata {
+            id: agent_id,
+            endpoint: "http://agent.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::with_response(agent_id, b"ok".to_vec()));
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+        let (key, val) = make_agent_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .insert_header((key, val))
+            .set_json(serde_json::json!({
+                "query": "search",
+                "conversation_id": "thread-42",
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["conversation_id"], "thread-42");
+    }
+
+    #[actix_web::test]
+    async fn agent_query_returns_200_with_no_success_when_dispatcher_fails_all() {
+        // The route_agent_query function swallows individual dispatch errors
+        // and returns Ok with a 'no agent returned a successful response'
+        // message when every attempt fails. The 502 'dispatch_error' path
+        // in the HTTP handler is therefore unreachable in practice — pinned
+        // here so future refactors don't accidentally change this contract
+        // without updating tests/docs.
+        use crate::services::agent_dispatcher::DispatchError;
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let agent_id = Uuid::new_v4();
+        let registry = AgentRegistry::default();
+        registry.register_agent(AgentMetadata {
+            id: agent_id,
+            endpoint: "http://agent.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::with_error(
+                agent_id,
+                DispatchError::Network("backend down".into()),
+            ));
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+        let (key, val) = make_agent_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .insert_header((key, val))
+            .set_json(serde_json::json!({ "query": "search" }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap()
+                .contains("no agent returned a successful response"),
+            "got: {}",
+            body["message"]
+        );
+    }
+
+    #[actix_web::test]
+    async fn agent_query_with_open_breaker_skips_agent_and_returns_503() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let agent_id = Uuid::new_v4();
+        let registry = AgentRegistry::default();
+        registry.register_agent(AgentMetadata {
+            id: agent_id,
+            endpoint: "http://agent.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        for _ in 0..5 {
+            breakers.record_result(agent_id, false, 100.0);
+        }
+        assert!(breakers.is_open(agent_id));
+
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::with_response(agent_id, b"ok".to_vec()));
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+        let (key, val) = make_agent_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/v1/agent/query")
+            .insert_header((key, val))
+            .set_json(serde_json::json!({ "query": "search" }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(
+            resp.status(),
+            503,
+            "open breaker must skip the agent, leaving none available"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Spec 0017 — Agent health API
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn get_agents_health_includes_summary_fields_per_agent() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get().uri("/v1/health/agents").to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        let agents = body["agents"].as_array().expect("agents array");
+        assert_eq!(agents.len(), 1);
+        let entry = &agents[0];
+        assert_eq!(entry["agent_id"], id.to_string());
+        assert_eq!(entry["state"], "Closed");
+        assert_eq!(entry["failure_count"], 0);
+        assert!(entry["score"]["ewma_latency_ms"].is_number());
+        assert!(entry["score"]["ewma_error_rate"].is_number());
+    }
+
+    #[actix_web::test]
+    async fn get_agents_health_reports_open_state_for_tripped_breaker() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec!["search".into()],
+            is_active: true,
+        });
+        for _ in 0..5 {
+            breakers.record_result(id, false, 100.0);
+        }
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get().uri("/v1/health/agents").to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        let entry = &body["agents"][0];
+        assert_eq!(entry["state"], "Open");
+        assert_eq!(entry["failure_count"], 5);
+    }
+
+    #[actix_web::test]
+    async fn get_agents_health_returns_empty_array_when_no_agents() {
+        use crate::services::agent_registry::AgentRegistry;
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get().uri("/v1/health/agents").to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["agents"].as_array().unwrap().len(), 0);
+    }
+
+    #[actix_web::test]
+    async fn get_agents_health_includes_inactive_agents() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        registry.register_agent(AgentMetadata {
+            id: Uuid::new_v4(),
+            endpoint: "http://a.local".into(),
+            capabilities: vec![],
+            is_active: false,
+        });
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get().uri("/v1/health/agents").to_request();
+        let resp = call_service(&app, req).await;
+        let body: serde_json::Value = read_body_json(resp).await;
+        let agents = body["agents"].as_array().unwrap();
+        assert_eq!(agents.len(), 1, "inactive agents are still listed");
+    }
+
+    #[actix_web::test]
+    async fn get_agent_health_detail_returns_full_payload() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec!["search".into(), "chat".into()],
+            is_active: true,
+        });
+        metrics.record_sample(id, std::time::Duration::from_millis(120), true);
+        metrics.record_sample(id, std::time::Duration::from_millis(180), true);
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get()
+            .uri(&format!("/v1/health/agents/{id}"))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["agent_id"], id.to_string());
+        assert_eq!(body["endpoint"], "http://a.local");
+        assert_eq!(body["state"], "Closed");
+        assert_eq!(body["failure_count"], 0);
+        let caps = body["capabilities"].as_array().unwrap();
+        assert_eq!(caps.len(), 2);
+        assert!(body["score"]["ewma_latency_ms"].as_f64().unwrap() > 0.0);
+    }
+
+    #[actix_web::test]
+    async fn get_agent_health_detail_reports_open_state_and_failure_count() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec!["x".into()],
+            is_active: true,
+        });
+        for _ in 0..5 {
+            breakers.record_result(id, false, 100.0);
+        }
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get()
+            .uri(&format!("/v1/health/agents/{id}"))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["state"], "Open");
+        assert_eq!(body["failure_count"], 5);
+    }
+
+    #[actix_web::test]
+    async fn get_agent_health_detail_zero_failures_for_healthy_agent() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec![],
+            is_active: true,
+        });
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get()
+            .uri(&format!("/v1/health/agents/{id}"))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["failure_count"], 0);
+        assert_eq!(body["state"], "Closed");
+    }
+
+    #[actix_web::test]
+    async fn get_agent_health_detail_returns_default_score_for_no_samples() {
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec![],
+            is_active: true,
+        });
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::get()
+            .uri(&format!("/v1/health/agents/{id}"))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        let body: serde_json::Value = read_body_json(resp).await;
+        let latency = body["score"]["ewma_latency_ms"].as_f64().unwrap();
+        assert!(
+            (latency - 200.0).abs() < 0.001,
+            "expected default 200.0, got {latency}"
+        );
+        assert_eq!(body["score"]["ewma_error_rate"].as_f64().unwrap(), 0.0);
+    }
+
+    #[actix_web::test]
+    async fn reset_agent_breaker_endpoint_returns_200_for_known_agent() {
+        // The metrics-clearing side effect of the reset endpoint is covered
+        // by the service-level test `reset_clears_breaker_and_metrics` and
+        // `reset_agent_breaker_returns_200`. Here we only verify the HTTP
+        // integration: 200 + {"status":"reset"} payload.
+        use crate::services::agent_registry::{AgentMetadata, AgentRegistry};
+        use uuid::Uuid;
+
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+
+        let id = Uuid::new_v4();
+        registry.register_agent(AgentMetadata {
+            id,
+            endpoint: "http://a.local".into(),
+            capabilities: vec![],
+            is_active: true,
+        });
+        for _ in 0..5 {
+            breakers.record_result(id, false, 100.0);
+        }
+        assert!(breakers.is_open(id));
+
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        let req = TestRequest::post()
+            .uri(&format!("/v1/health/agents/{id}/reset"))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["status"], "reset");
+    }
+
+    #[actix_web::test]
+    async fn reset_agent_breaker_idempotent_for_unknown_agent() {
+        use crate::services::agent_registry::AgentRegistry;
+        let registry = AgentRegistry::default();
+        let breakers = crate::services::circuit_breaker::CircuitBreakerRegistry::default();
+        let metrics = crate::services::agent_metrics::AgentMetricsCollector::default();
+        let dispatcher: Arc<dyn crate::services::agent_dispatcher::AgentDispatcher> =
+            Arc::new(MockAgentDispatcher::default());
+
+        let app = init_agent_app!(registry, breakers, metrics, dispatcher);
+
+        // Reset on a never-seen agent must still return 200 (no breaker to reset).
+        let req = TestRequest::post()
+            .uri("/v1/health/agents/11111111-1111-1111-1111-111111111111/reset")
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["status"], "reset");
     }
 }
