@@ -1247,3 +1247,35 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Verified**: `check.ps1` 6/6 pass (the journal-append-only guard and active-spec governance guard both pass - the latter only scans `_active/`, not `_done/`, so the file deletion is invisible to it).
 - **Net diff**: 1 file deleted, 0 added.
 - **Next**: TODO.md M5 - flip the 6 admin endpoint response codes from `200` to `204` in `openapi.yaml`. One-line edits per path, no code change.
+
+
+## 2026-06-05 11:55 - M5: Flip 6 admin endpoint response codes 200 -> 204 in openapi.yaml (audit TODO.md MAJOR item)
+
+- **Goal**: TODO.md MAJOR item M5 - reconcile the spec with code reality. Six admin endpoints in `actix_handlers.rs` return `HttpResponse::NoContent().finish()` (204), but the spec said `200`. Code is semantically correct (no body), spec was wrong. Reference: `archive_listing` at `openapi.yaml:550` is already 204 in the spec.
+- **Code verification** (before any edit) via `rg HttpResponse::NoContent` in `actix_handlers.rs`:
+  - line 932 `release_reservation` -> NoContent
+  - line 959 `set_trust_level` -> NoContent
+  - line 986 `set_quota_override` -> NoContent
+  - line 1020 `recalculate_rating` -> NoContent
+  - line 1224 `approve_review` -> NoContent
+  - line 1261 `reject_review` -> NoContent
+  All 6 confirmed.
+- **What changed (1 file, +6 / -6 lines, 6 one-line status code edits)**:
+  - `docs/specs/openapi.yaml`:
+    - line 580: `reservations/{lease_id}/release` 200 -> 204
+    - line 603: `sellers/{seller_id}/trust-level` 200 -> 204
+    - line 626: `sellers/{seller_id}/quota-override` 200 -> 204
+    - line 643: `sellers/{seller_id}/recalculate-rating` 200 -> 204
+    - line 699: `reviews/{review_id}/approve` 200 -> 204
+    - line 719: `reviews/{review_id}/reject` 200 -> 204
+  - Description text preserved verbatim. No sibling error responses touched.
+- **Validation**:
+  - `python -c 'import yaml; yaml.safe_load(...)'` parses cleanly. Path count still 31.
+  - `npx @redocly/cli lint --config docs/specs/redocly.yaml` shows the same **2 pre-existing warnings** in `ListingPayload/example/shipping_info` (lines 1430-1431) noted in M2. No new warnings from these 6 edits.
+  - `check.ps1` 6/6 pass (no Rust change, all gates still green).
+- **Out of scope (deliberate, kept for followups)**:
+  - Spec 0012 plan says `PUT` for trust-level and quota-override; spec currently documents `PUT` but the spec-vs-code method question is independent of the 200-vs-204 question and is a separate small spec reconciliation.
+  - No `204 No Content` shared response component added - existing 204 entries (archive route) inline the description, and matching that style keeps the diff small.
+  - The 6 endpoints are not in the 6-route set that the legacy raw-TCP runtime also served (deleted in M1), so no parallel-path reconciliation needed.
+- **Net diff**: 1 file, +6 / -6.
+- **Next**: TODO.md MAJOR items M1-M5 are now complete. Remaining: 7 MINOR items (m1, m2, m3, m4, m5, m6, m7, m8, m9) + 8 ENV items (e1-e8). Most are openapi.yaml or .env.example edits. The natural next batches: (a) the 4 pure openapi.yaml MINOR edits (m1 idempotency 200, m2 owner_id query, m4 SSE payload, m6 m6 duplicate archive route) and (b) the 5 done-spec plan drift fixes (m7, m8, m9 plus 0010/0011/0012 plan text). Then the env-var batch.

@@ -577,7 +577,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        '204':
           description: Reservation released
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -600,7 +600,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SetSellerTrustLevelRequest'
       responses:
-        '200':
+        '204':
           description: Trust level updated
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -623,7 +623,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SetSellerQuotaOverrideRequest'
       responses:
-        '200':
+        '204':
           description: Quota override set
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -640,7 +640,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        '204':
           description: Rating recalculated
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -696,7 +696,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        '204':
           description: Review approved
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -715,7 +715,7 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        '204':
           description: Review rejected
         '401':
           $ref: '#/components/responses/Unauthorized'
