@@ -17,8 +17,3 @@ pub mod test_support;
 pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     http::actix_runtime::run()
 }
-
-#[cfg(test)]
-pub fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    http::runtime::run()
-}

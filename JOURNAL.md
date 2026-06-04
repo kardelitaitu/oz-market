@@ -1148,3 +1148,22 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Zero runtime bugs found.** All drift is documentation or dead-path code. Code is functionally correct; 6 CI gates pass.
 - Audit stamp `last audited 05-06-26 by docs-auditor` added to top of new TODO.md.
 - Per user direction, will proceed one-by-one starting with M1 (legacy runtime removal). Each major item gets its own commit + journal entry.
+
+## 2026-06-05 09:00 — M1: Remove legacy raw-TCP HTTP runtime (audit MAJOR item)
+
+- **Goal**: TODO.md MAJOR item M1 — eliminate the dual HTTP runtime. The Actix runtime (`actix_runtime.rs` + `actix_handlers.rs`) is the production entry point wired into `main.rs`; the legacy raw-TCP `runtime.rs` (2259 lines) was reachable via `pub use runtime::run` in `http/mod.rs` and via the `#[cfg(test)] pub fn run()` path in `lib.rs` that called `http::runtime::run()`. Three admin paths in the legacy runtime diverged from the OpenAPI spec (release-reservation, trust-level, quota-override). With the legacy runtime gone, those drifts disappear by construction.
+- **Investigation found two non-obvious couplings before deletion**:
+  1. `runtime.rs` exported `current_time_marker()` which was used by **11 call sites in `actix_handlers.rs`** and **1 in `mcp/src/runtime.rs:14`**. The utility had to be relocated before the file could be deleted.
+  2. `lib.rs:21-24` had a `#[cfg(test)] pub fn run()` that called `http::runtime::run()`. Verified no test or binary called it (`rg 'lib::run|server::run\(' backend/` returns only `main.rs` which uses the non-test path), but it kept `runtime` module-imported in test builds. Removed the test path; the production `pub fn run()` is now `#[cfg(not(test))]` to match the original gate on `actix_runtime`.
+- **Step-by-step (all compile-clean at each step)**:
+  1. Created `backend/server/src/http/util.rs` with `current_time_marker()` (5 lines).
+  2. Updated `http/mod.rs` — added `pub mod util;`, removed `pub use runtime::run;` (deferred `pub mod runtime;` removal until file deletion).
+  3. Updated 11 call sites in `actix_handlers.rs` (regex replaceAll `crate::http::runtime::current_time_marker` → `crate::http::util::current_time_marker`).
+  4. Updated `mcp/src/runtime.rs:14` import path (same util relocation).
+  5. `cargo check --workspace` clean.
+  6. Removed `lib.rs:21-24` test path. Re-gated `pub fn run()` with `#[cfg(not(test))]`.
+  7. Deleted `backend/server/src/http/runtime.rs` and removed `pub mod runtime;` from `http/mod.rs`.
+  8. `cargo check --workspace --all-targets` clean.
+- **Verified**: `check.ps1` 6/6 pass. Test count went from 415 → 395 lib tests (-20 unit tests for the legacy parser `parse_category`, `parse_query_string`, `url_decode`, `split_target`, `parse_sort`, `parse_listing_status`, `search_request_from_query` — all dead code now). 19 postgres integration tests skip cleanly when `DATABASE_URL` is unset.
+- **Net diff**: -2259 lines (one file deleted), +13 lines (new util + 3 modified files).
+- **Next**: TODO.md M2 — document the 14 routes currently missing from `openapi.yaml` (agent query/health, SSE, internal rate-limits, 6 deprecated redirects). All spec drift, no code change. Can be done as a pure documentation commit.

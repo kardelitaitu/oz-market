@@ -11,7 +11,7 @@ use marketplace_api_contract::{
 use marketplace_auth_core::Claims;
 use marketplace_server::app::MarketplaceApp;
 use marketplace_server::http::handlers::HandlerError;
-use marketplace_server::http::runtime::current_time_marker;
+use marketplace_server::http::util::current_time_marker;
 use marketplace_server::repositories::audit_events::{
     InMemoryAuditEventRepository, PostgresAuditEventRepository,
 };

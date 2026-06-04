@@ -515,7 +515,7 @@ pub async fn create_listing(
         return rate_limited("create listing rate limit exceeded (10/min)", &rl_create);
     }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     // Invalidate search cache on write
     if **cache_enabled {
         search_cache.invalidate_all();
@@ -605,7 +605,7 @@ pub async fn open_negotiation(
         return rate_limited("open negotiation rate limit exceeded (20/min)", &rl_negot);
     }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -673,7 +673,7 @@ pub async fn submit_offer(
         return rate_limited("offer submit rate limit exceeded (20/min)", &rl_offer);
     }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -716,7 +716,7 @@ pub async fn accept_negotiation(
         return rate_limited("accept rate limit exceeded (20/min)", &rl_accept);
     }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -764,7 +764,7 @@ pub async fn reject_negotiation(
         return rate_limited("reject rate limit exceeded (20/min)", &rl_reject);
     }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -816,7 +816,7 @@ pub async fn request_contact_reveal(
         );
     }
     let fingerprint = serde_json::to_string(&body).unwrap_or_default();
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -904,7 +904,7 @@ pub async fn archive_listing(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -922,7 +922,7 @@ pub async fn release_reservation(
     lease_id: web::Path<String>,
     claims: web::ReqData<Claims>,
 ) -> impl Responder {
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -947,7 +947,7 @@ pub async fn set_seller_trust_level(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
@@ -974,7 +974,7 @@ pub async fn set_seller_quota_override(
         Ok(c) => c,
         Err(resp) => return resp,
     };
-    let now = crate::http::runtime::current_time_marker();
+    let now = crate::http::util::current_time_marker();
     if **cache_enabled {
         search_cache.invalidate_all();
     }
