@@ -1378,9 +1378,13 @@ async fn postgres_credit_ledger_idempotency_key_replay_returns_existing_balance(
     let first = repo.apply_transaction(&dep1).await?;
     assert_eq!(first.balance_credits, Decimal::from_str("25.0000").unwrap());
 
-    // Replay with the same idempotency_key but a different transaction id.
-    // The UNIQUE(idempotency_key) constraint must reject the second insert
-    // and the function must return the existing balance (idempotency contract).
+    // Replay with the same idempotency_key. Per spec 0010
+    // (`docs/specs/_done/0010-credit-ledger-schema-domain/plan.md`
+    // §"Idempotency contract"): "Handle unique constraint violations on
+    // idempotency_key by rolling back and returning DuplicateIdempotencyKey."
+    // The function returns the error and the transaction rolls back, so the
+    // balance must not change and exactly one row must remain in
+    // credit_transactions.
     let dep2 = NewTransaction {
         id: Uuid::new_v4(),
         agent_id: agent_id.clone(),
@@ -1388,9 +1392,17 @@ async fn postgres_credit_ledger_idempotency_key_replay_returns_existing_balance(
         tx_type: TransactionType::Deposit,
         idempotency_key: format!("idem-{suffix}"),
     };
-    let second = repo.apply_transaction(&dep2).await?;
+    match repo.apply_transaction(&dep2).await {
+        Err(CreditLedgerError::DuplicateIdempotencyKey(k)) => {
+            assert_eq!(k, format!("idem-{suffix}"));
+        }
+        other => panic!("expected DuplicateIdempotencyKey, got {other:?}"),
+    }
+
+    // Balance must be unchanged after the replay (transaction rolled back).
+    let bal = repo.get_balance(&agent_id).await?;
     assert_eq!(
-        second.balance_credits,
+        bal.balance_credits,
         Decimal::from_str("25.0000").unwrap(),
         "idempotency replay must not double-apply"
     );
