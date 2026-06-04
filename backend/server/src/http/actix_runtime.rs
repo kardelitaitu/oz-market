@@ -13,7 +13,10 @@ use crate::repositories::{
     AuditEventRepository, OutboxEventRepository, PostgresIdempotencyKeyRepository,
     SellerAccountRepository,
 };
+use crate::services::agent_metrics::AgentMetricsCollector;
+use crate::services::agent_registry::AgentRegistry;
 use crate::services::async_committer::batch_channel;
+use crate::services::circuit_breaker::CircuitBreakerRegistry;
 use crate::services::ledger_cache::LedgerCache;
 use crate::services::wal::WalManager;
 use actix_web::{web, App, HttpServer};
@@ -137,6 +140,11 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     batch_committer.start();
     let batch_tx_data = web::Data::new(batch_tx);
 
+    // Agent system — circuit breaker, registry, and metrics for agent routing
+    let breaker_registry = web::Data::new(CircuitBreakerRegistry::default());
+    let agent_registry = web::Data::new(AgentRegistry::default());
+    let metrics_collector = web::Data::new(AgentMetricsCollector::default());
+
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
     let cache_enabled_data = web::Data::new(cache_enabled);
@@ -174,6 +182,9 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(batch_tx_data.clone())
             .app_data(pool_data.clone())
             .app_data(event_bus_data.clone())
+            .app_data(breaker_registry.clone())
+            .app_data(agent_registry.clone())
+            .app_data(metrics_collector.clone())
             // OpenAPI docs
             .route("/docs", web::get().to(crate::openapi::serve_swagger_editor))
             .route(

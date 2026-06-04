@@ -1053,3 +1053,13 @@ new line
   - **12 circuit breaker tests** (initial state, success resets, 5-fail trip, slow response, HalfOpen success closes, HalfOpen failure reopens, Open ignores, cooldown remaining, registry create/record/reset, state serialization).
   - All 6 gates PASS (337 tests, clean clippy, clean fmt).
   - Moved spec from `_active/0017-*` to `_done/0017-*`. Active specs remaining: 0018.
+
+## 2026-06-05 (Session)
+
+- **Spec 0018**: Updated TODO.md to check off Phase 2/3/4 items. Updated `docs/specs/README.md` spec index table. Moved `_active/0018-update-affected-documents` to `_done/`.
+- **BatchSender wiring**: Added `batch_tx: web::Data<BatchSender>` param to `adjust_credits` handler. After successful `ledger.apply_transaction()`, creates `WalEntry` from `NewTransaction` fields and calls `try_send` to enqueue to async batch WAL. Updated return type of `make_test_app_data()` (7-tuple), `init_actix_app!` macro, and SSE test destructuring to include `batch_tx`.
+- **Health endpoint integration tests** (`get_agents_health_returns_200`, `get_agent_health_detail_unknown_returns_404`): Added as Actix integration tests. Fixed route interception issue by moving health routes before `web::scope("/v1")` in `register_api_routes`. Fixed test assertions to match actual JSON response shapes.
+- **Production wiring**: Added `CircuitBreakerRegistry`, `AgentRegistry`, `AgentMetricsCollector` creation and `web::Data` injection in `actix_runtime::async_run` alongside other app data.
+- All 6 gates PASS (339 tests, clean clippy, clean fmt).
+- No active specs remaining.
+

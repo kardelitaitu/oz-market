@@ -122,6 +122,34 @@ openapi-generator generate \
 | `spectral-rules.md` | ⚠️ TODO | Custom Spectral rules |
 | `.spectral.yaml` | ⚠️ TODO | Spectral config |
 
+## Specification Library
+
+Specifications are stored under `_active/` (in progress) and `_done/` (completed).
+
+### Active Specs
+
+| ID | Title | Priority |
+|----|-------|----------|
+| 0018 | Update Affected Documents | P3 |
+
+### Completed Specs
+
+| ID | Title | Priority |
+|----|-------|----------|
+| 0001 | Unified Listings Endpoint | P1 |
+| 0002 | Listing ID Cleanup | P2 |
+| 0003 | Negotiation Offer History | P1 |
+| 0004 | HTTP Benchmark Stability | P3 |
+| 0005 | Negotiation Hardening And Parity | P1 |
+| 0010 | Credit Ledger Schema & Domain | P1 |
+| 0011 | Dual-Layer Ledger Cache | P1 |
+| 0012 | Ledger Cache Invalidation | P1 |
+| 0013 | Async Batch WAL + Committer | P1 |
+| 0014 | Agent Routing And Dispatch Core | P2 |
+| 0015 | Agent Metrics Collector | P2 |
+| 0016 | Predictive Latency Scoring | P2 |
+| 0017 | Agent Circuit-Breaker And Health API | P2 |
+
 ---
 
 **The API is fully documented!** 🎉

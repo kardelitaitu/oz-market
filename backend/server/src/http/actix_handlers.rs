@@ -34,7 +34,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::domain::ledger::{CreditLedgerError, NewTransaction, TransactionType};
+use crate::services::async_committer::BatchSender;
 use crate::services::ledger_cache::LedgerCache;
+use crate::services::wal::WalEntry;
 
 // Production hardening: tracing + metrics
 use metrics::{counter, histogram};
@@ -1348,122 +1350,122 @@ pub async fn get_agent_health_detail(
 /// Called by `actix_runtime` in production and by integration tests.
 /// App data (MarketplaceApp, caches, etc.) must be set before calling this.
 pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
-    // Deprecated listing-type redirects (Spec 0001)
-    cfg.route(
-        "/v1/product/{listing_id}",
-        web::get().to(deprecated_listing_redirect),
-    )
-    .route(
-        "/v1/product/search",
-        web::get().to(deprecated_search_redirect),
-    )
-    .route(
-        "/v1/service/{listing_id}",
-        web::get().to(deprecated_listing_redirect),
-    )
-    .route(
-        "/v1/service/search",
-        web::get().to(deprecated_search_redirect),
-    )
-    .route(
-        "/v1/property/{listing_id}",
-        web::get().to(deprecated_listing_redirect),
-    )
-    .route(
-        "/v1/property/search",
-        web::get().to(deprecated_search_redirect),
-    )
-    // Listings
-    .service(
-        web::scope("/v1/listings")
-            .route("/search", web::get().to(search_listings))
-            .route("", web::post().to(create_listing))
-            .route("/{listing_id}", web::get().to(get_listing))
-            .route("/{listing_id}/archive", web::post().to(archive_listing)),
-    )
-    // Negotiations + contact reveals + real-time event stream (SSE)
-    .service(
-        web::scope("/v1")
-            .route("/negotiations", web::post().to(open_negotiation))
-            .route(
-                "/negotiations/{negotiation_id}",
-                web::get().to(get_negotiation_status),
-            )
-            .route(
-                "/negotiations/{negotiation_id}/offers",
-                web::post().to(submit_offer),
-            )
-            .route(
-                "/negotiations/{negotiation_id}/accept",
-                web::post().to(accept_negotiation),
-            )
-            .route(
-                "/negotiations/{negotiation_id}/reject",
-                web::post().to(reject_negotiation),
-            )
-            .route(
-                "/negotiations/{negotiation_id}/request-contact-reveal",
-                web::post().to(request_contact_reveal),
-            )
-            .route(
-                "/contact-reveals/{reveal_id}/approve",
-                web::post().to(approve_contact_reveal),
-            )
-            .route(
-                "/events/negotiations/{negotiation_id}",
-                web::get().to(negotiation_event_stream),
-            ),
-    )
-    // Internal admin/support routes
-    .service(
-        web::scope("/internal/v1")
-            .route(
-                "/listings/{listing_id}/archive",
-                web::post().to(archive_listing),
-            )
-            .route(
-                "/reservations/{lease_id}/release",
-                web::post().to(release_reservation),
-            )
-            .route(
-                "/sellers/{seller_id}/trust-level",
-                web::put().to(set_seller_trust_level),
-            )
-            .route(
-                "/sellers/{seller_id}/quota-override",
-                web::put().to(set_seller_quota_override),
-            )
-            .route(
-                "/sellers/{seller_id}/recalculate-rating",
-                web::post().to(recalculate_seller_rating),
-            )
-            .route(
-                "/reviews/{review_id}/approve",
-                web::post().to(approve_review),
-            )
-            .route("/reviews/{review_id}/reject", web::post().to(reject_review))
-            .route("/rate-limits", web::get().to(get_rate_limits))
-            .route(
-                "/sellers/{seller_id}/credits",
-                web::post().to(adjust_credits),
-            ),
-    )
-    // Reviews
-    .route(
-        "/v1/listings/{listing_id}/reviews",
-        web::post().to(create_review),
-    )
-    .route("/v1/agent/query", web::post().to(agent_query))
-    // Agent health API
-    .route("/v1/health/agents", web::get().to(get_agents_health))
-    .route(
-        "/v1/health/agents/{agent_id}",
-        web::get().to(get_agent_health_detail),
-    )
-    .route(
-        "/v1/listings/{listing_id}/reviews",
-        web::get().to(list_reviews_for_listing),
-    );
+    // Agent health API — must be before /v1 scope to avoid scope interception
+    cfg.route("/v1/health/agents", web::get().to(get_agents_health))
+        .route(
+            "/v1/health/agents/{agent_id}",
+            web::get().to(get_agent_health_detail),
+        )
+        // Deprecated listing-type redirects (Spec 0001)
+        .route(
+            "/v1/product/{listing_id}",
+            web::get().to(deprecated_listing_redirect),
+        )
+        .route(
+            "/v1/product/search",
+            web::get().to(deprecated_search_redirect),
+        )
+        .route(
+            "/v1/service/{listing_id}",
+            web::get().to(deprecated_listing_redirect),
+        )
+        .route(
+            "/v1/service/search",
+            web::get().to(deprecated_search_redirect),
+        )
+        .route(
+            "/v1/property/{listing_id}",
+            web::get().to(deprecated_listing_redirect),
+        )
+        .route(
+            "/v1/property/search",
+            web::get().to(deprecated_search_redirect),
+        )
+        // Listings
+        .service(
+            web::scope("/v1/listings")
+                .route("/search", web::get().to(search_listings))
+                .route("", web::post().to(create_listing))
+                .route("/{listing_id}", web::get().to(get_listing))
+                .route("/{listing_id}/archive", web::post().to(archive_listing)),
+        )
+        // Negotiations + contact reveals + real-time event stream (SSE)
+        .service(
+            web::scope("/v1")
+                .route("/negotiations", web::post().to(open_negotiation))
+                .route(
+                    "/negotiations/{negotiation_id}",
+                    web::get().to(get_negotiation_status),
+                )
+                .route(
+                    "/negotiations/{negotiation_id}/offers",
+                    web::post().to(submit_offer),
+                )
+                .route(
+                    "/negotiations/{negotiation_id}/accept",
+                    web::post().to(accept_negotiation),
+                )
+                .route(
+                    "/negotiations/{negotiation_id}/reject",
+                    web::post().to(reject_negotiation),
+                )
+                .route(
+                    "/negotiations/{negotiation_id}/request-contact-reveal",
+                    web::post().to(request_contact_reveal),
+                )
+                .route(
+                    "/contact-reveals/{reveal_id}/approve",
+                    web::post().to(approve_contact_reveal),
+                )
+                .route(
+                    "/events/negotiations/{negotiation_id}",
+                    web::get().to(negotiation_event_stream),
+                ),
+        )
+        // Internal admin/support routes
+        .service(
+            web::scope("/internal/v1")
+                .route(
+                    "/listings/{listing_id}/archive",
+                    web::post().to(archive_listing),
+                )
+                .route(
+                    "/reservations/{lease_id}/release",
+                    web::post().to(release_reservation),
+                )
+                .route(
+                    "/sellers/{seller_id}/trust-level",
+                    web::put().to(set_seller_trust_level),
+                )
+                .route(
+                    "/sellers/{seller_id}/quota-override",
+                    web::put().to(set_seller_quota_override),
+                )
+                .route(
+                    "/sellers/{seller_id}/recalculate-rating",
+                    web::post().to(recalculate_seller_rating),
+                )
+                .route(
+                    "/reviews/{review_id}/approve",
+                    web::post().to(approve_review),
+                )
+                .route("/reviews/{review_id}/reject", web::post().to(reject_review))
+                .route("/rate-limits", web::get().to(get_rate_limits))
+                .route(
+                    "/sellers/{seller_id}/credits",
+                    web::post().to(adjust_credits),
+                ),
+        )
+        // Reviews
+        .route(
+            "/v1/listings/{listing_id}/reviews",
+            web::post().to(create_review),
+        )
+        .route("/v1/agent/query", web::post().to(agent_query))
+        .route(
+            "/v1/listings/{listing_id}/reviews",
+            web::get().to(list_reviews_for_listing),
+        );
 }
 
 /// Request body for `POST /internal/v1/sellers/{agent_id}/credits`.
@@ -1480,9 +1482,11 @@ pub struct AdjustCreditsRequest {
 /// Admin: adjust an agent's credit balance.
 ///
 /// Requires admin role. Uses write-through to commit to the DB first, then
-/// updates the in-memory ledger cache. Returns the new balance on success.
+/// updates the in-memory ledger cache, and enqueues an entry to the async
+/// batch WAL for crash recovery. Returns the new balance on success.
 pub async fn adjust_credits(
     ledger: web::Data<LedgerCache>,
+    batch_tx: web::Data<BatchSender>,
     agent_id: web::Path<String>,
     body: web::Json<AdjustCreditsRequest>,
     req: HttpRequest,
@@ -1533,12 +1537,24 @@ pub async fn adjust_credits(
     };
 
     match ledger.apply_transaction(&tx).await {
-        Ok(account) => HttpResponse::Ok().json(serde_json::json!({
-            "agent_id": account.agent_id,
-            "balance_credits": account.balance_credits,
-            "idempotency_key": body.idempotency_key,
-            "updated_at": account.updated_at,
-        })),
+        Ok(account) => {
+            // Enqueue to async batch WAL for crash recovery (non-blocking).
+            let wal_entry = WalEntry {
+                transaction_id: tx.id,
+                agent_id: tx.agent_id.clone(),
+                amount: tx.amount.to_string(),
+                tx_type: format!("{:?}", tx.tx_type),
+                idempotency_key: tx.idempotency_key.clone(),
+            };
+            let _ = batch_tx.try_send(wal_entry);
+
+            HttpResponse::Ok().json(serde_json::json!({
+                "agent_id": account.agent_id,
+                "balance_credits": account.balance_credits,
+                "idempotency_key": body.idempotency_key,
+                "updated_at": account.updated_at,
+            }))
+        },
         Err(err) => match err {
             CreditLedgerError::InsufficientCredits { requested, available } => {
                 HttpResponse::BadRequest().json(serde_json::json!({
@@ -1821,6 +1837,7 @@ mod tests {
         web::Data<Cache<String, String>>,
         web::Data<Cache<String, String>>,
         web::Data<LedgerCache>,
+        web::Data<BatchSender>,
     ) {
         use crate::domain::ledger::CreditLedgerRepository;
         use crate::repositories::audit_events::InMemoryAuditEventRepository;
@@ -1830,6 +1847,7 @@ mod tests {
         use crate::repositories::seller_accounts::InMemorySellerAccountRepository;
         use std::sync::Arc;
         use std::time::Duration;
+        use tokio::sync::mpsc;
 
         let app = MarketplaceApp::new(
             InMemoryListingRepository::new(),
@@ -1844,6 +1862,7 @@ mod tests {
 
         let cache: Cache<String, String> = Cache::builder().max_capacity(100).build();
         let (event_tx, _) = broadcast::channel::<String>(1024);
+        let (batch_tx, _) = mpsc::channel::<WalEntry>(1024);
 
         let ledger_repo: Arc<dyn CreditLedgerRepository> =
             Arc::new(InMemoryCreditLedgerRepository::new());
@@ -1856,6 +1875,7 @@ mod tests {
             web::Data::new(cache.clone()),
             web::Data::new(cache),
             web::Data::new(ledger_cache),
+            web::Data::new(batch_tx),
         )
     }
 
@@ -1865,8 +1885,15 @@ mod tests {
             use crate::services::agent_registry::AgentRegistry;
             use crate::services::circuit_breaker::CircuitBreakerRegistry;
 
-            let (app_data, event_bus, cache_enabled, listing_cache, search_cache, ledger_cache) =
-                make_test_app_data();
+            let (
+                app_data,
+                event_bus,
+                cache_enabled,
+                listing_cache,
+                search_cache,
+                ledger_cache,
+                batch_tx,
+            ) = make_test_app_data();
             actix_web::test::init_service(
                 actix_web::App::new()
                     .app_data(app_data)
@@ -1875,6 +1902,7 @@ mod tests {
                     .app_data(listing_cache)
                     .app_data(search_cache)
                     .app_data(ledger_cache)
+                    .app_data(batch_tx)
                     .app_data(web::Data::new(CircuitBreakerRegistry::default()))
                     .app_data(web::Data::new(AgentRegistry::default()))
                     .app_data(web::Data::new(AgentMetricsCollector::default()))
@@ -2275,8 +2303,15 @@ mod tests {
 
     #[actix_web::test]
     async fn actix_sse_negotiation_actions_publish_events() {
-        let (_app_data, event_bus, _cache_enabled, _listing_cache, _search_cache, _ledger_cache) =
-            make_test_app_data();
+        let (
+            _app_data,
+            event_bus,
+            _cache_enabled,
+            _listing_cache,
+            _search_cache,
+            _ledger_cache,
+            _batch_tx,
+        ) = make_test_app_data();
         let sender = event_bus.get_ref().clone();
         let mut brx = sender.subscribe();
 
@@ -2360,5 +2395,36 @@ mod tests {
             "expected at least one broadcast event for negotiation {}",
             neg_id
         );
+    }
+
+    #[actix_web::test]
+    async fn get_agents_health_returns_200() {
+        let app = init_actix_app!();
+
+        let req = TestRequest::get().uri("/v1/health/agents").to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200, "agents health should return 200");
+
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert!(
+            body.get("agents").and_then(|v| v.as_array()).is_some(),
+            "body should have an 'agents' array, got: {:?}",
+            body
+        );
+    }
+
+    #[actix_web::test]
+    async fn get_agent_health_detail_unknown_returns_404() {
+        let app = init_actix_app!();
+
+        let req = TestRequest::get()
+            .uri("/v1/health/agents/00000000-0000-0000-0000-000000000000")
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 404, "unknown agent should return 404");
+
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["error"]["code"], "not_found");
+        assert_eq!(body["error"]["message"], "Agent not found");
     }
 }
