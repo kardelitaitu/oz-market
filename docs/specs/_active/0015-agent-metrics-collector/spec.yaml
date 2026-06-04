@@ -1,0 +1,23 @@
+version: 1
+id: 0015-agent-metrics-collector
+title: Agent Metrics Collector
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - metrics
+files:
+  code:
+    - backend/server/src/services/agent_metrics.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - In-memory sliding window buffer stores call telemetry per agent
+  - Telemetry is recorded asynchronously after every dispatch call
+  - Out of bounds or stale metrics are evicted to avoid unbounded memory growth
+non_goals:
+  - Calculating scores or using EWMA models (deferred to Spec 0016)
+risks:
+  - High synchronization lock contention during high throughput dispatches (mitigated by using thread-safe granular locked windows)

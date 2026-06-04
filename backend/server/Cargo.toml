@@ -16,6 +16,7 @@ tokio-stream = "0.1"
 chrono = "0.4"
 actix-web = "4"
 actix-rt = "2"
+dashmap = "6"
 moka = { version = "0.12", features = ["future", "sync"] }
 reqwest = { version = "0.12", features = ["json"] }
 # Production hardening: tracing + metrics

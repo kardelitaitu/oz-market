@@ -960,3 +960,25 @@ new line
 - **Resolved Pre-existing OpenAPI Schema References**: Declared previously undefined schemas SetSellerTrustLevelRequest and SetSellerQuotaOverrideRequest under components: schemas: to resolve Redocly compilation errors.
 - **Fixed OpenAPI Formatting/Syntax Error**: Resolved a YAML parsing error caused by an unquoted colon in the radius_km description string.
 - Verified that Redocly API description validation succeeds with 0 errors.
+
+## 2026-06-04 23:05
+
+- **Created Phase 4 Specifications (Predictive Latency Scoring)**: Defined 4 new active specifications under docs/specs/_active/ to establish the architecture, components, and checklists:
+  - 0014-agent-routing-dispatch-core: Finished remaining files (implementation-notes.md, validation-checklist.md, quality-rules.md, parity-report.md, ci-commands.md) to define the dynamic in-memory AgentRegistry and HTTP AgentDispatcher.
+  - 0015-agent-metrics-collector: Created all 10 specification files to detail the thread-safe sliding window telemetry queue for capturing duration and success rate.
+  - 0016-predictive-latency-scoring: Created all 10 specification files to detail EWMA smoothing algorithms, probationary default baselines, and scoring metrics.
+  - 0017-agent-circuit-breaker-health-api: Created all 10 specification files outlining the circuit-breaker state machine (Closed, Open, Half-Open), skip/bypass rules, and REST health endpoints.
+- **Verified Spec Governance**: Ran check.ps1 to ensure all frontmatter parameters, statuses, and directories conform to active specification governance policies.
+
+## 2026-06-04 23:35
+
+- **Executed Spec 0011 (Dual-Layer Ledger Cache)**:
+  - Added `dashmap = "6"` to Cargo.toml for concurrent in-memory map.
+  - Created `backend/server/src/services/ledger_cache.rs` — `LedgerCache` struct wrapping `DashMap<String, CreditAccount>` + `Arc<dyn CreditLedgerRepository>`.
+  - **Cache reads**: `get_balance` checks DashMap first; on miss queries DB repo and populates cache.
+  - **Write-through**: `apply_transaction` commits to DB first, updates cache only on success; evicts cached entry on DB failure.
+  - **Delegation**: `get_transaction_history` passes through to the underlying repo.
+  - **Eviction**: `invalidate` (single key) and `invalidate_all` methods.
+  - **7 unit tests**: cache hit, cache miss + populate, write-through update, eviction on DB failure, delegation, invalidate, and concurrent reads/writes (10 concurrent tasks).
+  - All 6 gates PASS (274 tests, clean clippy, clean fmt).
+  - Moved spec from `_active/0011-*` to `_done/0011-*`. Active specs remaining: 0012, 0013, 0014, 0015, 0016, 0017.

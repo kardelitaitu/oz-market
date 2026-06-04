@@ -1,0 +1,24 @@
+version: 1
+id: 0017-agent-circuit-breaker-health-api
+title: Agent Circuit-Breaker and Health API
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - api
+files:
+  code:
+    - backend/server/src/services/circuit_breaker.rs
+    - docs/specs/openapi.yaml
+  docs:
+    - docs/TODO.md
+acceptance:
+  - Circuit-breaker state machine handles Closed, Open, and Half-Open transitions based on error rates and latencies
+  - Slow or failing agents are bypassed by the routing coordinator
+  - OpenAPI paths are added for retrieving agent health lists and detail records
+non_goals:
+  - Persisting agent health history to a database (in-memory state is sufficient)
+risks:
+  - Thread safety and timing inconsistencies in state transitions during concurrent query dispatches

@@ -1,0 +1,23 @@
+version: 1
+id: 0016-predictive-latency-scoring
+title: Predictive Latency Scoring
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - algorithms
+files:
+  code:
+    - backend/server/src/services/latency_scorer.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - EWMA calculation is implemented correctly for both latency and error rate
+  - Cold-start probationary scores are assigned to new agents
+  - Score calculations are validated mathematically in unit tests
+non_goals:
+  - Circuit breaker transitions or API endpoints (deferred to Spec 0017)
+risks:
+  - Tuning the EWMA alpha parameters requires careful calibration to avoid routing instabilities

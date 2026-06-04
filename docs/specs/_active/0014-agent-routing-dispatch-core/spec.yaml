@@ -1,0 +1,24 @@
+version: 1
+id: 0014-agent-routing-dispatch-core
+title: Agent Routing and Dispatch Core Layer
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - agents
+files:
+  code:
+    - backend/server/src/services/agent_registry.rs
+    - backend/server/src/services/agent_dispatcher.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - AgentRegistry is implemented providing thread-safe registration and querying of agents
+  - AgentDispatcher trait is created to route request payloads to target agents dynamically
+  - MockAgentDispatcher is implemented to support offline testing of route dispatching
+non_goals:
+  - Integrating latency scoring or metrics telemetry (deferred to Specs 0015-0017)
+risks:
+  - Race conditions in registry read/write operations (mitigated by using RwLock or DashMap)
