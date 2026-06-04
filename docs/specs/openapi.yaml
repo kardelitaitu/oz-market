@@ -28,6 +28,12 @@ tags:
     description: Controlled contact reveal flows.
   - name: reviews
     description: Listing review and rating flows.
+  - name: agents
+    description: Agent query dispatch and circuit-breaker health monitoring.
+  - name: internal-ops
+    description: Internal operator endpoints (admin or support reviewer only).
+  - name: deprecated
+    description: Sunsetted endpoints that emit 301 redirects to their successors.
 paths:
   /listings:
     post:
@@ -717,6 +723,359 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /agent/query:
+    post:
+      tags: [agents]
+      summary: Dispatch a query to a registered agent
+      description: >
+        Sends the query to the highest-ranked available agent and returns
+        a structured response. Bypasses circuit-breaker open agents.
+        Rate limited at 20/min per agent. Spec 0014.
+      operationId: dispatchAgentQuery
+      x-required-scopes: [agent:query]
+      x-allowed-roles: [seller_listing_writer, seller_negotiator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentQueryRequest'
+      responses:
+        '200':
+          description: Agent response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentQueryResponse'
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: Agent dispatcher error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: No available agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /health/agents:
+    get:
+      tags: [agents]
+      summary: List all agent health summaries
+      description: >
+        Returns the circuit-breaker state, failure count, and EWMA score
+        for every registered agent. Intended for operator dashboards.
+        Unauthenticated for health-check simplicity. Spec 0017.
+      operationId: listAgentsHealth
+      security: []
+      responses:
+        '200':
+          description: Agent health summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agents]
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentHealthSummary'
+  /health/agents/{agent_id}:
+    get:
+      tags: [agents]
+      summary: Get one agent's health detail
+      description: >
+        Returns circuit-breaker state, failure count, EWMA score, and
+        the agent's declared endpoint and capabilities. Spec 0017.
+      operationId: getAgentHealthDetail
+      security: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Agent health detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentHealthDetail'
+  /health/agents/{agent_id}/reset:
+    post:
+      tags: [agents]
+      summary: Reset an agent's circuit breaker
+      description: >
+        Manually clears the circuit-breaker state and the EWMA samples
+        for one agent. Use after fixing an upstream issue. Spec 0017.
+      operationId: resetAgentBreaker
+      security: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Breaker reset
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [reset]
+  /events/negotiations/{negotiation_id}:
+    get:
+      tags: [negotiations]
+      summary: Server-Sent Events stream of negotiation updates
+      description: >
+        SSE stream (Content-Type: text/event-stream) that emits a frame
+        of type `negotiation_updated` whenever the negotiation's state
+        changes, plus a 30-second heartbeat. The first frame is the
+        initial state. Frames have the form:
+          event: negotiation_updated
+          data: {"negotiation_id": "...", "event_type": "...", "response": { ... NegotiationResponse ... }}
+      operationId: streamNegotiationEvents
+      x-required-scopes: [negotiation:read]
+      x-allowed-roles: [seller_listing_writer, seller_negotiator, buyer_searcher, buyer_negotiator, admin, support_reviewer]
+      parameters:
+        - $ref: '#/components/parameters/NegotiationId'
+      responses:
+        '200':
+          description: SSE event stream opened
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events text stream
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /internal/v1/rate-limits:
+    get:
+      tags: [internal-ops]
+      summary: Snapshot of in-memory rate-limiter buckets
+      description: >
+        Returns the current count and oldest age for every active
+        rate-limit bucket, plus the static configuration. Internal
+        operator endpoint — requires admin or support_reviewer role.
+      operationId: getRateLimits
+      x-allowed-roles: [admin, support_reviewer]
+      responses:
+        '200':
+          description: Rate-limit snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [buckets, config]
+                properties:
+                  buckets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RateLimitBucketSnapshot'
+                  config:
+                    $ref: '#/components/schemas/RateLimitConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /product/{listing_id}:
+    get:
+      tags: [deprecated]
+      summary: '[DEPRECATED] Redirect to /v1/listings/{listing_id}'
+      description: >
+        Sunsetted 2026-06-01. Emits 301 to /v1/listings/{listing_id}
+        with Deprecation: true, Sunset, and Link rel="successor-version"
+        headers. Spec 0001.
+      operationId: getDeprecatedProductListing
+      deprecated: true
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '301':
+          description: Moved permanently to /v1/listings/{listing_id}
+          headers:
+            Location:
+              schema:
+                type: string
+              description: New URL
+            Deprecation:
+              schema:
+                type: string
+                enum: ['true']
+            Sunset:
+              schema:
+                type: string
+                format: date
+            Link:
+              schema:
+                type: string
+  /product/search:
+    get:
+      tags: [deprecated]
+      summary: '[DEPRECATED] Redirect to /v1/listings/search'
+      description: >
+        Sunsetted 2026-06-01. Emits 301 to /v1/listings/search with
+        Deprecation: true, Sunset, and Link rel="successor-version"
+        headers. Spec 0001.
+      operationId: getDeprecatedProductSearch
+      deprecated: true
+      responses:
+        '301':
+          description: Moved permanently to /v1/listings/search
+          headers:
+            Location:
+              schema:
+                type: string
+            Deprecation:
+              schema:
+                type: string
+                enum: ['true']
+            Sunset:
+              schema:
+                type: string
+                format: date
+            Link:
+              schema:
+                type: string
+  /service/{listing_id}:
+    get:
+      tags: [deprecated]
+      summary: '[DEPRECATED] Redirect to /v1/listings/{listing_id}'
+      description: >
+        Sunsetted 2026-06-01. Emits 301 to /v1/listings/{listing_id}.
+        Spec 0001.
+      operationId: getDeprecatedServiceListing
+      deprecated: true
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '301':
+          description: Moved permanently to /v1/listings/{listing_id}
+          headers:
+            Location:
+              schema:
+                type: string
+            Deprecation:
+              schema:
+                type: string
+                enum: ['true']
+            Sunset:
+              schema:
+                type: string
+                format: date
+            Link:
+              schema:
+                type: string
+  /service/search:
+    get:
+      tags: [deprecated]
+      summary: '[DEPRECATED] Redirect to /v1/listings/search'
+      description: >
+        Sunsetted 2026-06-01. Emits 301 to /v1/listings/search.
+        Spec 0001.
+      operationId: getDeprecatedServiceSearch
+      deprecated: true
+      responses:
+        '301':
+          description: Moved permanently to /v1/listings/search
+          headers:
+            Location:
+              schema:
+                type: string
+            Deprecation:
+              schema:
+                type: string
+                enum: ['true']
+            Sunset:
+              schema:
+                type: string
+                format: date
+            Link:
+              schema:
+                type: string
+  /property/{listing_id}:
+    get:
+      tags: [deprecated]
+      summary: '[DEPRECATED] Redirect to /v1/listings/{listing_id}'
+      description: >
+        Sunsetted 2026-06-01. Emits 301 to /v1/listings/{listing_id}.
+        Spec 0001.
+      operationId: getDeprecatedPropertyListing
+      deprecated: true
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '301':
+          description: Moved permanently to /v1/listings/{listing_id}
+          headers:
+            Location:
+              schema:
+                type: string
+            Deprecation:
+              schema:
+                type: string
+                enum: ['true']
+            Sunset:
+              schema:
+                type: string
+                format: date
+            Link:
+              schema:
+                type: string
+  /property/search:
+    get:
+      tags: [deprecated]
+      summary: '[DEPRECATED] Redirect to /v1/listings/search'
+      description: >
+        Sunsetted 2026-06-01. Emits 301 to /v1/listings/search.
+        Spec 0001.
+      operationId: getDeprecatedPropertySearch
+      deprecated: true
+      responses:
+        '301':
+          description: Moved permanently to /v1/listings/search
+          headers:
+            Location:
+              schema:
+                type: string
+            Deprecation:
+              schema:
+                type: string
+                enum: ['true']
+            Sunset:
+              schema:
+                type: string
+                format: date
+            Link:
+              schema:
+                type: string
 
 components:
   securitySchemes:
@@ -743,6 +1102,19 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ResourceId'
+  headers:
+    RateLimitLimit:
+      description: Maximum number of requests allowed in the current window.
+      schema:
+        type: integer
+    RateLimitRemaining:
+      description: Remaining requests in the current window.
+      schema:
+        type: integer
+    RateLimitReset:
+      description: Seconds until the rate-limit window resets.
+      schema:
+        type: integer
   responses:
     BadRequest:
       description: Invalid request
@@ -1517,3 +1889,193 @@ components:
           type: string
           format: date-time
           example: "2026-06-04T15:30:00Z"
+    AgentQueryRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          description: Natural-language query forwarded to the highest-ranked available agent.
+        conversation_id:
+          type:
+            - string
+            - 'null'
+          description: Optional conversation identifier to maintain context across calls.
+      example:
+        query: "Find me a ThinkPad under $500"
+        conversation_id: conv-001
+    AgentAction:
+      type: object
+      additionalProperties: false
+      required: [action_type, label, params]
+      properties:
+        action_type:
+          type: string
+          description: Discriminator for the suggested action.
+          example: search_listings
+        label:
+          type: string
+          description: Human-readable label for the action.
+          example: Search listings
+        params:
+          type: object
+          additionalProperties: true
+          description: Free-form parameters for the action.
+          example: { "query": "ThinkPad", "max_amount": 500 }
+    AgentQueryResponse:
+      type: object
+      additionalProperties: false
+      required: [message, conversation_id]
+      properties:
+        message:
+          type: string
+          description: Free-form message from the agent.
+        actions:
+          type: array
+          description: Optional list of suggested actions for the client to render.
+          items:
+            $ref: '#/components/schemas/AgentAction'
+        conversation_id:
+          type: string
+          description: Echo of the request conversation_id, or a fresh one if absent.
+        listing_ids:
+          type: array
+          description: Optional list of listing IDs the agent references.
+          items:
+            type: string
+      example:
+        message: "I found 3 ThinkPad listings under $500."
+        actions:
+          - action_type: search_listings
+            label: Show me these
+            params: { "query": "ThinkPad", "max_amount": 500 }
+        conversation_id: conv-001
+        listing_ids: [lst_123, lst_456]
+    AgentHealthScore:
+      type: object
+      additionalProperties: false
+      required: [ewma_latency_ms, ewma_error_rate]
+      properties:
+        ewma_latency_ms:
+          type: number
+          description: Exponentially-weighted moving average of recent latency in milliseconds.
+          example: 142.7
+        ewma_error_rate:
+          type: number
+          description: Exponentially-weighted moving average of error rate (0.0-1.0).
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.02
+    AgentHealthSummary:
+      type: object
+      additionalProperties: false
+      required: [agent_id, state, failure_count, cooldown_remaining_secs, score]
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+          description: Agent identifier.
+        state:
+          type: string
+          enum: [Closed, Open, HalfOpen]
+          description: Current circuit-breaker state.
+        failure_count:
+          type: integer
+          description: Consecutive-failure counter. Resets on success or manual reset.
+          minimum: 0
+        cooldown_remaining_secs:
+          type: integer
+          description: Seconds until the breaker can transition from Open to HalfOpen.
+          minimum: 0
+        score:
+          $ref: '#/components/schemas/AgentHealthScore'
+    AgentHealthDetail:
+      type: object
+      additionalProperties: false
+      required: [agent_id, state, failure_count, cooldown_remaining_secs, score]
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        endpoint:
+          type:
+            - string
+            - 'null'
+          description: The HTTP endpoint the dispatcher forwards queries to.
+        capabilities:
+          type: array
+          description: Agent-declared capabilities.
+          items:
+            type: string
+        state:
+          type: string
+          enum: [Closed, Open, HalfOpen]
+        failure_count:
+          type: integer
+          minimum: 0
+        cooldown_remaining_secs:
+          type: integer
+          minimum: 0
+        score:
+          $ref: '#/components/schemas/AgentHealthScore'
+    RateLimitBucketSnapshot:
+      type: object
+      additionalProperties: false
+      required: [key, count, oldest_age_secs]
+      properties:
+        key:
+          type: string
+          description: Bucket key (e.g. "negotiate:agent-1").
+        count:
+          type: integer
+          description: Current count of consumed slots in the active window.
+        oldest_age_secs:
+          type: integer
+          description: Age in seconds of the oldest sample in the bucket.
+    RateLimitConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        search:
+          type: object
+          required: [max, window_secs]
+          properties:
+            max: { type: integer }
+            window_secs: { type: integer }
+        create_listing:
+          type: object
+          required: [max, window_secs]
+          properties:
+            max: { type: integer }
+            window_secs: { type: integer }
+        open_negotiation:
+          type: object
+          required: [max, window_secs]
+          properties:
+            max: { type: integer }
+            window_secs: { type: integer }
+        contact_reveal:
+          type: object
+          required: [max, window_secs]
+          properties:
+            max: { type: integer }
+            window_secs: { type: integer }
+        agent_query:
+          type: object
+          required: [max, window_secs]
+          properties:
+            max: { type: integer }
+            window_secs: { type: integer }
+        new_seller_daily:
+          type: object
+          required: [max]
+          properties:
+            max: { type: integer }
+        new_seller_hourly:
+          type: object
+          required: [max]
+          properties:
+            max: { type: integer }

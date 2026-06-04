@@ -1167,3 +1167,27 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Verified**: `check.ps1` 6/6 pass. Test count went from 415 → 395 lib tests (-20 unit tests for the legacy parser `parse_category`, `parse_query_string`, `url_decode`, `split_target`, `parse_sort`, `parse_listing_status`, `search_request_from_query` — all dead code now). 19 postgres integration tests skip cleanly when `DATABASE_URL` is unset.
 - **Net diff**: -2259 lines (one file deleted), +13 lines (new util + 3 modified files).
 - **Next**: TODO.md M2 — document the 14 routes currently missing from `openapi.yaml` (agent query/health, SSE, internal rate-limits, 6 deprecated redirects). All spec drift, no code change. Can be done as a pure documentation commit.
+
+## 2026-06-05 09:45 — M2: Document 12 undocumented routes in openapi.yaml (audit MAJOR item)
+
+- **Goal**: TODO.md MAJOR item M2 — add 12 routes that are live in code but missing from `docs/specs/openapi.yaml`. After M1 deleted the legacy raw-TCP runtime, these are the only routes the codebase serves that the spec didn't know about.
+- **What was added to `openapi.yaml`** (+562 lines, 0 code changes):
+  - 3 new tags: `agents`, `internal-ops`, `deprecated`
+  - 12 new paths:
+    - `POST /v1/agent/query` (agents, 200/401/403/429/502/503 + `X-RateLimit-*` headers)
+    - `GET /v1/health/agents` (agents, unauthenticated)
+    - `GET /v1/health/agents/{agent_id}` (agents, unauthenticated)
+    - `POST /v1/health/agents/{agent_id}/reset` (agents, unauthenticated)
+    - `GET /v1/events/negotiations/{negotiation_id}` (negotiations, SSE stream)
+    - `GET /internal/v1/rate-limits` (internal-ops, admin/support_reviewer only)
+    - 6 deprecated redirect paths under `deprecated` tag with `deprecated: true` flag: `/v1/product/{id}`, `/v1/product/search`, `/v1/service/{id}`, `/v1/service/search`, `/v1/property/{id}`, `/v1/property/search`. All mark `Sunset: 2026-06-01` (already passed — 4 days ago).
+  - 1 new `headers` component (`RateLimitLimit`, `RateLimitRemaining`, `RateLimitReset`) — shared across any future route that needs to document the rate-limit headers.
+  - 7 new schemas: `AgentQueryRequest`, `AgentAction`, `AgentQueryResponse`, `AgentHealthScore`, `AgentHealthSummary`, `AgentHealthDetail`, `RateLimitBucketSnapshot`, `RateLimitConfig` (matches Rust structs in `crates/api-contract/src/agent.rs` + `services/rate_limiter.rs` + handler-defined JSON shapes).
+- **Validation**:
+  - `python -c 'import yaml; yaml.safe_load(...)'` parses cleanly.
+  - `npx @redocly/cli lint --config docs/specs/redocly.yaml` reports only **2 pre-existing warnings** in `ListingPayload/example/shipping_info` (lines 1428-1431) — both in the pre-existing example value, not in my additions. None of the new paths or schemas trigger warnings.
+  - `yamllint -c docs/specs/yamllint.yaml` reports the same pre-existing CRLF/LF line-ending warning on line 1 of the file (project-wide Windows issue, not a regression).
+  - `check.ps1` 6/6 pass; lib tests still 395 (no code change).
+- **Spec stats**: paths 19 → 31 (+12), schemas 36 → 43 (+7), tags 5 → 8 (+3).
+- **Note on the deprecated endpoints**: their `Sunset: 2026-06-01` date is already 4 days in the past (today is 2026-06-05). The endpoints still serve 301 redirects. They should be removed in a follow-up. The spec now correctly marks them with `deprecated: true` so tooling like Redocly will flag them.
+- **Next**: TODO.md M3 — add the four ledger Prometheus counters (spec 0013 §4). Small, contained change in `observability/mod.rs` + emit sites in `ledger_cache.rs` and `async_committer.rs`. Code-only, no spec/doc changes.
