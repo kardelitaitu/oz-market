@@ -56,6 +56,12 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateListingRequest'
       responses:
+        '200':
+          description: Listing already exists (idempotency replay; same body)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateListingResponse'
         '201':
           description: Listing created
           content:
@@ -171,6 +177,13 @@ paths:
             type: string
             minLength: 1
             maxLength: 200
+        - name: owner_id
+          in: query
+          description: >
+            Restrict results to listings owned by this seller_account_id.
+            Maps to SearchRequest.owner_id (api-contract/src/listing.rs).
+          schema:
+            type: string
         - name: category
           in: query
           schema:
@@ -293,6 +306,12 @@ paths:
             schema:
               $ref: '#/components/schemas/OpenNegotiationRequest'
       responses:
+        '200':
+          description: Negotiation already exists (idempotency replay; same body)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
         '201':
           description: Negotiation created
           content:
@@ -869,7 +888,15 @@ paths:
             text/event-stream:
               schema:
                 type: string
-                description: Server-Sent Events text stream
+                description: >
+                  Server-Sent Events text stream. Each frame is delivered
+                  as `event: negotiation_updated` with a `data:` line
+                  whose payload is a NegotiationEvent JSON object (see
+                  components.schemas.NegotiationEvent). Heartbeats are
+                  sent as comment lines (`:hb`) every 30 seconds.
+              example: |
+                event: negotiation_updated
+                data: {"negotiation_id":"neg_123","event_type":"negotiation_updated","response":{ ... NegotiationResponse ... }}
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1726,6 +1753,53 @@ components:
             created_at: '2026-05-04T00:00:00Z'
         version: 1
         updated_at: '2026-05-04T00:00:00Z'
+    NegotiationEvent:
+      type: object
+      description: >
+        Frame body for the SSE stream at
+        GET /v1/events/negotiations/{negotiation_id}.
+        Mirrors the Rust struct NegotiationEvent in
+        backend/server/src/http/actix_handlers.rs. Each frame is
+        delivered as a `negotiation_updated` Server-Sent Event with
+        this object as the `data` payload.
+      additionalProperties: false
+      required: [negotiation_id, event_type, response]
+      properties:
+        negotiation_id:
+          type: string
+          description: Negotiation this frame pertains to.
+        event_type:
+          type: string
+          description: >
+            Discriminator for what triggered the frame. Currently
+            emitted values include `negotiation_updated` (state
+            change) and the initial state snapshot on connect.
+        response:
+          $ref: '#/components/schemas/NegotiationResponse'
+      example:
+        negotiation_id: neg_123
+        event_type: negotiation_updated
+        response:
+          negotiation_id: neg_123
+          listing_id: lst_123
+          buyer_agent_id: buyer-agent-1
+          status: open
+          offer_currency: USD
+          latest_offer_amount: 430
+          reservation_lease_id: null
+          final_offer_amount: null
+          offer_history:
+            - entry_id: neg_123-offer-1
+              entry_type: offer
+              offer_currency: USD
+              offer_amount: 430
+              actor_subject: buyer-1
+              actor_role: buyer_negotiator
+              idempotency_key: offer-001
+              resulting_status: reserved
+              created_at: '2026-05-04T00:00:00Z'
+          version: 1
+          updated_at: '2026-05-04T00:00:00Z'
     NegotiationHistoryEntryType:
       type: string
       enum: [offer, accept, reject]

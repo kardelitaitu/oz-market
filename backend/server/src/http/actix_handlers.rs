@@ -1427,8 +1427,7 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
             web::scope("/v1/listings")
                 .route("/search", web::get().to(search_listings))
                 .route("", web::post().to(create_listing))
-                .route("/{listing_id}", web::get().to(get_listing))
-                .route("/{listing_id}/archive", web::post().to(archive_listing)),
+                .route("/{listing_id}", web::get().to(get_listing)),
         )
         // Negotiations + contact reveals + real-time event stream (SSE)
         .service(
