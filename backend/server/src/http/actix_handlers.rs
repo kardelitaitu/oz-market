@@ -26,9 +26,15 @@ use marketplace_api_contract::{
 };
 use marketplace_auth_core::{Claims, Role};
 use moka::future::Cache;
+use rust_decimal::Decimal;
+use serde::Deserialize;
 use serde_json::json;
 use sqlx::Row;
 use std::sync::Arc;
+use uuid::Uuid;
+
+use crate::domain::ledger::{CreditLedgerError, NewTransaction, TransactionType};
+use crate::services::ledger_cache::LedgerCache;
 
 // Production hardening: tracing + metrics
 use metrics::{counter, histogram};
@@ -1343,7 +1349,11 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
                 web::post().to(approve_review),
             )
             .route("/reviews/{review_id}/reject", web::post().to(reject_review))
-            .route("/rate-limits", web::get().to(get_rate_limits)),
+            .route("/rate-limits", web::get().to(get_rate_limits))
+            .route(
+                "/sellers/{seller_id}/credits",
+                web::post().to(adjust_credits),
+            ),
     )
     // Reviews
     .route(
@@ -1355,6 +1365,108 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
         "/v1/listings/{listing_id}/reviews",
         web::get().to(list_reviews_for_listing),
     );
+}
+
+/// Request body for `POST /internal/v1/sellers/{agent_id}/credits`.
+#[derive(Debug, Deserialize)]
+pub struct AdjustCreditsRequest {
+    /// One of: "deposit", "spend", "refund", "adjustment".
+    pub adjustment: String,
+    /// Positive decimal amount.
+    pub amount: Decimal,
+    /// Unique idempotency key for the transaction.
+    pub idempotency_key: String,
+}
+
+/// Admin: adjust an agent's credit balance.
+///
+/// Requires admin role. Uses write-through to commit to the DB first, then
+/// updates the in-memory ledger cache. Returns the new balance on success.
+pub async fn adjust_credits(
+    ledger: web::Data<LedgerCache>,
+    agent_id: web::Path<String>,
+    body: web::Json<AdjustCreditsRequest>,
+    req: HttpRequest,
+) -> impl Responder {
+    let claims = match extract_claims(&req) {
+        Ok(c) => c,
+        Err(resp) => return resp,
+    };
+
+    if !claims.roles.iter().any(|r| matches!(r, Role::Admin)) {
+        return error_json(403, "forbidden", "Admin access required");
+    }
+
+    let tx_type = match body.adjustment.as_str() {
+        "deposit" => TransactionType::Deposit,
+        "spend" => TransactionType::Spend,
+        "refund" => TransactionType::Refund,
+        "adjustment" => TransactionType::Adjustment,
+        _ => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "invalid_transaction_type",
+                "message": "Transaction type must be deposit, spend, refund, or adjustment.",
+            }));
+        }
+    };
+
+    if body.amount <= Decimal::ZERO {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "invalid_amount",
+            "message": "Amount must be positive.",
+        }));
+    }
+
+    // Spend transactions carry a positive amount in the request but must be
+    // represented as a negative delta in the ledger repository.
+    let amount = if matches!(tx_type, TransactionType::Spend) {
+        -body.amount
+    } else {
+        body.amount
+    };
+
+    let tx = NewTransaction {
+        id: Uuid::new_v4(),
+        agent_id: agent_id.into_inner(),
+        amount,
+        tx_type,
+        idempotency_key: body.idempotency_key.clone(),
+    };
+
+    match ledger.apply_transaction(&tx).await {
+        Ok(account) => HttpResponse::Ok().json(serde_json::json!({
+            "agent_id": account.agent_id,
+            "balance_credits": account.balance_credits,
+            "idempotency_key": body.idempotency_key,
+            "updated_at": account.updated_at,
+        })),
+        Err(err) => match err {
+            CreditLedgerError::InsufficientCredits { requested, available } => {
+                HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "insufficient_credits",
+                    "message": format!("Insufficient credits: requested {requested}, available {available}"),
+                }))
+            }
+            CreditLedgerError::DuplicateIdempotencyKey(key) => {
+                HttpResponse::Conflict().json(serde_json::json!({
+                    "error": "duplicate_idempotency_key",
+                    "message": format!("Transaction with idempotency key '{key}' already exists"),
+                }))
+            }
+            CreditLedgerError::AgentNotFound(_) => {
+                HttpResponse::NotFound().json(serde_json::json!({
+                    "error": "agent_not_found",
+                    "message": "Agent not found",
+                }))
+            }
+            CreditLedgerError::DatabaseError(msg) => {
+                HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "internal_error",
+                    "message": msg,
+                }))
+            }
+        },
+    }
 }
 
 #[cfg(test)]
@@ -1609,12 +1721,16 @@ mod tests {
         web::Data<bool>,
         web::Data<Cache<String, String>>,
         web::Data<Cache<String, String>>,
+        web::Data<LedgerCache>,
     ) {
+        use crate::domain::ledger::CreditLedgerRepository;
         use crate::repositories::audit_events::InMemoryAuditEventRepository;
+        use crate::repositories::ledger::InMemoryCreditLedgerRepository;
         use crate::repositories::negotiations::InMemoryNegotiationRepository;
         use crate::repositories::outbox_events::InMemoryOutboxEventRepository;
         use crate::repositories::seller_accounts::InMemorySellerAccountRepository;
         use std::sync::Arc;
+        use std::time::Duration;
 
         let app = MarketplaceApp::new(
             InMemoryListingRepository::new(),
@@ -1630,18 +1746,23 @@ mod tests {
         let cache: Cache<String, String> = Cache::builder().max_capacity(100).build();
         let (event_tx, _) = broadcast::channel::<String>(1024);
 
+        let ledger_repo: Arc<dyn CreditLedgerRepository> =
+            Arc::new(InMemoryCreditLedgerRepository::new());
+        let ledger_cache = LedgerCache::with_ttl(ledger_repo, Duration::from_secs(3600));
+
         (
             web::Data::new(Arc::new(app)),
             web::Data::new(event_tx),
             web::Data::new(true),
             web::Data::new(cache.clone()),
             web::Data::new(cache),
+            web::Data::new(ledger_cache),
         )
     }
 
     macro_rules! init_actix_app {
         () => {{
-            let (app_data, event_bus, cache_enabled, listing_cache, search_cache) =
+            let (app_data, event_bus, cache_enabled, listing_cache, search_cache, ledger_cache) =
                 make_test_app_data();
             actix_web::test::init_service(
                 actix_web::App::new()
@@ -1650,6 +1771,7 @@ mod tests {
                     .app_data(cache_enabled)
                     .app_data(listing_cache)
                     .app_data(search_cache)
+                    .app_data(ledger_cache)
                     .configure(register_api_routes),
             )
             .await
@@ -1881,9 +2003,173 @@ mod tests {
         // because test in-memory repos may not have the negotiation.
     }
 
+    fn admin_claims_header() -> (&'static str, String) {
+        let claims = crate::test_support::admin_claims();
+        (
+            "x-marketplace-claims",
+            serde_json::to_string(&claims).unwrap(),
+        )
+    }
+
+    #[actix_web::test]
+    async fn admin_credits_deposit_success() {
+        let app = init_actix_app!();
+        let (key, val) = admin_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-1/credits")
+            .insert_header((key, val))
+            .set_json(json!({
+                "adjustment": "deposit",
+                "amount": "100.0000",
+                "idempotency_key": "adm-dep-1"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(
+            resp.status(),
+            200,
+            "deposit should succeed: {}",
+            resp.status()
+        );
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["agent_id"], "agent-1");
+        assert_eq!(body["balance_credits"], "100.0000");
+        assert_eq!(body["idempotency_key"], "adm-dep-1");
+        assert!(body["updated_at"].is_string());
+    }
+
+    #[actix_web::test]
+    async fn admin_credits_auth_rejected() {
+        let app = init_actix_app!();
+
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-1/credits")
+            .set_json(json!({
+                "adjustment": "deposit",
+                "amount": "100.0000",
+                "idempotency_key": "adm-no-auth"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 401, "missing claims should be 401");
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["error"], "missing claims header");
+    }
+
+    #[actix_web::test]
+    async fn admin_credits_non_admin_rejected() {
+        let app = init_actix_app!();
+        let (key, val) = seller_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-1/credits")
+            .insert_header((key, val))
+            .set_json(json!({
+                "adjustment": "deposit",
+                "amount": "100.0000",
+                "idempotency_key": "adm-no-role"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 403, "non-admin should be 403");
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["error"]["code"], "forbidden");
+        assert_eq!(body["error"]["message"], "Admin access required");
+    }
+
+    #[actix_web::test]
+    async fn admin_credits_invalid_transaction_type() {
+        let app = init_actix_app!();
+        let (key, val) = admin_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-1/credits")
+            .insert_header((key, val))
+            .set_json(json!({
+                "adjustment": "invalid_tx",
+                "amount": "100.0000",
+                "idempotency_key": "adm-bad-tx"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 400, "bad adjustment should be 400");
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["error"], "invalid_transaction_type");
+    }
+
+    #[actix_web::test]
+    async fn admin_credits_spend_deducts_and_returns_new_balance() {
+        let app = init_actix_app!();
+        let (key, val) = admin_claims_header();
+
+        // Deposit 200 first
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-2/credits")
+            .insert_header((key, val.clone()))
+            .set_json(json!({
+                "adjustment": "deposit",
+                "amount": "200.0000",
+                "idempotency_key": "adm-spend-prep"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200, "deposit prep: {}", resp.status());
+
+        // Then spend 50
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-2/credits")
+            .insert_header((key, val))
+            .set_json(json!({
+                "adjustment": "spend",
+                "amount": "50.0000",
+                "idempotency_key": "adm-spend-do"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(
+            resp.status(),
+            200,
+            "spend should succeed: {}",
+            resp.status()
+        );
+        let body: serde_json::Value = read_body_json(resp).await;
+        assert_eq!(body["balance_credits"], "150.0000");
+    }
+
+    #[actix_web::test]
+    async fn admin_credits_duplicate_idempotency() {
+        let app = init_actix_app!();
+        let (key, val) = admin_claims_header();
+
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-1/credits")
+            .insert_header((key, val.clone()))
+            .set_json(json!({
+                "adjustment": "deposit",
+                "amount": "50.0000",
+                "idempotency_key": "dup-key"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 200, "first deposit: {}", resp.status());
+
+        let req = TestRequest::post()
+            .uri("/internal/v1/sellers/agent-1/credits")
+            .insert_header((key, val))
+            .set_json(json!({
+                "adjustment": "deposit",
+                "amount": "50.0000",
+                "idempotency_key": "dup-key"
+            }))
+            .to_request();
+        let resp = call_service(&app, req).await;
+        assert_eq!(resp.status(), 409, "duplicate key should be 409");
+    }
+
     #[actix_web::test]
     async fn actix_sse_negotiation_actions_publish_events() {
-        let (_app_data, event_bus, _cache_enabled, _listing_cache, _search_cache) =
+        let (_app_data, event_bus, _cache_enabled, _listing_cache, _search_cache, _ledger_cache) =
             make_test_app_data();
         let sender = event_bus.get_ref().clone();
         let mut brx = sender.subscribe();
@@ -1898,6 +2184,7 @@ mod tests {
                 .app_data(_cache_enabled)
                 .app_data(_listing_cache)
                 .app_data(_search_cache)
+                .app_data(_ledger_cache)
                 .configure(register_api_routes),
         )
         .await;

@@ -982,3 +982,21 @@ new line
   - **7 unit tests**: cache hit, cache miss + populate, write-through update, eviction on DB failure, delegation, invalidate, and concurrent reads/writes (10 concurrent tasks).
   - All 6 gates PASS (274 tests, clean clippy, clean fmt).
   - Moved spec from `_active/0011-*` to `_done/0011-*`. Active specs remaining: 0012, 0013, 0014, 0015, 0016, 0017.
+
+## 2026-06-05 02:15
+
+- **Executed Spec 0012 (Cache Invalidation & Admin Endpoint)**:
+  - **TTL support**: Added `CachedEntry` struct storing `account + inserted_at: Instant` to `LedgerCache`. Entries evicted when `now - inserted_at > ttl`. Configurable via `LEDGER_CACHE_TTL_SECS` env var (default 300s).
+  - **`with_ttl()` constructor**: Added for deterministic test TTLs (`ZERO_TTL` for instant expiry tests).
+  - **Admin endpoint**: `POST /internal/v1/sellers/{seller_id}/credits` accepting `AdjustCreditsRequest` JSON body (`adjustment`, `amount`, `idempotency_key`). Requires `Role::Admin`. Spend amounts auto-negated for ledger delta convention.
+  - **Route registration**: Added to existing `/internal/v1/` scope in `register_api_routes`.
+  - **Production wiring**: `LedgerCache` created with `PostgresCreditLedgerRepository` in `actix_runtime::async_run` and injected as `web::Data<LedgerCache>`.
+  - **Test infrastructure**: `make_test_app_data` now returns `web::Data<LedgerCache>` using `InMemoryCreditLedgerRepository`. All callers (`init_actix_app!`, SSE test) updated.
+  - **8 ledger_cache tests** (+1 TTL expiry) and **6 actix handler tests** (deposit success, auth rejected, non-admin rejected, invalid tx type, spend + verify balance, duplicate idempotency).
+  - All 6 gates PASS (281 tests, clean clippy, clean fmt).
+  - Moved spec from `_active/0012-*` to `_done/0012-*`. Active specs remaining: 0013, 0014, 0015, 0016, 0017.
+
+## 2026-06-04 23:10
+
+- **Created Active Spec 0018 (Update Affected Documents)**: Added all 10 specification files under docs/specs/_active/0018-update-affected-documents/ to establish requirements, checklists, and plan for syncing checklists in TODO.md, mapping indexes in docs/specs/README.md, and references in docs/DOCS-README.md.
+- Verified that all active spec structures conform to repo governance rules and check.ps1 runs clean.

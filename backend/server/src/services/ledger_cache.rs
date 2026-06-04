@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 
@@ -6,32 +7,72 @@ use crate::domain::ledger::{
     CreditAccount, CreditLedgerError, CreditLedgerRepository, CreditTransaction, NewTransaction,
 };
 
+const DEFAULT_TTL_SECS: u64 = 300;
+
+struct CachedEntry {
+    account: CreditAccount,
+    inserted_at: Instant,
+}
+
 /// Write-through cache over a [`CreditLedgerRepository`].
 ///
-/// Balances are stored in a `DashMap<String, CreditAccount>` keyed by `agent_id`.
+/// Balances are stored in a `DashMap<String, CachedEntry>` keyed by `agent_id`.
 /// Reads check the cache first; on miss they query the DB and populate the cache.
 /// Writes commit to the DB first and only update the cache on success.
+///
+/// Cache entries have a configurable TTL. Expired entries are treated as cache
+/// misses and re-fetched from the DB.
 pub struct LedgerCache {
-    balances: DashMap<String, CreditAccount>,
+    balances: DashMap<String, CachedEntry>,
     db_repo: Arc<dyn CreditLedgerRepository>,
+    ttl: Duration,
 }
 
 impl LedgerCache {
+    /// Create a new `LedgerCache` with the given TTL.
+    ///
+    /// Uses `LEDGER_CACHE_TTL_SECS` env var if set, otherwise defaults to 300s.
     pub fn new(db_repo: Arc<dyn CreditLedgerRepository>) -> Self {
+        let ttl_secs = std::env::var("LEDGER_CACHE_TTL_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_TTL_SECS);
         Self {
             balances: DashMap::new(),
             db_repo,
+            ttl: Duration::from_secs(ttl_secs),
+        }
+    }
+
+    /// Create a cache with an explicit (non-env) TTL. Used in tests.
+    pub fn with_ttl(db_repo: Arc<dyn CreditLedgerRepository>, ttl: Duration) -> Self {
+        Self {
+            balances: DashMap::new(),
+            db_repo,
+            ttl,
         }
     }
 
     /// Retrieve the agent's balance from cache, or fall back to the DB.
+    ///
+    /// Expired cache entries are evicted and treated as a cache miss.
     pub async fn get_balance(&self, agent_id: &str) -> Result<CreditAccount, CreditLedgerError> {
         if let Some(entry) = self.balances.get(agent_id) {
-            return Ok(entry.value().clone());
+            if entry.inserted_at.elapsed() < self.ttl {
+                return Ok(entry.account.clone());
+            }
+            drop(entry);
+            self.balances.remove(agent_id);
         }
 
         let account = self.db_repo.get_balance(agent_id).await?;
-        self.balances.insert(agent_id.to_owned(), account.clone());
+        self.balances.insert(
+            agent_id.to_owned(),
+            CachedEntry {
+                account: account.clone(),
+                inserted_at: Instant::now(),
+            },
+        );
         Ok(account)
     }
 
@@ -50,7 +91,13 @@ impl LedgerCache {
             }
         };
 
-        self.balances.insert(tx.agent_id.clone(), account.clone());
+        self.balances.insert(
+            tx.agent_id.clone(),
+            CachedEntry {
+                account: account.clone(),
+                inserted_at: Instant::now(),
+            },
+        );
         Ok(account)
     }
 
@@ -87,6 +134,11 @@ mod tests {
     use uuid::Uuid;
 
     use crate::domain::ledger::TransactionType;
+
+    /// A constant-length TTL that will never expire during a test.
+    const LONG_TTL: Duration = Duration::from_secs(3600);
+    /// A zero-length TTL so the entry is instantly expired.
+    const ZERO_TTL: Duration = Duration::from_secs(0);
 
     struct MockRepo {
         balance: Mutex<Decimal>,
@@ -162,14 +214,17 @@ mod tests {
     #[tokio::test]
     async fn get_balance_hit_returns_cached() {
         let mock = Arc::new(MockRepo::new(Decimal::new(5000, 4)));
-        let cache = LedgerCache::new(mock.clone());
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
 
         cache.balances.insert(
             "agent-1".into(),
-            CreditAccount {
-                agent_id: "agent-1".into(),
-                balance_credits: Decimal::new(5000, 4),
-                updated_at: chrono::Utc::now().to_rfc3339(),
+            CachedEntry {
+                account: CreditAccount {
+                    agent_id: "agent-1".into(),
+                    balance_credits: Decimal::new(5000, 4),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                },
+                inserted_at: Instant::now(),
             },
         );
 
@@ -181,7 +236,7 @@ mod tests {
     #[tokio::test]
     async fn get_balance_miss_queries_db_and_populates_cache() {
         let mock = Arc::new(MockRepo::new(Decimal::new(3000, 4)));
-        let cache = LedgerCache::new(mock.clone());
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
 
         let account = cache.get_balance("agent-1").await.unwrap();
         assert_eq!(account.balance_credits, Decimal::new(3000, 4));
@@ -193,9 +248,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_balance_evicts_expired_entry() {
+        let mock = Arc::new(MockRepo::new(Decimal::new(7777, 4)));
+        let cache = LedgerCache::with_ttl(mock.clone(), ZERO_TTL);
+
+        cache.balances.insert(
+            "agent-1".into(),
+            CachedEntry {
+                account: CreditAccount {
+                    agent_id: "agent-1".into(),
+                    balance_credits: Decimal::new(5000, 4),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                },
+                inserted_at: Instant::now(),
+            },
+        );
+
+        let account = cache.get_balance("agent-1").await.unwrap();
+        assert_eq!(account.balance_credits, Decimal::new(7777, 4));
+        assert_eq!(mock.get_balance_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
     async fn apply_transaction_updates_cache_on_success() {
         let mock = Arc::new(MockRepo::new(Decimal::ZERO));
-        let cache = LedgerCache::new(mock.clone());
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
 
         let tx = make_tx("agent-1", Decimal::new(1000, 4));
         let account = cache.apply_transaction(&tx).await.unwrap();
@@ -210,14 +287,17 @@ mod tests {
     #[tokio::test]
     async fn apply_transaction_evicts_cache_on_db_failure() {
         let mock = Arc::new(MockRepo::new(Decimal::new(5000, 4)));
-        let cache = LedgerCache::new(mock.clone());
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
 
         cache.balances.insert(
             "agent-1".into(),
-            CreditAccount {
-                agent_id: "agent-1".into(),
-                balance_credits: Decimal::new(5000, 4),
-                updated_at: chrono::Utc::now().to_rfc3339(),
+            CachedEntry {
+                account: CreditAccount {
+                    agent_id: "agent-1".into(),
+                    balance_credits: Decimal::new(5000, 4),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                },
+                inserted_at: Instant::now(),
             },
         );
 
@@ -237,7 +317,7 @@ mod tests {
     #[tokio::test]
     async fn get_transaction_history_delegates_to_db() {
         let mock = Arc::new(MockRepo::new(Decimal::ZERO));
-        let cache = LedgerCache::new(mock.clone());
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
 
         let result = cache.get_transaction_history("agent-1", 10, 0).await;
         assert!(result.is_ok());
@@ -247,7 +327,7 @@ mod tests {
     #[tokio::test]
     async fn invalidate_removes_from_cache() {
         let mock = Arc::new(MockRepo::new(Decimal::new(5000, 4)));
-        let cache = LedgerCache::new(mock.clone());
+        let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
 
         let _ = cache.get_balance("agent-1").await.unwrap();
         assert_eq!(mock.get_balance_calls.load(Ordering::SeqCst), 1);
@@ -262,7 +342,7 @@ mod tests {
     #[tokio::test]
     async fn concurrent_reads_and_writes() {
         let mock = Arc::new(MockRepo::new(Decimal::ZERO));
-        let cache = Arc::new(LedgerCache::new(mock.clone()));
+        let cache = Arc::new(LedgerCache::with_ttl(mock.clone(), LONG_TTL));
 
         let mut handles = Vec::new();
 

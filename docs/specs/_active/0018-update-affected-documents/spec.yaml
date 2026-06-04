@@ -1,0 +1,23 @@
+version: 1
+id: 0018-update-affected-documents
+title: Update Affected Documents
+status: active
+owner: backend-team
+implementer: agent
+priority: P3
+area:
+  - docs
+files:
+  code: []
+  docs:
+    - docs/TODO.md
+    - docs/DOCS-README.md
+    - docs/specs/README.md
+    - AGENTS.md
+acceptance:
+  - Affected documentation files (TODO.md, DOCS-README.md, specs/README.md, AGENTS.md) are updated to reflect completed/active phases and spec changes
+  - All outdated references, deprecated paths, and checklists are updated to represent current codebase state
+non_goals:
+  - Modifying code files or writing integration tests (focused strictly on documentation parity)
+risks:
+  - Documentation becoming out-of-sync if future phases are completed without corresponding spec updates

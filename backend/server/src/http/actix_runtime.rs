@@ -1,7 +1,9 @@
 use crate::app::MarketplaceApp;
+use crate::domain::ledger::CreditLedgerRepository;
 use crate::observability::ServerObservability;
 use crate::repositories::audit_events::PostgresAuditEventRepository;
 use crate::repositories::contact_reveals::PostgresContactRevealRepository;
+use crate::repositories::ledger::PostgresCreditLedgerRepository;
 use crate::repositories::listings::PostgresListingRepository;
 use crate::repositories::negotiations::PostgresNegotiationRepository;
 use crate::repositories::outbox_events::PostgresOutboxEventRepository;
@@ -11,6 +13,7 @@ use crate::repositories::{
     AuditEventRepository, OutboxEventRepository, PostgresIdempotencyKeyRepository,
     SellerAccountRepository,
 };
+use crate::services::ledger_cache::LedgerCache;
 use actix_web::{web, App, HttpServer};
 use moka::future::Cache;
 use std::error::Error;
@@ -112,6 +115,12 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (event_tx, _) = broadcast::channel::<String>(1024);
     let event_bus_data = web::Data::new(event_tx);
 
+    // Credit ledger cache (write-through with TTL)
+    let ledger_repo: Arc<dyn CreditLedgerRepository> =
+        Arc::new(PostgresCreditLedgerRepository::new(pool.clone()));
+    let ledger_cache = LedgerCache::new(ledger_repo);
+    let ledger_cache_data = web::Data::new(ledger_cache);
+
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
     let cache_enabled_data = web::Data::new(cache_enabled);
@@ -145,6 +154,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(search_cache_data.clone())
             .app_data(listing_cache_limit_data.clone())
             .app_data(search_cache_limit_data.clone())
+            .app_data(ledger_cache_data.clone())
             .app_data(pool_data.clone())
             .app_data(event_bus_data.clone())
             // OpenAPI docs
