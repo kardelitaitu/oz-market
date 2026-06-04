@@ -1022,3 +1022,11 @@ new line
   - Avoided adding `thiserror` dependency — manual `Display + Error` impl consistent with project convention.
   - All 6 gates PASS (306 tests, +13 new, clean clippy, clean fmt).
   - Moved spec from `_active/0014-*` to `_done/0014-*`. Active specs remaining: 0015, 0016, 0017, 0018.
+
+## 2026-06-05 04:00
+
+- **Executed Spec 0015 (Agent Metrics Collector)**:
+  - **`services/agent_metrics.rs`**: `AgentMetricsCollector` struct backed by `DashMap<Uuid, Mutex<VecDeque<AgentTelemetrySample>>>`. Bounded sliding window (default 100) with automatic oldest-sample eviction. Methods: `record_sample(agent_id, duration, is_success)`, `get_samples(agent_id)`, `clear_metrics(agent_id)`, `sample_count(agent_id)`, `total_agents()`.
+  - 8 tests: record+retrieve, unknown agent returns empty, capacity eviction (3→5 fills evicts 2 oldest), clear metrics, clear nonexistent noop, multiple agents isolated, default capacity=100, concurrent record.
+  - All 6 gates PASS (314 tests, +8, clean clippy, clean fmt).
+  - Moved spec from `_active/0015-*` to `_done/0015-*`. Active specs remaining: 0016, 0017, 0018.

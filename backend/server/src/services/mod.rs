@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod agent_dispatcher;
+pub mod agent_metrics;
 pub mod agent_registry;
 pub mod async_committer;
 pub mod audit_events;
