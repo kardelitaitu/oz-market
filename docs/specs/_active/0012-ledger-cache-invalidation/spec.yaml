@@ -1,0 +1,25 @@
+version: 1
+id: 0012-ledger-cache-invalidation
+title: Cache Invalidation and Admin Interventions
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - ledger
+  - api
+files:
+  code:
+    - backend/server/src/services/ledger_cache.rs
+    - backend/server/src/http/handlers.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - Cache entries expire automatically based on a configurable TTL
+  - Admin endpoints (`POST /v1/admin/sellers/{id}/credits`) allow modifying balance in DB and invalidating the cache entry
+  - Tests verify that reading a value post-invalidation pulls the updated data from PostgreSQL
+non_goals:
+  - Invalidate cache entries across multiple server processes (no horizontal redis sync required yet)
+risks:
+  - Admin modifications bypass the cache, leading to cache inconsistency (resolved by enforcing cache-invalidation call in route handler)

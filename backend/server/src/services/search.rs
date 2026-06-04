@@ -468,4 +468,54 @@ mod tests {
         let result = compare_search_items(&a, &b, &[], SearchSort::Relevance);
         assert!(result == Ordering::Equal || a.listing_id != b.listing_id);
     }
+
+    // -----------------------------------------------------------------------
+    // Phase D: Geolocation edge cases (coordinates in index text)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn score_listing_handles_missing_coordinates() {
+        let mut listing = make_listing("Laptop", 1000.0, "NYC", "USA");
+        listing.listing.location.latitude = None;
+        listing.listing.location.longitude = None;
+        // Should not panic — score should work without coordinates
+        let score = score_listing(&listing, &["laptop".to_string()]);
+        assert!(score > 0);
+    }
+
+    #[test]
+    fn score_listing_handles_polar_coordinates() {
+        let mut listing = make_listing("Laptop", 1000.0, "NYC", "USA");
+        listing.listing.location.latitude = Some(90.0); // North Pole
+        listing.listing.location.longitude = Some(0.0);
+        let score = score_listing(&listing, &["laptop".to_string()]);
+        assert!(score > 0);
+    }
+
+    #[test]
+    fn score_listing_handles_antipodal_coordinates() {
+        let mut listing = make_listing("Laptop", 1000.0, "NYC", "USA");
+        listing.listing.location.latitude = Some(-33.8688);
+        listing.listing.location.longitude = Some(151.2093); // Sydney
+        let score = score_listing(&listing, &["laptop".to_string()]);
+        assert!(score > 0);
+    }
+
+    #[test]
+    fn score_listing_handles_date_line_coordinates() {
+        let mut listing = make_listing("Laptop", 1000.0, "NYC", "USA");
+        listing.listing.location.latitude = Some(0.0);
+        listing.listing.location.longitude = Some(179.9999); // Near Date Line
+        let score = score_listing(&listing, &["laptop".to_string()]);
+        assert!(score > 0);
+    }
+
+    #[test]
+    fn score_listing_handles_zero_coordinates() {
+        let mut listing = make_listing("Laptop", 1000.0, "NYC", "USA");
+        listing.listing.location.latitude = Some(0.0);
+        listing.listing.location.longitude = Some(0.0); // Null Island
+        let score = score_listing(&listing, &["laptop".to_string()]);
+        assert!(score > 0);
+    }
 }

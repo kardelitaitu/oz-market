@@ -1,0 +1,24 @@
+version: 1
+id: 0010-credit-ledger-schema-domain
+title: Credit/Balance DB Schema and Domain Logic
+status: done
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - ledger
+files:
+  code:
+    - backend/server/src/domain/ledger.rs
+    - backend/migrations/0014_add_credit_ledger.sql
+  docs:
+    - docs/TODO.md
+acceptance:
+  - Credit ledger DB migration is added defining agent balances and transaction history
+  - Domain models are created for CreditAccount and CreditTransaction
+  - Repository trait is defined for thread-safe credit balance retrieval and updates
+non_goals:
+  - Implementing the in-memory cache or async batching (deferred to 0011/0013)
+risks:
+  - Race conditions during concurrent balance updates (handled via DB locks/constraints)

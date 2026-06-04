@@ -2,6 +2,7 @@ pub mod agent_credentials;
 pub mod audit_events;
 pub mod contact_reveals;
 pub mod idempotency_keys;
+pub mod ledger;
 pub mod listings;
 pub mod negotiations;
 pub mod outbox_events;

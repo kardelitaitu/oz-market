@@ -23,8 +23,7 @@ use crate::services::rate_limiter::{
     global_limiter, AGENT_QUERY_RATE_MAX, AGENT_QUERY_RATE_WINDOW_SECS, CONTACT_REVEAL_RATE_MAX,
     CONTACT_REVEAL_RATE_WINDOW_SECS, CREATE_LISTING_RATE_MAX, CREATE_LISTING_RATE_WINDOW_SECS,
     NEW_SELLER_DAILY_MAX, NEW_SELLER_HOURLY_MAX, OPEN_NEGOTIATION_RATE_MAX,
-    OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX,
-    SEARCH_RATE_WINDOW_SECS,
+    OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS,
 };
 use marketplace_api_contract::{
     AcceptNegotiationRequest, ApiErrorCode, Category, Condition, CreateListingRequest,
@@ -358,10 +357,13 @@ where
                 "new_seller_daily": { "max": NEW_SELLER_DAILY_MAX },
                 "new_seller_hourly": { "max": NEW_SELLER_HOURLY_MAX },
             });
-            json_response(200, serde_json::json!({
-                "buckets": buckets,
-                "config": config,
-            }))
+            json_response(
+                200,
+                serde_json::json!({
+                    "buckets": buckets,
+                    "config": config,
+                }),
+            )
         }
         ("GET", path) if path.starts_with("/internal/v1/contact-reveals/") => {
             if let Err(response) = authorize_internal_read(&claims) {
@@ -497,13 +499,18 @@ where
         }
         ("GET", "/v1/listings/search") => {
             let search_key = format!("search:{}", claims.sub);
-            let rl_search = global_limiter().check(&search_key, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS);
+            let rl_search =
+                global_limiter().check(&search_key, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS);
             if !rl_search.allowed {
                 return rate_limited_response("search rate limit exceeded (60/min)", &rl_search);
             }
             let search = search_request_from_query(&request.query);
             match app.search_listings(Some(&claims), &search).await {
-                Ok(result) => json_response_with_rl(200, serde_json::to_value(result).unwrap_or_default(), &rl_search),
+                Ok(result) => json_response_with_rl(
+                    200,
+                    serde_json::to_value(result).unwrap_or_default(),
+                    &rl_search,
+                ),
                 Err(error) => map_handler_error(&error),
             }
         }
@@ -515,19 +522,22 @@ where
                 AGENT_QUERY_RATE_WINDOW_SECS,
             );
             if !rl_agent.allowed {
-                return rate_limited_response("agent query rate limit exceeded (20/min)", &rl_agent);
+                return rate_limited_response(
+                    "agent query rate limit exceeded (20/min)",
+                    &rl_agent,
+                );
             }
             match serde_json::from_slice::<marketplace_api_contract::AgentQueryRequest>(
                 &request.body,
             ) {
-                Ok(parsed) => {
-                    match app.agent_query(Some(&claims), &parsed).await {
-                        Ok(result) => {
-                            json_response_with_rl(200, serde_json::to_value(result).unwrap_or_default(), &rl_agent)
-                        }
-                        Err(error) => map_handler_error(&error),
-                    }
-                }
+                Ok(parsed) => match app.agent_query(Some(&claims), &parsed).await {
+                    Ok(result) => json_response_with_rl(
+                        200,
+                        serde_json::to_value(result).unwrap_or_default(),
+                        &rl_agent,
+                    ),
+                    Err(error) => map_handler_error(&error),
+                },
                 Err(error) => api_error_response(
                     400,
                     ApiErrorCode::InvalidField,
@@ -556,7 +566,10 @@ where
                 CREATE_LISTING_RATE_WINDOW_SECS,
             );
             if !rl_create.allowed {
-                return rate_limited_response("create listing rate limit exceeded (10/min)", &rl_create);
+                return rate_limited_response(
+                    "create listing rate limit exceeded (10/min)",
+                    &rl_create,
+                );
             }
             match serde_json::from_slice::<CreateListingRequest>(&request.body) {
                 Ok(parsed) => {
@@ -566,12 +579,16 @@ where
                         .create_listing(&claims, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok((created, false)) => {
-                            json_response_with_rl(201, serde_json::to_value(created).unwrap_or_default(), &rl_create)
-                        }
-                        Ok((created, true)) => {
-                            json_response_with_rl(200, serde_json::to_value(created).unwrap_or_default(), &rl_create)
-                        }
+                        Ok((created, false)) => json_response_with_rl(
+                            201,
+                            serde_json::to_value(created).unwrap_or_default(),
+                            &rl_create,
+                        ),
+                        Ok((created, true)) => json_response_with_rl(
+                            200,
+                            serde_json::to_value(created).unwrap_or_default(),
+                            &rl_create,
+                        ),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -591,7 +608,10 @@ where
                 OPEN_NEGOTIATION_RATE_WINDOW_SECS,
             );
             if !rl_negot.allowed {
-                return rate_limited_response("open negotiation rate limit exceeded (20/min)", &rl_negot);
+                return rate_limited_response(
+                    "open negotiation rate limit exceeded (20/min)",
+                    &rl_negot,
+                );
             }
             match serde_json::from_slice::<OpenNegotiationRequest>(&request.body) {
                 Ok(parsed) => {
@@ -601,12 +621,16 @@ where
                         .open_negotiation(&claims, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok((created, false)) => {
-                            json_response_with_rl(201, serde_json::to_value(created).unwrap_or_default(), &rl_negot)
-                        }
-                        Ok((created, true)) => {
-                            json_response_with_rl(200, serde_json::to_value(created).unwrap_or_default(), &rl_negot)
-                        }
+                        Ok((created, false)) => json_response_with_rl(
+                            201,
+                            serde_json::to_value(created).unwrap_or_default(),
+                            &rl_negot,
+                        ),
+                        Ok((created, true)) => json_response_with_rl(
+                            200,
+                            serde_json::to_value(created).unwrap_or_default(),
+                            &rl_negot,
+                        ),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -638,7 +662,10 @@ where
                 OPEN_NEGOTIATION_RATE_WINDOW_SECS,
             );
             if !rl_offer.allowed {
-                return rate_limited_response("offer submit rate limit exceeded (20/min)", &rl_offer);
+                return rate_limited_response(
+                    "offer submit rate limit exceeded (20/min)",
+                    &rl_offer,
+                );
             }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
@@ -652,9 +679,11 @@ where
                         .submit_offer(&claims, negotiation_id, &parsed, &request_fingerprint, &now)
                         .await
                     {
-                        Ok(response) => {
-                            json_response_with_rl(200, serde_json::to_value(response).unwrap_or_default(), &rl_offer)
-                        }
+                        Ok(response) => json_response_with_rl(
+                            200,
+                            serde_json::to_value(response).unwrap_or_default(),
+                            &rl_offer,
+                        ),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -694,9 +723,11 @@ where
                         )
                         .await
                     {
-                        Ok(response) => {
-                            json_response_with_rl(200, serde_json::to_value(response).unwrap_or_default(), &rl_accept)
-                        }
+                        Ok(response) => json_response_with_rl(
+                            200,
+                            serde_json::to_value(response).unwrap_or_default(),
+                            &rl_accept,
+                        ),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -736,9 +767,11 @@ where
                         )
                         .await
                     {
-                        Ok(response) => {
-                            json_response_with_rl(200, serde_json::to_value(response).unwrap_or_default(), &rl_reject)
-                        }
+                        Ok(response) => json_response_with_rl(
+                            200,
+                            serde_json::to_value(response).unwrap_or_default(),
+                            &rl_reject,
+                        ),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -758,7 +791,10 @@ where
                 CONTACT_REVEAL_RATE_WINDOW_SECS,
             );
             if !rl_reveal.allowed {
-                return rate_limited_response("contact reveal rate limit exceeded (10/min)", &rl_reveal);
+                return rate_limited_response(
+                    "contact reveal rate limit exceeded (10/min)",
+                    &rl_reveal,
+                );
             }
             let negotiation_id = path
                 .trim_start_matches("/v1/negotiations/")
@@ -778,9 +814,11 @@ where
                         )
                         .await
                     {
-                        Ok(reveal) => {
-                            json_response_with_rl(202, serde_json::to_value(reveal).unwrap_or_default(), &rl_reveal)
-                        }
+                        Ok(reveal) => json_response_with_rl(
+                            202,
+                            serde_json::to_value(reveal).unwrap_or_default(),
+                            &rl_reveal,
+                        ),
                         Err(error) => map_handler_error(&error),
                     }
                 }
@@ -802,14 +840,21 @@ where
                 CONTACT_REVEAL_RATE_WINDOW_SECS,
             );
             if !rl_approve.allowed {
-                return rate_limited_response("contact reveal rate limit exceeded (10/min)", &rl_approve);
+                return rate_limited_response(
+                    "contact reveal rate limit exceeded (10/min)",
+                    &rl_approve,
+                );
             }
             let reveal_id = path
                 .trim_start_matches("/v1/contact-reveals/")
                 .trim_end_matches("/approve")
                 .trim_end_matches('/');
             match app.approve_contact_reveal(&claims, reveal_id).await {
-                Ok(reveal) => json_response_with_rl(200, serde_json::to_value(reveal).unwrap_or_default(), &rl_approve),
+                Ok(reveal) => json_response_with_rl(
+                    200,
+                    serde_json::to_value(reveal).unwrap_or_default(),
+                    &rl_approve,
+                ),
                 Err(error) => map_handler_error(&error),
             }
         }
@@ -1146,19 +1191,36 @@ fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {
     }
 }
 
-fn append_rate_limit_headers(resp: &mut HttpResponse, rl: &crate::services::rate_limiter::RateLimitStatus) {
-    resp.headers.push(("X-RateLimit-Limit".to_string(), rl.limit.to_string()));
-    resp.headers.push(("X-RateLimit-Remaining".to_string(), rl.remaining.to_string()));
-    resp.headers.push(("X-RateLimit-Reset".to_string(), rl.reset_after_secs.to_string()));
+fn append_rate_limit_headers(
+    resp: &mut HttpResponse,
+    rl: &crate::services::rate_limiter::RateLimitStatus,
+) {
+    resp.headers
+        .push(("X-RateLimit-Limit".to_string(), rl.limit.to_string()));
+    resp.headers.push((
+        "X-RateLimit-Remaining".to_string(),
+        rl.remaining.to_string(),
+    ));
+    resp.headers.push((
+        "X-RateLimit-Reset".to_string(),
+        rl.reset_after_secs.to_string(),
+    ));
 }
 
-fn json_response_with_rl(status: u16, body: serde_json::Value, rl: &crate::services::rate_limiter::RateLimitStatus) -> HttpResponse {
+fn json_response_with_rl(
+    status: u16,
+    body: serde_json::Value,
+    rl: &crate::services::rate_limiter::RateLimitStatus,
+) -> HttpResponse {
     let mut resp = json_response(status, body);
     append_rate_limit_headers(&mut resp, rl);
     resp
 }
 
-fn rate_limited_response(message: &str, rl: &crate::services::rate_limiter::RateLimitStatus) -> HttpResponse {
+fn rate_limited_response(
+    message: &str,
+    rl: &crate::services::rate_limiter::RateLimitStatus,
+) -> HttpResponse {
     let mut resp = json_response(
         429,
         serde_json::json!({
@@ -1268,9 +1330,12 @@ fn map_handler_error(error: &crate::http::handlers::HandlerError) -> HttpRespons
         crate::http::handlers::HandlerError::QuotaExceeded { message } => {
             api_error_response(403, ApiErrorCode::Forbidden, message.clone(), None)
         }
-        crate::http::handlers::HandlerError::Validation { field, message } => {
-            api_error_response(400, ApiErrorCode::InvalidField, message.clone(), Some(field.clone()))
-        }
+        crate::http::handlers::HandlerError::Validation { field, message } => api_error_response(
+            400,
+            ApiErrorCode::InvalidField,
+            message.clone(),
+            Some(field.clone()),
+        ),
     }
 }
 
@@ -1343,11 +1408,13 @@ Connection: close\r
 {body}"
             )
         } else {
-            format!("{method} {path} HTTP/1.1\r
+            format!(
+                "{method} {path} HTTP/1.1\r
 Host: localhost\r
 Connection: close\r
 \r
-")
+"
+            )
         }
     }
 
@@ -1445,270 +1512,270 @@ Connection: close\r
     // #[tokio::test]
     // async fn runtime_hits_health_and_listings() {
     /*
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap().to_string();
-        let app = build_runtime_app_for_test();
-        let accept_app = Arc::clone(&app);
-        tokio::spawn(async move {
-            for _ in 0..8 {
-                let (stream, _) = listener.accept().await.unwrap();
-                let app = Arc::clone(&accept_app);
-                let observability = Arc::new(ServerObservability::new());
-                tokio::spawn(async move {
-                    let _ = handle_connection(stream, app, observability).await;
-                });
-            }
-        });
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap().to_string();
+            let app = build_runtime_app_for_test();
+            let accept_app = Arc::clone(&app);
+            tokio::spawn(async move {
+                for _ in 0..8 {
+                    let (stream, _) = listener.accept().await.unwrap();
+                    let app = Arc::clone(&accept_app);
+                    let observability = Arc::new(ServerObservability::new());
+                    tokio::spawn(async move {
+                        let _ = handle_connection(stream, app, observability).await;
+                    });
+                }
+            });
 
-        let health = round_trip(
-            &address,
-            "GET /health HTTP/1.1\r
-Host: localhost\r
-Connection: close\r
-\r
-",
-        )
-        .await;
-        assert!(health.contains("\"status\":\"ok\""));
+            let health = round_trip(
+                &address,
+                "GET /health HTTP/1.1\r
+    Host: localhost\r
+    Connection: close\r
+    \r
+    ",
+            )
+            .await;
+            assert!(health.contains("\"status\":\"ok\""));
 
-        let create = round_trip(
-            &address,
-            &format!(
-                "POST /v1/listings HTTP/1.1\r
-Host: localhost\r
-Content-Type: application/json\r
-X-Marketplace-Claims: {}\r
-Content-Length: {}\r
-Connection: close\r
-\r
-{}",
-                claims_header(),
-                create_body().len(),
-                create_body()
-            ),
-        )
-        .await;
-        assert!(create.contains("ThinkPad T480"));
+            let create = round_trip(
+                &address,
+                &format!(
+                    "POST /v1/listings HTTP/1.1\r
+    Host: localhost\r
+    Content-Type: application/json\r
+    X-Marketplace-Claims: {}\r
+    Content-Length: {}\r
+    Connection: close\r
+    \r
+    {}",
+                    claims_header(),
+                    create_body().len(),
+                    create_body()
+                ),
+            )
+            .await;
+            assert!(create.contains("ThinkPad T480"));
 
-        let get = round_trip(
-            &address,
-            &format!(
-                "GET /v1/listings/lst_000001 HTTP/1.1\r
-Host: localhost\r
-X-Marketplace-Claims: {}\r
-Connection: close\r
-\r
-",
-                claims_header()
-            ),
-        )
-        .await;
-        assert!(get.contains("ThinkPad T480"));
-        assert!(get.contains("\"listing_id\":\"lst_000001\""));
+            let get = round_trip(
+                &address,
+                &format!(
+                    "GET /v1/listings/lst_000001 HTTP/1.1\r
+    Host: localhost\r
+    X-Marketplace-Claims: {}\r
+    Connection: close\r
+    \r
+    ",
+                    claims_header()
+                ),
+            )
+            .await;
+            assert!(get.contains("ThinkPad T480"));
+            assert!(get.contains("\"listing_id\":\"lst_000001\""));
 
-        let open = round_trip(
-            &address,
-            &format!(
-                "POST /v1/negotiations HTTP/1.1\r
-Host: localhost\r
-Content-Type: application/json\r
-X-Marketplace-Claims: {}\r
-Content-Length: {}\r
-Connection: close\r
-\r
-{}",
-                claims_header(),
-                serde_json::json!({
-                    "idempotency_key": "idem-open-1",
-                    "listing_id": "lst_000001",
-                    "buyer_agent_id": "buyer-1",
-                    "offer_currency": "USD",
-                    "offer_amount": 440.0
-                })
-                .to_string()
-                .len(),
-                serde_json::json!({
-                    "idempotency_key": "idem-open-1",
-                    "listing_id": "lst_000001",
-                    "buyer_agent_id": "buyer-1",
-                    "offer_currency": "USD",
-                    "offer_amount": 440.0
-                })
-            ),
-        )
-        .await;
-        assert!(open.contains("\"status\":\"reserved\""));
-        assert!(open.starts_with("HTTP/1.1 201"));
+            let open = round_trip(
+                &address,
+                &format!(
+                    "POST /v1/negotiations HTTP/1.1\r
+    Host: localhost\r
+    Content-Type: application/json\r
+    X-Marketplace-Claims: {}\r
+    Content-Length: {}\r
+    Connection: close\r
+    \r
+    {}",
+                    claims_header(),
+                    serde_json::json!({
+                        "idempotency_key": "idem-open-1",
+                        "listing_id": "lst_000001",
+                        "buyer_agent_id": "buyer-1",
+                        "offer_currency": "USD",
+                        "offer_amount": 440.0
+                    })
+                    .to_string()
+                    .len(),
+                    serde_json::json!({
+                        "idempotency_key": "idem-open-1",
+                        "listing_id": "lst_000001",
+                        "buyer_agent_id": "buyer-1",
+                        "offer_currency": "USD",
+                        "offer_amount": 440.0
+                    })
+                ),
+            )
+            .await;
+            assert!(open.contains("\"status\":\"reserved\""));
+            assert!(open.starts_with("HTTP/1.1 201"));
 
-        let reveal = round_trip(
-            &address,
-            &format!(
-                "POST /v1/negotiations/neg_000001/request-contact-reveal HTTP/1.1\r
-Host: localhost\r
-Content-Type: application/json\r
-X-Marketplace-Claims: {}\r
-Content-Length: {}\r
-Connection: close\r
-\r
-{}",
-                claims_header(),
-                serde_json::json!({
-                    "idempotency_key": "idem-reveal-1",
-                    "buyer_agent_id": "buyer-1"
-                }).to_string().len(),
-                serde_json::json!({
-                    "idempotency_key": "idem-reveal-1",
-                    "buyer_agent_id": "buyer-1"
-                })
-            ),
-        )
-        .await;
-        assert!(reveal.contains("\"status\":\"pending\""));
-    }
+            let reveal = round_trip(
+                &address,
+                &format!(
+                    "POST /v1/negotiations/neg_000001/request-contact-reveal HTTP/1.1\r
+    Host: localhost\r
+    Content-Type: application/json\r
+    X-Marketplace-Claims: {}\r
+    Content-Length: {}\r
+    Connection: close\r
+    \r
+    {}",
+                    claims_header(),
+                    serde_json::json!({
+                        "idempotency_key": "idem-reveal-1",
+                        "buyer_agent_id": "buyer-1"
+                    }).to_string().len(),
+                    serde_json::json!({
+                        "idempotency_key": "idem-reveal-1",
+                        "buyer_agent_id": "buyer-1"
+                    })
+                ),
+            )
+            .await;
+            assert!(reveal.contains("\"status\":\"pending\""));
+        }
 
-    #[test]
-    fn test_parse_category() {
-        assert_eq!(parse_category("laptop"), Some(Category::Laptop));
-        assert_eq!(parse_category("LAPTOP"), Some(Category::Laptop));
-        assert_eq!(parse_category("invalid"), None);
-    }
+        #[test]
+        fn test_parse_category() {
+            assert_eq!(parse_category("laptop"), Some(Category::Laptop));
+            assert_eq!(parse_category("LAPTOP"), Some(Category::Laptop));
+            assert_eq!(parse_category("invalid"), None);
+        }
 
-    #[test]
-    fn test_parse_condition() {
-        assert_eq!(parse_condition("new"), Some(Condition::New));
-        assert_eq!(parse_condition("USED"), Some(Condition::Used));
-        assert_eq!(parse_condition("invalid"), None);
-    }
+        #[test]
+        fn test_parse_condition() {
+            assert_eq!(parse_condition("new"), Some(Condition::New));
+            assert_eq!(parse_condition("USED"), Some(Condition::Used));
+            assert_eq!(parse_condition("invalid"), None);
+        }
 
-    #[test]
-    fn test_parse_listing_status() {
-        assert_eq!(parse_listing_status("active"), Some(ListingStatus::Active));
-        assert_eq!(parse_listing_status("SOLD"), Some(ListingStatus::Sold));
-        assert_eq!(parse_listing_status("invalid"), None);
-    }
+        #[test]
+        fn test_parse_listing_status() {
+            assert_eq!(parse_listing_status("active"), Some(ListingStatus::Active));
+            assert_eq!(parse_listing_status("SOLD"), Some(ListingStatus::Sold));
+            assert_eq!(parse_listing_status("invalid"), None);
+        }
 
-    #[test]
-    fn test_parse_sort() {
-        assert_eq!(parse_sort("relevance"), Some(SearchSort::Relevance));
-        assert_eq!(parse_sort("PRICE_DESC"), Some(SearchSort::PriceDesc));
-        assert_eq!(parse_sort("rating_highest"), Some(SearchSort::RatingHighest));
-        assert_eq!(parse_sort("invalid"), None);
-    }
+        #[test]
+        fn test_parse_sort() {
+            assert_eq!(parse_sort("relevance"), Some(SearchSort::Relevance));
+            assert_eq!(parse_sort("PRICE_DESC"), Some(SearchSort::PriceDesc));
+            assert_eq!(parse_sort("rating_highest"), Some(SearchSort::RatingHighest));
+            assert_eq!(parse_sort("invalid"), None);
+        }
 
-    #[test]
-    fn test_split_target() {
-        let (path, query) = split_target("/search?q=laptop&category=electronics");
-        assert_eq!(path, "/search");
-        assert_eq!(query.get("q"), Some(&"laptop".to_string()));
-        assert_eq!(query.get("category"), Some(&"electronics".to_string()));
+        #[test]
+        fn test_split_target() {
+            let (path, query) = split_target("/search?q=laptop&category=electronics");
+            assert_eq!(path, "/search");
+            assert_eq!(query.get("q"), Some(&"laptop".to_string()));
+            assert_eq!(query.get("category"), Some(&"electronics".to_string()));
 
-        let (path, query) = split_target("/listings");
-        assert_eq!(path, "/listings");
-        assert!(query.is_empty());
-    }
+            let (path, query) = split_target("/listings");
+            assert_eq!(path, "/listings");
+            assert!(query.is_empty());
+        }
 
-    #[test]
-    fn test_parse_query_string() {
-        let query = parse_query_string("q=laptop&category=electronics&page=1");
-        assert_eq!(query.get("q"), Some(&"laptop".to_string()));
-        assert_eq!(query.get("category"), Some(&"electronics".to_string()));
-        assert_eq!(query.get("page"), Some(&"1".to_string()));
+        #[test]
+        fn test_parse_query_string() {
+            let query = parse_query_string("q=laptop&category=electronics&page=1");
+            assert_eq!(query.get("q"), Some(&"laptop".to_string()));
+            assert_eq!(query.get("category"), Some(&"electronics".to_string()));
+            assert_eq!(query.get("page"), Some(&"1".to_string()));
 
-        let query = parse_query_string("single");
-        assert_eq!(query.get("single"), Some(&"".to_string()));
+            let query = parse_query_string("single");
+            assert_eq!(query.get("single"), Some(&"".to_string()));
 
-        let query = parse_query_string("");
-        assert!(query.is_empty());
-    }
+            let query = parse_query_string("");
+            assert!(query.is_empty());
+        }
 
-    #[test]
-    fn test_url_decode() {
-        assert_eq!(url_decode("hello%20world"), "hello world");
-        assert_eq!(url_decode("test%2Bvalue"), "test+value");
-        assert_eq!(url_decode("normal+text"), "normal text");
-        assert_eq!(url_decode("invalid%XX"), "invalid%XX");
-        assert_eq!(url_decode("empty%20"), "empty ");
-    }
+        #[test]
+        fn test_url_decode() {
+            assert_eq!(url_decode("hello%20world"), "hello world");
+            assert_eq!(url_decode("test%2Bvalue"), "test+value");
+            assert_eq!(url_decode("normal+text"), "normal text");
+            assert_eq!(url_decode("invalid%XX"), "invalid%XX");
+            assert_eq!(url_decode("empty%20"), "empty ");
+        }
 
-    #[test]
-    fn test_search_request_from_query() {
-        let mut query = HashMap::new();
-        query.insert("query".to_string(), "laptop".to_string());
-        query.insert("category".to_string(), "laptop".to_string());
-        query.insert("condition".to_string(), "used".to_string());
-        query.insert("currency".to_string(), "USD".to_string());
-        query.insert("min_amount".to_string(), "100".to_string());
-        query.insert("max_amount".to_string(), "500".to_string());
-        query.insert("country_code".to_string(), "US".to_string());
-        query.insert("city".to_string(), "NYC".to_string());
-        query.insert("sort_by".to_string(), "price_asc".to_string());
-        query.insert("limit".to_string(), "10".to_string());
+        #[test]
+        fn test_search_request_from_query() {
+            let mut query = HashMap::new();
+            query.insert("query".to_string(), "laptop".to_string());
+            query.insert("category".to_string(), "laptop".to_string());
+            query.insert("condition".to_string(), "used".to_string());
+            query.insert("currency".to_string(), "USD".to_string());
+            query.insert("min_amount".to_string(), "100".to_string());
+            query.insert("max_amount".to_string(), "500".to_string());
+            query.insert("country_code".to_string(), "US".to_string());
+            query.insert("city".to_string(), "NYC".to_string());
+            query.insert("sort_by".to_string(), "price_asc".to_string());
+            query.insert("limit".to_string(), "10".to_string());
 
-        let request = search_request_from_query(&query);
-        assert_eq!(request.query, Some("laptop".to_string()));
-        assert_eq!(request.category, Some(Category::Laptop));
-        assert_eq!(request.condition, Some(Condition::Used));
-        assert_eq!(request.price.as_ref().unwrap().currency, Some("USD".to_string()));
-        assert_eq!(request.price.as_ref().unwrap().min_amount, Some(100.0));
-        assert_eq!(request.price.as_ref().unwrap().max_amount, Some(500.0));
-        assert_eq!(request.location.as_ref().unwrap().country_code, Some("US".to_string()));
-        assert_eq!(request.location.as_ref().unwrap().city, Some("NYC".to_string()));
-        assert_eq!(request.sort_by, SearchSort::PriceAsc);
-        assert_eq!(request.limit, Some(10));
-    }
-
-
+            let request = search_request_from_query(&query);
+            assert_eq!(request.query, Some("laptop".to_string()));
+            assert_eq!(request.category, Some(Category::Laptop));
+            assert_eq!(request.condition, Some(Condition::Used));
+            assert_eq!(request.price.as_ref().unwrap().currency, Some("USD".to_string()));
+            assert_eq!(request.price.as_ref().unwrap().min_amount, Some(100.0));
+            assert_eq!(request.price.as_ref().unwrap().max_amount, Some(500.0));
+            assert_eq!(request.location.as_ref().unwrap().country_code, Some("US".to_string()));
+            assert_eq!(request.location.as_ref().unwrap().city, Some("NYC".to_string()));
+            assert_eq!(request.sort_by, SearchSort::PriceAsc);
+            assert_eq!(request.limit, Some(10));
+        }
 
 
-            &address,
-            &format!(
-                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
-Host: localhost\r
-X-Marketplace-Claims: {}\r
-Connection: close\r
-\r
-",
-                serde_json::to_string(&reviewer_claims()).unwrap()
-            ),
-        )
-        .await;
-        assert!(internal_listing.contains("\"listing_id\":\"lst_000001\""));
 
-        let denied = round_trip(
-            &address,
-            &format!(
-                "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
-Host: localhost\r
-X-Marketplace-Claims: {}\r
-Connection: close\r
-\r
-",
-                claims_header()
-            ),
-        )
-        .await;
-        assert!(denied.contains("\"code\":\"forbidden\""));
 
-        let release_body = serde_json::json!({ "reason": "admin cleanup" }).to_string();
-        let release = round_trip(
-            &address,
-            &format!(
-                "POST /internal/v1/listings/lst_000001/release-reservation HTTP/1.1\r
-Host: localhost\r
-X-Marketplace-Claims: {}\r
-Content-Type: application/json\r
-Content-Length: {}\r
-Connection: close\r
-\r
-{}",
-                serde_json::to_string(&admin_claims()).unwrap(),
-                release_body.len(),
-                release_body
-            ),
-        )
-        .await;
-        assert!(release.contains("\"status\":\"cancelled\""));
-    */
+                &address,
+                &format!(
+                    "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
+    Host: localhost\r
+    X-Marketplace-Claims: {}\r
+    Connection: close\r
+    \r
+    ",
+                    serde_json::to_string(&reviewer_claims()).unwrap()
+                ),
+            )
+            .await;
+            assert!(internal_listing.contains("\"listing_id\":\"lst_000001\""));
+
+            let denied = round_trip(
+                &address,
+                &format!(
+                    "GET /internal/v1/listings/lst_000001 HTTP/1.1\r
+    Host: localhost\r
+    X-Marketplace-Claims: {}\r
+    Connection: close\r
+    \r
+    ",
+                    claims_header()
+                ),
+            )
+            .await;
+            assert!(denied.contains("\"code\":\"forbidden\""));
+
+            let release_body = serde_json::json!({ "reason": "admin cleanup" }).to_string();
+            let release = round_trip(
+                &address,
+                &format!(
+                    "POST /internal/v1/listings/lst_000001/release-reservation HTTP/1.1\r
+    Host: localhost\r
+    X-Marketplace-Claims: {}\r
+    Content-Type: application/json\r
+    Content-Length: {}\r
+    Connection: close\r
+    \r
+    {}",
+                    serde_json::to_string(&admin_claims()).unwrap(),
+                    release_body.len(),
+                    release_body
+                ),
+            )
+            .await;
+            assert!(release.contains("\"status\":\"cancelled\""));
+        */
     // }
 
     #[tokio::test]
@@ -1934,7 +2001,12 @@ Connection: close\r
 
         let response = round_trip(
             &address,
-            &http_request("POST", "/v1/listings", Some(&claims()), Some(&create_body())),
+            &http_request(
+                "POST",
+                "/v1/listings",
+                Some(&claims()),
+                Some(&create_body()),
+            ),
         )
         .await;
 

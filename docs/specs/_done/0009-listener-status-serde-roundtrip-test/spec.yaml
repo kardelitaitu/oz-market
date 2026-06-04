@@ -1,0 +1,23 @@
+version: 1
+id: 0009-listener-status-serde-roundtrip-test
+title: ListenerStatus Serde Round-trip Test
+status: done
+owner: mobile-team
+implementer: agent
+priority: P2
+area:
+  - mobile
+  - testing
+files:
+  code:
+    - mobile/marketplace/src-tauri/src/client/sse.rs
+  docs:
+    - docs/testing/todo-test-improvement.md
+acceptance:
+  - ListenerStatus enum derives serde::Deserialize (it already derives Serialize)
+  - A unit test verifies that serializing any variant of ListenerStatus produces a lowercase string matching what the frontend expects
+  - The unit test asserts that deserializing the resulting JSON matches the original variant identically
+non_goals:
+  - Changing the names or string values of the ListenerStatus variants
+risks:
+  - Frontend contract break if casing/serialization changes

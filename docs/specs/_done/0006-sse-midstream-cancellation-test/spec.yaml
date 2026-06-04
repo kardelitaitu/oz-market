@@ -1,0 +1,26 @@
+version: 1
+id: 0006-sse-midstream-cancellation-test
+title: SSE Mid-stream Cancellation Integration Test
+status: completed
+owner: mobile-team
+implementer: agent
+priority: P2
+area:
+  - mobile
+  - testing
+files:
+  code:
+    - mobile/marketplace/src-tauri/src/client/sse.rs
+  docs:
+    - docs/testing/todo-test-improvement.md
+acceptance:
+  - An integration test is added verifying mid-stream cancellation in read_sse_stream
+  - The test runs on a spawned thread/task
+  - It uses wiremock to stream chunked/delayed events
+  - Setting cancelled = true mid-stream halts read_sse_stream immediately
+  - The collector only receives events emitted before cancellation
+non_goals:
+  - Modifying the read_sse_stream function structure
+  - Modifying Tauri frontend event listeners
+risks:
+  - Timing sensitivity in sleep and cancellation delays

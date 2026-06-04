@@ -33,7 +33,9 @@ impl Display for HandlerError {
             Self::Search(error) => write!(f, "{error:?}"),
             Self::Repository(error) => write!(f, "{error}"),
             Self::QuotaExceeded { message } => write!(f, "quota exceeded: {message}"),
-            Self::Validation { field, message } => write!(f, "validation error on {field}: {message}"),
+            Self::Validation { field, message } => {
+                write!(f, "validation error on {field}: {message}")
+            }
         }
     }
 }
@@ -51,9 +53,11 @@ impl HandlerError {
                 }
             },
             Self::Idempotency(inner) => match inner.kind {
-                crate::services::idempotency::IdempotencyErrorKind::InvalidKey => {
-                    (400, ApiErrorCode::InvalidField, Some("idempotency_key".into()))
-                }
+                crate::services::idempotency::IdempotencyErrorKind::InvalidKey => (
+                    400,
+                    ApiErrorCode::InvalidField,
+                    Some("idempotency_key".into()),
+                ),
                 crate::services::idempotency::IdempotencyErrorKind::Conflict => {
                     (409, ApiErrorCode::VersionConflict, None)
                 }
@@ -95,16 +99,21 @@ impl HandlerError {
             },
             Self::QuotaExceeded { .. } => (429, ApiErrorCode::QuotaExceeded, None),
             Self::Agent(_) => (400, ApiErrorCode::InvalidField, None),
-            Self::Validation { field, .. } => (400, ApiErrorCode::InvalidField, Some(field.clone())),
+            Self::Validation { field, .. } => {
+                (400, ApiErrorCode::InvalidField, Some(field.clone()))
+            }
         };
         let message = self.to_string();
-        (status, ApiErrorResponse {
-            error: ApiErrorDetail {
-                code,
-                message,
-                field,
+        (
+            status,
+            ApiErrorResponse {
+                error: ApiErrorDetail {
+                    code,
+                    message,
+                    field,
+                },
             },
-        })
+        )
     }
 }
 

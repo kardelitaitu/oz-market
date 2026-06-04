@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 mod error;
 pub mod rate_limit;
+pub mod sse;
 pub use error::ApiError;
 
 use marketplace_api_contract::{
@@ -114,7 +115,8 @@ impl ApiClient {
 
     /// Update the rate limit tracker from a response for the given action.
     async fn update_rate_limit(&self, action: &str, response: &reqwest::Response) {
-        if let Some((remaining, limit, reset_after_secs)) = Self::parse_rate_limit_headers(response) {
+        if let Some((remaining, limit, reset_after_secs)) = Self::parse_rate_limit_headers(response)
+        {
             let mut tracker = self.rate_limiter.write().await;
             tracker.update(action, remaining, limit, reset_after_secs);
         }

@@ -1,4 +1,7 @@
-use crate::auth::{self, Claims};
+use crate::auth;
+use crate::state::AppState;
+use std::sync::atomic::Ordering;
+use tauri::State;
 
 #[tauri::command]
 pub async fn login(
@@ -8,7 +11,7 @@ pub async fn login(
     roles: Vec<String>,
     scopes: Vec<String>,
 ) -> Result<String, String> {
-    let claims = Claims {
+    let claims = auth::Claims {
         sub,
         roles,
         scopes,
@@ -23,7 +26,11 @@ pub async fn login(
 }
 
 #[tauri::command]
-pub async fn logout() -> Result<(), String> {
+pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
+    let mut listeners = state.negotiation_listeners.write().await;
+    for (_, cancelled) in listeners.drain() {
+        cancelled.store(true, Ordering::Relaxed);
+    }
     auth::clear_claims()
 }
 

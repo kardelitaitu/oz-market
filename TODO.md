@@ -1,39 +1,79 @@
-# TODO
+# TODO — Infrastructure Hardening Roadmap
 
-Project state: near-production-ready. All foundation work is complete.
-Remaining items are deployment, demo validation, and future-facing extensions.
+Takes `oz-market` from highly optimized open-source monorepo to bulletproof production-grade infrastructure.
 
-## Ready
+Ordered by feasibility + codebase readiness.
 
-- [x] Rust backend (Actix-web, 12MB release binary, 60k+ ops/s search)
-- [x] MCP server (10 tools, full transaction flow verified via stdio)
-- [x] PostgreSQL schema (17 migrations, auto-applied on boot)
-- [x] Auth: API key fallback, JWT support wired, role/permission matrix
-- [x] Rate limiting (per-IP search, per-token writes)
-- [x] Idempotency (Postgres-backed)
-- [x] Graceful shutdown (SIGINT/SIGTERM, configurable drain timeout)
-- [x] Structured JSON logging (LOG_FORMAT=json)
-- [x] Docker + docker-compose (one-command deploy)
-- [x] CI (fmt, clippy, 184 lib tests, 15 MCP smoke tests, Postgres integration)
-- [x] Actix integration tests (4 tests exercising full HTTP stack with in-memory repos)
-- [x] Caches byte-limited via Moka weigher, sized for 4GB VPS
-- [x] Deployment runbook (docs/deploy.md) with 8-step demo transaction
+---
 
-## Next (for production launch)
+## ✅ Phase 1 — Non-Blocking Timeout Guardrails
 
-- [ ] Deploy to a Linux VPS (recommended: Hetzner CX22 €4/mo or Railway.app)
-- [ ] Run the 8-step demo transaction against live server
-- [ ] Configure domain name + reverse proxy (Caddy / Nginx)
-- [ ] Set up PostgreSQL backups (pg_dump cron job or managed DB)
-- [ ] Set up log aggregation (Loki / Datadog) via LOG_FORMAT=json
+> Protect sub-ms server perf from slow agent calls with hard execution deadlines.
 
-## Future
+**Completed 2026-06-04:**
 
-- [ ] Mobile apps (Android/iOS — currently design docs only)
-- [ ] Stripe / Cryptomus payment integration
-- [ ] AI credit system and premium plans
-- [ ] Developer SDK (Rust / TypeScript)
-- [ ] Agent personality templates
-- [ ] Web frontend (minimal 3-page site)
-- [ ] MCP HTTP/SSE transport (currently stdio-only)
-- [ ] End-to-end benchmark CI step (bench_concurrent regression check)
+- [x] Wrap MCP tool handlers with `tokio::time::timeout()` — configurable per-tool deadline via `MCP_TOOL_TIMEOUT_MS` env var (default 10s)
+- [x] Return `McpToolError::timeout()` with code `"timeout"` on timeout
+- [x] Add timeout metadata to `ServerInfo.instructions` in `get_info()`
+- [x] Audit `api-contract`: no `deny_unknown_fields` anywhere; all optional fields have `#[serde(default)]`
+- [x] Log internal errors and timeouts to stderr via `eprintln!` (respects MCP stderr convention)
+- [x] Document rollback boundary: idempotency keys already prevent duplicate mutations on timeout+retry
+
+---
+
+## Phase 2 — Resilient Mobile Integration
+
+> Replace aggressive polling with server-push model; reduce battery drain without sacrificing responsiveness.
+
+- [ ] Add SSE endpoint on server for negotiation status changes (`GET /v1/events/negotiations`)
+- [ ] Wire Tauri events system to consume SSE stream (`listen()` API)
+- [ ] Remove 5s polling from `negotiations/[id]/+page.svelte` — replace with SSE-driven reactivity
+- [ ] Reduce rate-limit polling from 3s to 15s (acceptable staleness for rate-limit UI)
+- [ ] Add state reconciliation on reconnect — fetch latest state after SSE reconnection
+- [ ] Measure and document JSON serialization cost at FFI boundary; set concrete threshold for zero-copy reconsideration (e.g. >5ms per call)
+- [ ] Cap exponential backoff at 30s with jitter on mobile reconnect
+
+---
+
+## Phase 3 — Dual-Layer Ledger
+
+> Track credits, rate limits, and auth tokens in-memory; async batch commit to Postgres.
+
+**Prerequisite: define and build the credit/balance model first (schema, deposit/spend).**
+
+- [ ] Design credit/balance DB schema and domain logic
+- [ ] Implement in-memory ledger trait (dashmap or embedded Redis) — same pattern as existing `SlidingWindowRateLimiter`
+- [ ] Define cache invalidation policy (TTL + admin-triggered invalidation)
+- [ ] Start with synchronous commit (credits written to DB immediately via the cache as write-through); add async batch only after proving the bottleneck
+- [ ] Add WAL or write-ahead log for crash recovery if moving to async batch
+- [ ] Add `cache_hit` / `cache_miss` / `batch_lag` metrics
+- [ ] Benchmark contention improvement vs direct Postgres writes
+- [ ] Note: existing single-process HashMap cache does not scale horizontally — cross-instance coordination needs Redis
+
+---
+
+## Phase 4 — Predictive Latency Scoring (Backlog)
+
+> Dynamic agent health metrics as a routing signal.
+
+**Blocked on: multi-agent routing/dispatch layer does not exist yet.**
+
+- [ ] Deferred — requires building an agent-pool / dispatch system first
+- [ ] Define latency + error-rate scoring model (EWMA, percentile-based)
+- [ ] Collect per-call metrics: response time, failure rate, windowed averages
+- [ ] Solve cold-start problem (probationary default score for new agents)
+- [ ] Expose health status in API contract for clients
+- [ ] Circuit-breaker integration — skip chronically slow agents
+
+---
+
+## Phase 5 — Semantic Tool Versioning (Backlog)
+
+> Multi-version contract support in `api-contract` crate.
+
+**Deferred — premature. Existing serde defaults + `schema_version` field cover current needs.**
+
+- [ ] Add warning log when unrecognized `schema_version` is received
+- [ ] Defer multi-version parsing until backward-compatibility pain is confirmed
+- [ ] If revisited: define version negotiation handshake (client advertises range, server responds)
+- [ ] If revisited: define deprecation window and migration policy per version

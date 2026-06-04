@@ -6,26 +6,30 @@
     rejectNegotiation,
     requestContactReveal,
     approveContactReveal,
+    startNegotiationListener,
+    stopNegotiationListener,
   } from '$lib/api/commands';
-  import type { NegotiationResponse, NegotiationHistoryEntry } from '$lib/api/commands';
+  import type { NegotiationResponse } from '$lib/api/commands';
   import { generateIdempotencyKey } from '$lib/utils/idempotency';
   import { rateLimits } from '$lib/stores/rateLimit.svelte';
-  import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import { onNavigate } from '$app/navigation';
+  import { listen } from '@tauri-apps/api/event';
 
   let negotiation = $state<NegotiationResponse | null>(null);
   let loading = $state(true);
   let error = $state('');
-  let polling = $state(false);
   let counterAmount = $state(0);
   let counterCurrency = $state('USD');
   let actionSubmitting = $state('');
   let actionError = $state('');
   let pendingRevealId = $state<string | undefined>(undefined);
 
-  const id = $derived($page.params.id);
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  const id = $page.params.id as string;
+  let unlisten: (() => void) | undefined;
+  let unlistenError: (() => void) | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
 
   let offerExhausted = $derived(rateLimits.forAction('offer')?.remaining === 0);
   let acceptExhausted = $derived(rateLimits.forAction('accept')?.remaining === 0);
@@ -33,14 +37,58 @@
   let revealExhausted = $derived(rateLimits.forAction('reveal')?.remaining === 0);
   let approveExhausted = $derived(rateLimits.forAction('approve')?.remaining === 0);
 
+  function applyNegotiationData(data: NegotiationResponse) {
+    negotiation = data;
+    pendingRevealId = data.reveal_id;
+    const latest = data.offer_history?.at(-1);
+    if (latest) {
+      counterAmount = latest.offer_amount;
+      counterCurrency = latest.offer_currency;
+    }
+    loading = false;
+  }
+
   onMount(() => {
-    loadNegotiation();
-    pollTimer = setInterval(loadNegotiation, 5000);
-    return () => { if (pollTimer) clearInterval(pollTimer); };
+    startNegotiationListener(id).catch(() => {});
+
+    // Fallback: if SSE doesn't deliver initial_state within 5s, do HTTP fetch
+    fallbackTimer = setTimeout(async () => {
+      if (loading) {
+        try {
+          const result = await getNegotiation(id);
+          applyNegotiationData(result);
+        } catch (e) {
+          error = String(e);
+          loading = false;
+        }
+      }
+    }, 5000);
+
+    listen<{ event_type: string; data: string }>('negotiation-update', (event) => {
+      try {
+        const parsed = JSON.parse(event.payload.data);
+        if (parsed.negotiation_id === id) {
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          applyNegotiationData(parsed);
+        }
+      } catch { /* ignore malformed events */ }
+    }).then((u) => unlisten = u);
+    listen<string>('negotiation-listener-error', (event) => {
+      error = String(event.payload);
+    }).then((u) => unlistenError = u);
+    return () => {
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      stopNegotiationListener(id).catch(() => {});
+      unlisten?.();
+      unlistenError?.();
+    };
+  });
+
+  onNavigate(() => {
+    stopNegotiationListener(id).catch(() => {});
   });
 
   async function loadNegotiation() {
-    if (!loading) polling = true;
     error = '';
     try {
       const result = await getNegotiation(id);
@@ -55,7 +103,6 @@
       if (!loading) error = String(e);
     } finally {
       loading = false;
-      polling = false;
     }
   }
 
@@ -109,7 +156,6 @@
     try {
       const result = await requestContactReveal(id, generateIdempotencyKey());
       pendingRevealId = result.reveal_id;
-      await loadNegotiation();
     } catch (e) {
       actionError = String(e);
     } finally {
@@ -123,7 +169,6 @@
     actionError = '';
     try {
       await approveContactReveal(pendingRevealId, generateIdempotencyKey());
-      await loadNegotiation();
     } catch (e) {
       actionError = String(e);
     } finally {
@@ -146,9 +191,6 @@
 
   <div class="status-bar status-{negotiation.status}">
     Status: {negotiation.status}
-    {#if polling}
-      <span class="polling-indicator">(polling...)</span>
-    {/if}
   </div>
 
   <div class="field">
@@ -249,11 +291,6 @@
   .status-cancelled { background: #fed7d7; color: #9b2c2c; }
   .status-contact_requested { background: #e9d8fd; color: #6b46c1; }
   .status-contact_revealed { background: #c6f6d5; color: #276749; }
-  .polling-indicator {
-    font-size: 0.75rem;
-    font-weight: 400;
-    opacity: 0.7;
-  }
   .field {
     margin: 8px 0;
     display: flex;

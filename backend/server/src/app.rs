@@ -1,3 +1,4 @@
+use crate::domain::listing_validation::validate_listing_payload;
 use crate::http::handlers::{
     begin_create_listing, begin_open_negotiation, get_listing, search_listings,
 };
@@ -7,7 +8,6 @@ use crate::repositories::{
     ListingRepository, OutboxEventRepository, RepositoryError, RepositoryErrorKind,
     ReservationLeaseRepository, SellerAccountRepository,
 };
-use crate::domain::listing_validation::validate_listing_payload;
 use crate::services::agent::AgentService;
 use crate::services::audit_events::AuditEventService;
 use crate::services::contact_reveals::ContactRevealService;
@@ -829,7 +829,8 @@ where
         crate::services::authz::authorize_create_listing(claims, &request.listing.owner_id)?;
 
         // Domain validation before any side effects
-        validate_listing_payload(&request.listing).map_err(crate::http::handlers::HandlerError::from)?;
+        validate_listing_payload(&request.listing)
+            .map_err(crate::http::handlers::HandlerError::from)?;
 
         // Check quota before proceeding
         let owner_id = &request.listing.owner_id;
@@ -856,7 +857,10 @@ where
             if is_new_seller(&account.trust_level) {
                 let daily_key = format!("daily:seller:{}", account.seller_account_id);
                 let hourly_key = format!("hourly:seller:{}", account.seller_account_id);
-                if !global_limiter().check(&daily_key, NEW_SELLER_DAILY_MAX as usize, 86400).allowed {
+                if !global_limiter()
+                    .check(&daily_key, NEW_SELLER_DAILY_MAX as usize, 86400)
+                    .allowed
+                {
                     return Err(crate::http::handlers::HandlerError::QuotaExceeded {
                         message: format!(
                             "new seller daily limit: {} listings/day",
@@ -864,7 +868,10 @@ where
                         ),
                     });
                 }
-                if !global_limiter().check(&hourly_key, NEW_SELLER_HOURLY_MAX as usize, 3600).allowed {
+                if !global_limiter()
+                    .check(&hourly_key, NEW_SELLER_HOURLY_MAX as usize, 3600)
+                    .allowed
+                {
                     return Err(crate::http::handlers::HandlerError::QuotaExceeded {
                         message: format!(
                             "new seller hourly limit: {} listing/hour",

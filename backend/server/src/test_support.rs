@@ -1,8 +1,13 @@
-use crate::repositories::{ListingRepository, RepositoryError, RepositoryErrorKind};
+use crate::models::db::AuditEventRow;
+use crate::repositories::{
+    AuditEventRepository, ListingRepository, NegotiationRepository, RepositoryError,
+    RepositoryErrorKind,
+};
 use marketplace_api_contract::{
-    Category, Condition, CreateListingRequest, CreateListingResponse, CurrencyCode,
-    ListingLocation, ListingPayload, ListingStatus, ListingSummary, ListingType,
-    NegotiationResponse, OpenNegotiationRequest, Price, SearchRequest, SearchResponse, ServiceType,
+    AcceptNegotiationRequest, Category, Condition, CreateListingRequest, CreateListingResponse,
+    CurrencyCode, ListingLocation, ListingPayload, ListingStatus, ListingSummary, ListingType,
+    NegotiationResponse, NegotiationStatus, OpenNegotiationRequest, Price,
+    RejectNegotiationRequest, SearchRequest, SearchResponse, ServiceType, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role, Scope};
 use std::sync::Arc;
@@ -573,4 +578,198 @@ where
     let json = serde_json::to_value(val).unwrap();
     let deserialized: T = serde_json::from_value(json.clone()).unwrap();
     assert_eq!(&deserialized, val, "JSON roundtrip failed for {json}");
+}
+
+// ---------------------------------------------------------------------------
+// MockNegotiationRepository — configurable per-method result slots
+// ---------------------------------------------------------------------------
+
+type MockNegotiationResult<T> = Arc<std::sync::Mutex<Option<Result<T, RepositoryError>>>>;
+type MockNegotiationOptionResult<T> =
+    Arc<std::sync::Mutex<Option<Result<Option<T>, RepositoryError>>>>;
+
+pub struct MockNegotiationRepository {
+    pub upsert_open_result: MockNegotiationResult<NegotiationResponse>,
+    pub get_result: MockNegotiationOptionResult<NegotiationResponse>,
+    pub submit_offer_result: MockNegotiationResult<NegotiationResponse>,
+    pub accept_result: MockNegotiationResult<NegotiationResponse>,
+    pub reject_result: MockNegotiationResult<NegotiationResponse>,
+    pub update_status_result: MockNegotiationResult<NegotiationResponse>,
+}
+
+impl Default for MockNegotiationRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MockNegotiationRepository {
+    pub fn new() -> Self {
+        Self {
+            upsert_open_result: Arc::new(std::sync::Mutex::new(None)),
+            get_result: Arc::new(std::sync::Mutex::new(None)),
+            submit_offer_result: Arc::new(std::sync::Mutex::new(None)),
+            accept_result: Arc::new(std::sync::Mutex::new(None)),
+            reject_result: Arc::new(std::sync::Mutex::new(None)),
+            update_status_result: Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
+    pub fn fail_all(&self) {
+        let msg = || RepositoryError::new(RepositoryErrorKind::Storage, "mock storage error");
+        *self.upsert_open_result.lock().unwrap() = Some(Err(msg()));
+        *self.get_result.lock().unwrap() = Some(Err(msg()));
+        *self.submit_offer_result.lock().unwrap() = Some(Err(msg()));
+        *self.accept_result.lock().unwrap() = Some(Err(msg()));
+        *self.reject_result.lock().unwrap() = Some(Err(msg()));
+        *self.update_status_result.lock().unwrap() = Some(Err(msg()));
+    }
+}
+
+#[async_trait::async_trait]
+impl NegotiationRepository for MockNegotiationRepository {
+    async fn upsert_open_negotiation(
+        &self,
+        _response: &NegotiationResponse,
+        _open_idempotency_key: &str,
+        _now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        self.upsert_open_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn get_negotiation(
+        &self,
+        _negotiation_id: &str,
+    ) -> Result<Option<NegotiationResponse>, RepositoryError> {
+        self.get_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn submit_offer(
+        &self,
+        _negotiation_id: &str,
+        _request: &SubmitOfferRequest,
+        _actor_subject: &str,
+        _actor_role: &str,
+        _now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        self.submit_offer_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn accept_negotiation(
+        &self,
+        _negotiation_id: &str,
+        _request: &AcceptNegotiationRequest,
+        _actor_subject: &str,
+        _actor_role: &str,
+        _now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        self.accept_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn reject_negotiation(
+        &self,
+        _negotiation_id: &str,
+        _request: &RejectNegotiationRequest,
+        _actor_subject: &str,
+        _actor_role: &str,
+        _now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        self.reject_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+
+    async fn update_status(
+        &self,
+        _negotiation_id: &str,
+        _status: NegotiationStatus,
+        _now_rfc3339: &str,
+    ) -> Result<NegotiationResponse, RepositoryError> {
+        self.update_status_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MockAuditEventRepository — configurable per-method result slots
+// ---------------------------------------------------------------------------
+
+type MockAuditResult = Arc<std::sync::Mutex<Option<Result<(), RepositoryError>>>>;
+
+pub struct MockAuditEventRepository {
+    pub append_result: MockAuditResult,
+}
+
+impl Default for MockAuditEventRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MockAuditEventRepository {
+    pub fn new() -> Self {
+        Self {
+            append_result: Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
+    pub fn fail(&self) {
+        *self.append_result.lock().unwrap() = Some(Err(RepositoryError::new(
+            RepositoryErrorKind::Storage,
+            "mock storage error",
+        )));
+    }
+}
+
+#[async_trait::async_trait]
+impl AuditEventRepository for MockAuditEventRepository {
+    async fn append_event(&self, _event: AuditEventRow) -> Result<(), RepositoryError> {
+        self.append_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or(Err(RepositoryError::new(
+                RepositoryErrorKind::Storage,
+                "mock not configured",
+            )))
+    }
 }

@@ -1,0 +1,24 @@
+version: 1
+id: 0008-wiremock-counted-responder-helper
+title: Wiremock Reusable Counted Responder Helper
+status: done
+owner: testing-team
+implementer: agent
+priority: P2
+area:
+  - mobile
+  - testing
+files:
+  code:
+    - mobile/marketplace/src-tauri/src/client/sse.rs
+  docs:
+    - docs/testing/todo-test-improvement.md
+acceptance:
+  - A reusable helper function counted_responder(responses: Vec<ResponseTemplate>) -> CountedResponder is created
+  - The CountedResponder struct implements wiremock::Respond
+  - It yields responses sequentially, returning a 500 fallback once the list is exhausted
+  - Existing or new wiremock tests are updated to use this helper where appropriate
+non_goals:
+  - Moving counted_responder outside the test suite of sse.rs unless other test suites need it (can keep it scoped to sse.rs integration module)
+risks:
+  - Thread-safety (must use AtomicUsize or Mutex for sequential state tracking across concurrent mock requests)

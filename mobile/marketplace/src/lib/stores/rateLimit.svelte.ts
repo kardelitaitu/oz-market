@@ -28,7 +28,7 @@ export const rateLimits = {
     return _limits.some((l) => l.limit > 0 && l.remaining / l.limit < 0.2);
   },
 
-  startPolling(intervalMs = 3000): void {
+  startPolling(intervalMs = 15000): void {
     if (_pollTimer) return;
     const poll = async () => {
       try {

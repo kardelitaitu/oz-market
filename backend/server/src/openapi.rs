@@ -3,11 +3,11 @@
 //! Serves the existing OpenAPI spec from docs/specs/openapi.yaml.
 //! Provides a simple redirect to Swagger Editor for interactive docs.
 
+use actix_web::HttpRequest;
 use serde_json;
 use serde_yaml;
 use std::fs;
 use std::path::PathBuf;
-use actix_web::HttpRequest;
 
 /// Try to locate the openapi.yaml file
 fn find_openapi_yaml() -> Option<PathBuf> {

@@ -187,7 +187,10 @@ impl ContactRevealRepository for InMemoryContactRevealRepository {
         negotiation_id: &str,
     ) -> Result<Option<ContactRevealResponse>, RepositoryError> {
         let by_reveal = self.by_reveal_id.read().expect("contact reveal read lock");
-        let by_negotiation = self.by_negotiation_id.read().expect("contact reveal negotiation read lock");
+        let by_negotiation = self
+            .by_negotiation_id
+            .read()
+            .expect("contact reveal negotiation read lock");
         Ok(by_negotiation
             .get(negotiation_id)
             .and_then(|reveal_id| by_reveal.get(reveal_id.as_str()))

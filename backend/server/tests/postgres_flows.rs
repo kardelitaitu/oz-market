@@ -153,7 +153,13 @@ async fn postgres_contact_approval_flow_persists_and_updates_status(
     // Seed reservation lease (create_request queries reservation_leases)
     let res_repo = PostgresReservationLeaseRepository::new(pool.clone());
     res_repo
-        .reserve(&listing_id, &negotiation_id, "buyer-1", "2026-05-04T00:00:00Z", 3600)
+        .reserve(
+            &listing_id,
+            &negotiation_id,
+            "buyer-1",
+            "2026-05-04T00:00:00Z",
+            3600,
+        )
         .await?;
 
     let repo = PostgresContactRevealRepository::new(pool.clone());
@@ -419,7 +425,9 @@ async fn postgres_contact_reveal_request_and_approve_flow(
     let repo = PostgresContactRevealRepository::new(pool.clone());
 
     // Approve reveal
-    let result = repo.approve_request(&reveal_id, "2026-05-12T00:01:00Z").await?;
+    let result = repo
+        .approve_request(&reveal_id, "2026-05-12T00:01:00Z")
+        .await?;
     assert_eq!(result.reveal_id, reveal_id);
     assert_eq!(
         result.reveal_status,
@@ -487,7 +495,13 @@ async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn 
 
     // Create lease (Postgres auto-generates lease_id via sequence)
     let result = repo
-        .reserve(&listing_id, &negotiation_id, "user", "2026-05-12T00:00:00Z", 3600)
+        .reserve(
+            &listing_id,
+            &negotiation_id,
+            "user",
+            "2026-05-12T00:00:00Z",
+            3600,
+        )
         .await?;
     assert_eq!(result.listing_id, listing_id);
     let actual_lease_id = result.lease_id.clone();
@@ -498,7 +512,8 @@ async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn 
     assert!(lease.is_some());
 
     // Release lease
-    repo.release(&actual_lease_id, "2026-05-12T01:00:00Z").await?;
+    repo.release(&actual_lease_id, "2026-05-12T01:00:00Z")
+        .await?;
 
     // Check lease gone
     let lease_after: Option<marketplace_server::models::db::ReservationLeaseRow> =

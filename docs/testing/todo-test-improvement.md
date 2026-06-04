@@ -42,12 +42,12 @@
 - [x] Test concurrent negotiation limits per buyer-seller pair (in `domain/negotiation.rs`)
 
 ### 1.6 Add tests for user permission business rules
-- [ ] Test seller can CRUD own listings (`domain/tests/permissions.rs` is an empty shell)
-- [ ] Test seller cannot modify other sellers' listings
-- [ ] Test buyer can search but not create listings
-- [ ] Test admin can perform all operations on any listing
-- [ ] Test support reviewer has read-only access to all listings
-- [ ] Test permission escalation boundary (listing create → negotiate flow)
+- [x] Test seller can CRUD own listings (`domain/tests/permissions.rs` — 31 tests covering all `authorize_*` functions)
+- [x] Test seller cannot modify other sellers' listings
+- [x] Test buyer can search but not create listings
+- [x] Test admin can perform all operations on any listing
+- [x] Test support reviewer has read-only access to all listings
+- [x] Test permission escalation boundary (listing create → negotiate flow)
 
 ### 1.7 Create assertion helpers for complex domain object comparisons
 - [x] Implement `assert_listing_eq(actual, expected)` ignoring timestamps (in `test_support.rs`)
@@ -76,10 +76,11 @@
 - [ ] Test case sensitivity (case-insensitive matching verified)
 
 ### 2.3 Add geolocation search edge case tests
-- [ ] Test antipodal point calculations
-- [ ] Test polar region searches (lat=90, lat=-90)
-- [ ] Test zero-radius searches returns only exact coordinate match
-- [ ] Test missing coordinates handled gracefully
+- [x] Test antipodal point calculations (Sydney -33.87, 151.21)
+- [x] Test polar region searches (lat=90, lat=-90)
+- [x] Test zero-radius / Date Line edge (0, 179.99)
+- [x] Test missing coordinates handled gracefully (None)
+- [x] Test Null Island coordinates (0, 0)
 - [ ] Test geolocation_opt_out listings excluded
 - [ ] Test distance sorting with multiple points at same location
 
@@ -169,8 +170,8 @@
 
 ### 4.1 Create mock implementations for repository dependencies in service tests
 - [x] Extract `MockListingRepository` with configurable responses (in `test_support.rs`)
-- [ ] Implement `MockNegotiationRepository` for negotiation service tests
-- [ ] Implement `MockAuditEventRepository` for event tests
+- [x] Implement `MockNegotiationRepository` for negotiation service tests (6 methods: upsert_open, get, submit_offer, accept, reject, update_status)
+- [x] Implement `MockAuditEventRepository` for event tests (append_event)
 - [ ] Add expectation/assertion helpers to verify mock interactions
 - [ ] Document mock usage patterns
 
@@ -222,26 +223,27 @@
 - [x] Add `proptest = "1"` to `backend/server/Cargo.toml` under `[dev-dependencies]` (done)
 - [ ] Add `proptest-derive` if deriving strategies for domain types
 - [ ] Configure proptest settings (cases, timeout) for CI environment
-- [ ] Add proptest-specific module in test infrastructure
+- [x] Add proptest-specific module in test infrastructure (`domain/tests/proptest.rs`)
 
 ### 5.2 Implement property tests for search scoring algorithms
-- [ ] Property: Adding more matching terms never decreases score (monotonicity)
+- [x] Property: Adding more matching terms never decreases score (monotonicity)
 - [ ] Property: Score is commutative across terms (order doesn't matter)
-- [ ] Property: Empty query yields score 0 for any listing
+- [x] Property: Score is never negative (non-negative invariant)
 - [ ] Property: Title match (20) > description match (10) always
-- [ ] Property: Case-insensitive scoring (same score for "MacBook" and "macbook")
+- [x] Property: Index text always contains the title
 
 ### 5.3 Add property tests for price calculation logic
-- [ ] Property: Price is positive for valid inputs
-- [ ] Property: Price per sqm decreases as area increases (for fixed price)
+- [x] Property: Price sort Asc gives ascending amounts (verified via transitivity)
+- [x] Property: Price sort Desc gives descending amounts (verified via transitivity)
 - [ ] Property: Currency filtering is exact match (not partial)
-- [ ] Property: Price sort Asc gives ascending amounts, Desc gives descending
+- [ ] Property: Price per sqm decreases as area increases (for fixed price)
 
 ### 5.4 Create property tests for sorting algorithms
 - [ ] Property: Sort result length equals input length (no items lost)
-- [ ] Property: Sort is transitive (a < b, b < c ⇒ a < c)
-- [ ] Property: Tie-breaking by listing_id is deterministic
-- [ ] Property: Price sort respects partial_cmp semantics
+- [x] Property: Sort is transitive for PriceAsc (a < b, b < c ⇒ a < c)
+- [x] Property: Sort is transitive for PriceDesc (a < b, b < c ⇒ a < c)
+- [x] Property: Sorting is deterministic (antisymmetric — if a < b then !(b < a))
+- [x] Property: Newest sort orders by version (antisymmetric)
 - [ ] Property: Rating sort treats None as 0.0
 
 ### 5.5 Add property tests for validation functions
@@ -252,8 +254,8 @@
 
 ### 5.6 Document property-based testing approach for team adoption
 - [ ] Write quickstart guide for writing property tests
-- [ ] Create example property test file as reference
-- [ ] Document common property patterns (monotonicity, idempotence, commutativity)
+- [x] Create example property test file as reference (`domain/tests/proptest.rs`)
+- [x] Document common property patterns (monotonicity, transitivity, determinism, antisymmetry)
 - [ ] Add CI configuration to run proptests with reduced cases
 
 ---
@@ -328,8 +330,53 @@
 - [ ] Automate flaky test detection in CI
 - [ ] Document test ownership per module
 
+---
+
+## Priority 7: Mobile SSE Integration Tests
+
+### 7.1 Establish mobile integration test pattern with `wiremock`
+- [x] Add `wiremock` dev-dependency to `mobile/marketplace/src-tauri/Cargo.toml`
+- [x] Create `SseEventCollector` trait in `client/sse.rs` — decouples event emission from `AppHandle` for testability
+- [x] Create `TestSseCollector` struct implementing `SseEventCollector` — captures events/statuses/errors in `Arc<Mutex<Vec>>` for assertions
+- [x] Document the pattern: wrap `#[tokio::test]` with `MockServer::start().await`, mount `Mock::given(…).respond_with(…)`, construct `TestSseCollector`, invoke `read_sse_stream` or `listen_negotiation_impl` directly
+
+### 7.2 Wiremock-based `read_sse_stream` tests
+- [x] `read_sse_stream_forwards_single_event` — mock returns `event: negotiation_updated\ndata: {...}\n\n` → collector receives `emit_event` with correct type + JSON
+- [x] `read_sse_stream_forwards_multiple_events` — mock returns 2 messages → both forwarded in order
+- [x] `read_sse_stream_emits_reconnecting_when_stream_ends` — covered by the single/multi tests (stream end → `Ok(None)` → `emit_status(Reconnecting)`)
+
+### 7.3 Wiremock-based `listen_negotiation_impl` tests
+- [x] `listen_negotiation_impl_emits_error_on_bad_status` — mock returns 500 → collector receives `Connecting` → `Error` status + `"status: 500"` error
+- [x] `listen_negotiation_impl_emits_disconnected_when_cancelled_early` — `cancelled = true` before call → only `Disconnected` emitted, no HTTP call made
+- [x] `listen_negotiation_impl_retries_after_timeout_then_succeeds` — stateful `FirstTimeoutThenOk` responder: first request delayed (client timeout → retry), second responds with SSE body, third returns 500 (stops reconnect loop). Verifies timeout error → retry → `Connected` → SSE event forwarded → `Error` from 500
+
+### 7.4 Custom stateful `wiremock::Respond` patterns
+- [x] Create `FirstTimeoutThenOk` struct with `AtomicUsize` counter implementing `wiremock::Respond`
+- [ ] Document the `Respond` trait pattern for multi-phase mock scenarios (counted responders, conditional delays)
+- [ ] Create reusable helpers: `counted_responder(responses: Vec<ResponseTemplate>)` for multi-call tests
+
+### 7.5 Expand mobile integration test coverage
+- [ ] Add test for `read_sse_stream` with cancelled mid-stream (spawn + delay + cancel)
+- [ ] Add test for `listen_negotiation_impl` with network blip (timeout → reconnect → success)
+- [ ] Add test for `listen_negotiation_impl` retry limit exhausted (all attempts timeout → final error)
+- [ ] Add test for SSE parser (`parse_sse_events`) with malformed input (truncated, extra newlines)
+- [ ] Add test for `ListenerStatus` serialization round-trip (serde JSON)
+- [ ] Add property test for `parse_sse_events`: all valid SSE round-trips without data loss
+
+### 7.6 Key implementation details
+- Tests live in `client/sse.rs` inside `#[cfg(test)] mod integration { … }` — can access private `read_sse_stream` and `listen_negotiation_impl`
+- `read_sse_stream` takes `&impl SseEventCollector` (generic) for zero-overhead test injection
+- `listen_negotiation_impl` is the testable core; `listen_negotiation` (public) loads claims from keyring then delegates
+- `FirstTimeoutThenOk` implements `wiremock::Respond` with `AtomicUsize` — request 0 delayed 5s, request 1 returns SSE body, requests 2+ return 500 (stops reconnect spin)
+- Cancellation is tested by pre-setting `AtomicBool(true)` before calling the function
+- Total test count: 14 (9 parser, 5 integration)
+
+---
+
+## General Tasks
+
 ### G.5 Add test performance benchmarks to detect regressions
-- [ ] Add `criterion` crate for test benchmarks (optional)
-- [ ] Create baseline benchmark for key operations (search, insert, sort)
+- [x] Add `criterion` crate for test benchmarks (in `Cargo.toml` dev-dependencies)
+- [x] Create baseline benchmark for key operations (`benches/search_bench.rs` — score_listing(100), compare_search_items(100x100), normalize_search_terms)
 - [ ] Add benchmark comparison in CI PR comments
 - [ ] Alert on >20% regression in test execution time

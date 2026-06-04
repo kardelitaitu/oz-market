@@ -31,6 +31,8 @@ pub fn run() {
             commands::notifications::request_notification_permission,
             commands::notifications::send_local_notification,
             commands::rate_limits::get_rate_limits,
+            commands::negotiations::start_negotiation_listener,
+            commands::negotiations::stop_negotiation_listener,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

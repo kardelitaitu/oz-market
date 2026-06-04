@@ -1,7 +1,7 @@
+use metrics::counter;
 use std::collections::HashMap;
 use std::sync::RwLock;
 use tracing::warn;
-use metrics::counter;
 
 #[derive(Debug, Clone)]
 pub struct RateLimitStatus {

@@ -1,0 +1,24 @@
+version: 1
+id: 0011-dual-layer-ledger-cache
+title: Dual-Layer Ledger Trait and Synchronous Cache
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - ledger
+  - caching
+files:
+  code:
+    - backend/server/src/services/ledger_cache.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - An in-memory cache using DashMap is implemented for tracking agent balances
+  - A write-through caching model writes updates immediately to the DB via the cache
+  - Cache hits prevent redundant database queries for balance checks
+non_goals:
+  - Asynchronous background batching (deferred to 0013)
+risks:
+  - In-memory drift if DB updates bypass the cache (mitigated by using cache as the exclusive modifier)

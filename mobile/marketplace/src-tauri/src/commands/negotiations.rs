@@ -3,11 +3,13 @@ use marketplace_api_contract::{
     RejectNegotiationRequest, RequestContactRevealRequest, SubmitOfferRequest,
 };
 use serde::Deserialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::auth;
-use crate::client::ApiClient;
+use crate::client::{sse, ApiClient};
 use crate::state::AppState;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 async fn build_client(state: &AppState) -> Result<ApiClient, String> {
     let base_url = state.base_url.read().await.clone();
@@ -174,4 +176,45 @@ pub async fn approve_contact_reveal(
         .approve_contact_reveal(&claims, &reveal_id, &request)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn start_negotiation_listener(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    negotiation_id: String,
+) -> Result<(), String> {
+    let cancelled = Arc::new(AtomicBool::new(false));
+
+    {
+        let mut listeners = state.negotiation_listeners.write().await;
+        if let Some(old) = listeners.remove(&negotiation_id) {
+            old.store(true, Ordering::Relaxed);
+        }
+        listeners.insert(negotiation_id.clone(), cancelled.clone());
+    }
+
+    let inner = AppState {
+        client: state.client.clone(),
+        base_url: state.base_url.clone(),
+        rate_limiter: state.rate_limiter.clone(),
+        negotiation_listeners: state.negotiation_listeners.clone(),
+    };
+    tokio::spawn(async move {
+        sse::listen_negotiation(app_handle, inner, negotiation_id, cancelled).await;
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn stop_negotiation_listener(
+    state: State<'_, AppState>,
+    negotiation_id: String,
+) -> Result<(), String> {
+    let mut listeners = state.negotiation_listeners.write().await;
+    if let Some(cancelled) = listeners.remove(&negotiation_id) {
+        cancelled.store(true, Ordering::Relaxed);
+    }
+    Ok(())
 }

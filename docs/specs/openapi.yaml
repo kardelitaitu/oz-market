@@ -251,7 +251,7 @@ paths:
             minimum: 1
             maximum: 500
             default: 50
-          description: Search radius in kilometers (default: 50km)
+          description: "Search radius in kilometers (default: 50km)"
       responses:
         '200':
           description: Search results
@@ -642,6 +642,43 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /internal/v1/sellers/{seller_id}/credits:
+    post:
+      tags: [admin]
+      summary: Adjust seller credits (admin)
+      description: >
+        Increase, decrease, or set the credit balance for a specific seller account.
+        This operation requires admin authorization and is idempotent.
+      operationId: adjustSellerCredits
+      parameters:
+        - name: seller_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustSellerCreditsRequest'
+      responses:
+        '200':
+          description: Credits adjusted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustSellerCreditsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /internal/v1/reviews/{review_id}/approve:
     post:
       tags: [admin]
@@ -1436,3 +1473,47 @@ components:
           code: invalid_field
           message: "condition must be one of: new, used, refurbished"
           field: condition
+    SetSellerTrustLevelRequest:
+      type: string
+      enum: [new, verified, trusted, restricted]
+      example: verified
+    SetSellerQuotaOverrideRequest:
+      type: integer
+      minimum: 0
+      example: 1000
+    AdjustSellerCreditsRequest:
+      type: object
+      additionalProperties: false
+      required: [adjustment, amount, idempotency_key]
+      properties:
+        adjustment:
+          type: string
+          enum: [deposit, spend, refund, adjustment]
+          example: deposit
+        amount:
+          type: number
+          minimum: 0.0001
+          example: 150.0000
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: adm-ref-0012-abc
+    AdjustSellerCreditsResponse:
+      type: object
+      additionalProperties: false
+      required: [agent_id, balance_credits, idempotency_key, updated_at]
+      properties:
+        agent_id:
+          type: string
+          example: 8f3a38d7-d954-4a49-9df2-8e100cdb4c9b
+        balance_credits:
+          type: number
+          example: 150.0000
+        idempotency_key:
+          type: string
+          example: adm-ref-0012-abc
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-06-04T15:30:00Z"

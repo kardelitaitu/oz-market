@@ -4,11 +4,44 @@
   import { rateLimits } from '$lib/stores/rateLimit.svelte';
   import { page } from '$app/stores';
   import { onMount, onDestroy } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
+  import { sendNotification } from '@tauri-apps/plugin-notification';
 
   let { children } = $props();
 
-  onMount(() => rateLimits.startPolling(4000));
-  onDestroy(() => rateLimits.stopPolling());
+  let sseNotification: (() => void) | undefined;
+  let sseStatus: (() => void) | undefined;
+  let sseStatuses = $state<Record<string, string>>({});
+
+  let anyConnected = $derived(
+    Object.values(sseStatuses).some((s) => s === 'connected'),
+  );
+  let anyReconnecting = $derived(
+    Object.values(sseStatuses).some((s) => s === 'reconnecting' || s === 'connecting'),
+  );
+
+  onMount(() => {
+    rateLimits.startPolling();
+    listen<{ event_type: string; data: string }>('negotiation-update', (event) => {
+      try {
+        const parsed = JSON.parse(event.payload.data);
+        const status = parsed.status ?? 'updated';
+        sendNotification({
+          title: `Negotiation ${status}`,
+          body: `Negotiation ${parsed.negotiation_id?.slice(0, 8)}… is now ${status}`,
+        });
+      } catch { /* ignore */ }
+    }).then((u) => sseNotification = u);
+    listen<{ negotiation_id: string; status: string }>('negotiation-listener-status', (event) => {
+      const { negotiation_id, status } = event.payload;
+      sseStatuses = { ...sseStatuses, [negotiation_id]: status };
+    }).then((u) => sseStatus = u);
+  });
+  onDestroy(() => {
+    rateLimits.stopPolling();
+    sseNotification?.();
+    sseStatus?.();
+  });
 
   let showRateBar = $derived(rateLimits.anyExhausted || rateLimits.anyLow);
 </script>
@@ -24,6 +57,11 @@
       <a href="/settings" class={$page.url.pathname === '/settings' ? 'active' : ''}>Settings</a>
     {:else}
       <a href="/login" class={$page.url.pathname === '/login' ? 'active' : ''}>Login</a>
+    {/if}
+    {#if anyConnected || anyReconnecting}
+      <span class="sse-indicator" class:sse-connected={anyConnected} class:sse-reconnecting={anyReconnecting} title={anyConnected ? 'Live' : 'Reconnecting…'}>
+        {anyConnected ? '●' : '◌'}
+      </span>
     {/if}
   </div>
 </nav>
@@ -79,5 +117,15 @@
   .nav-links a.active {
     background: var(--color-primary);
     color: white;
+  }
+  .sse-indicator {
+    font-size: 0.8rem;
+    margin-left: 4px;
+  }
+  .sse-connected { color: #38a169; }
+  .sse-reconnecting { color: #d69e2e; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 </style>

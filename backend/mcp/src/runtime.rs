@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use marketplace_api_contract::{
     AcceptNegotiationRequest, ContactRevealResponse, CreateListingRequest, NegotiationResponse,
@@ -57,6 +58,8 @@ type InMemoryApp = MarketplaceApp<
     InMemoryContactRevealRepository,
 >;
 
+const DEFAULT_TOOL_TIMEOUT: Duration = Duration::from_secs(10);
+
 #[derive(Clone)]
 pub struct MarketplaceMcpAgent<LR, IR, RR, CR>
 where
@@ -68,6 +71,7 @@ where
     app: Arc<MarketplaceApp<LR, IR, RR, CR>>,
     claims: Claims,
     tool_router: ToolRouter<Self>,
+    tool_timeout: Duration,
 }
 
 impl<LR, IR, RR, CR> MarketplaceMcpAgent<LR, IR, RR, CR>
@@ -82,11 +86,43 @@ where
             app: Arc::new(app),
             claims,
             tool_router: Self::tool_router(),
+            tool_timeout: Self::resolve_timeout(),
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn with_timeout(
+        app: MarketplaceApp<LR, IR, RR, CR>,
+        claims: Claims,
+        tool_timeout: Duration,
+    ) -> Self {
+        Self {
+            app: Arc::new(app),
+            claims,
+            tool_router: Self::tool_router(),
+            tool_timeout,
+        }
+    }
+
+    fn resolve_timeout() -> Duration {
+        std::env::var("MCP_TOOL_TIMEOUT_MS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(Duration::from_millis)
+            .unwrap_or(DEFAULT_TOOL_TIMEOUT)
     }
 
     fn claims(&self) -> &Claims {
         &self.claims
+    }
+
+    async fn run_with_timeout<F, T>(&self, future: F) -> Result<T, McpToolError>
+    where
+        F: Future<Output = Result<T, McpToolError>>,
+    {
+        tokio::time::timeout(self.tool_timeout, future)
+            .await
+            .map_err(|_| McpToolError::timeout())?
     }
 }
 
@@ -103,20 +139,23 @@ where
         &self,
         Parameters(request): Parameters<CreateListingRequest>,
     ) -> Result<String, McpToolError> {
-        let fingerprint = serde_json::to_string(&request)
-            .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let result = self
-            .app
-            .create_listing(
-                self.claims(),
-                &request,
-                &fingerprint,
-                &current_time_marker(),
-            )
-            .await
-            .map_err(McpToolError::from)?;
-        let response = result.0;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let fingerprint = serde_json::to_string(&request)
+                .map_err(|error| McpToolError::internal(error.to_string()))?;
+            let result = self
+                .app
+                .create_listing(
+                    self.claims(),
+                    &request,
+                    &fingerprint,
+                    &current_time_marker(),
+                )
+                .await
+                .map_err(McpToolError::from)?;
+            let response = result.0;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Search listings")]
@@ -124,12 +163,15 @@ where
         &self,
         Parameters(request): Parameters<SearchRequest>,
     ) -> Result<String, McpToolError> {
-        let response: SearchResponse = self
-            .app
-            .search_listings(Some(self.claims()), &request)
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let response: SearchResponse = self
+                .app
+                .search_listings(Some(self.claims()), &request)
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Get a listing by id")]
@@ -137,13 +179,16 @@ where
         &self,
         Parameters(request): Parameters<GetListingInput>,
     ) -> Result<String, McpToolError> {
-        let response = self
-            .app
-            .get_listing(Some(self.claims()), &request.listing_id)
-            .await
-            .map_err(McpToolError::from)?;
-        let response = response.ok_or_else(|| McpToolError::not_found("listing not found"))?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let response = self
+                .app
+                .get_listing(Some(self.claims()), &request.listing_id)
+                .await
+                .map_err(McpToolError::from)?;
+            let response = response.ok_or_else(|| McpToolError::not_found("listing not found"))?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Open a negotiation")]
@@ -151,20 +196,23 @@ where
         &self,
         Parameters(request): Parameters<OpenNegotiationRequest>,
     ) -> Result<String, McpToolError> {
-        let fingerprint = serde_json::to_string(&request)
-            .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let result = self
-            .app
-            .open_negotiation(
-                self.claims(),
-                &request,
-                &fingerprint,
-                &current_time_marker(),
-            )
-            .await
-            .map_err(McpToolError::from)?;
-        let response = result.0;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let fingerprint = serde_json::to_string(&request)
+                .map_err(|error| McpToolError::internal(error.to_string()))?;
+            let result = self
+                .app
+                .open_negotiation(
+                    self.claims(),
+                    &request,
+                    &fingerprint,
+                    &current_time_marker(),
+                )
+                .await
+                .map_err(McpToolError::from)?;
+            let response = result.0;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Submit an offer")]
@@ -172,25 +220,28 @@ where
         &self,
         Parameters(request): Parameters<SubmitOfferInput>,
     ) -> Result<String, McpToolError> {
-        let fingerprint = serde_json::to_string(&request)
-            .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let offer = SubmitOfferRequest {
-            offer_currency: request.offer_currency,
-            offer_amount: request.offer_amount,
-            idempotency_key: request.idempotency_key,
-        };
-        let response: NegotiationResponse = self
-            .app
-            .submit_offer(
-                self.claims(),
-                &request.negotiation_id,
-                &offer,
-                &fingerprint,
-                &current_time_marker(),
-            )
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let fingerprint = serde_json::to_string(&request)
+                .map_err(|error| McpToolError::internal(error.to_string()))?;
+            let offer = SubmitOfferRequest {
+                offer_currency: request.offer_currency,
+                offer_amount: request.offer_amount,
+                idempotency_key: request.idempotency_key,
+            };
+            let response: NegotiationResponse = self
+                .app
+                .submit_offer(
+                    self.claims(),
+                    &request.negotiation_id,
+                    &offer,
+                    &fingerprint,
+                    &current_time_marker(),
+                )
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Get negotiation status")]
@@ -198,12 +249,15 @@ where
         &self,
         Parameters(request): Parameters<GetNegotiationStatusInput>,
     ) -> Result<String, McpToolError> {
-        let response: NegotiationResponse = self
-            .app
-            .get_negotiation_status(self.claims(), &request.negotiation_id)
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let response: NegotiationResponse = self
+                .app
+                .get_negotiation_status(self.claims(), &request.negotiation_id)
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Request contact reveal for a reserved negotiation")]
@@ -211,23 +265,26 @@ where
         &self,
         Parameters(request): Parameters<RequestContactRevealInput>,
     ) -> Result<String, McpToolError> {
-        let fingerprint = serde_json::to_string(&request)
-            .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let payload = RequestContactRevealRequest {
-            idempotency_key: request.idempotency_key,
-        };
-        let response: ContactRevealResponse = self
-            .app
-            .request_contact_reveal(
-                self.claims(),
-                &request.negotiation_id,
-                &payload,
-                &fingerprint,
-                &current_time_marker(),
-            )
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let fingerprint = serde_json::to_string(&request)
+                .map_err(|error| McpToolError::internal(error.to_string()))?;
+            let payload = RequestContactRevealRequest {
+                idempotency_key: request.idempotency_key,
+            };
+            let response: ContactRevealResponse = self
+                .app
+                .request_contact_reveal(
+                    self.claims(),
+                    &request.negotiation_id,
+                    &payload,
+                    &fingerprint,
+                    &current_time_marker(),
+                )
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Approve a contact reveal")]
@@ -235,12 +292,15 @@ where
         &self,
         Parameters(request): Parameters<ApproveContactRevealInput>,
     ) -> Result<String, McpToolError> {
-        let response: ContactRevealResponse = self
-            .app
-            .approve_contact_reveal(self.claims(), &request.reveal_id)
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let response: ContactRevealResponse = self
+                .app
+                .approve_contact_reveal(self.claims(), &request.reveal_id)
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Accept a negotiation")]
@@ -248,23 +308,26 @@ where
         &self,
         Parameters(request): Parameters<AcceptNegotiationInput>,
     ) -> Result<String, McpToolError> {
-        let fingerprint = serde_json::to_string(&request)
-            .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let payload = AcceptNegotiationRequest {
-            idempotency_key: request.idempotency_key,
-        };
-        let response: NegotiationResponse = self
-            .app
-            .accept_negotiation(
-                self.claims(),
-                &request.negotiation_id,
-                &payload,
-                &fingerprint,
-                &current_time_marker(),
-            )
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let fingerprint = serde_json::to_string(&request)
+                .map_err(|error| McpToolError::internal(error.to_string()))?;
+            let payload = AcceptNegotiationRequest {
+                idempotency_key: request.idempotency_key,
+            };
+            let response: NegotiationResponse = self
+                .app
+                .accept_negotiation(
+                    self.claims(),
+                    &request.negotiation_id,
+                    &payload,
+                    &fingerprint,
+                    &current_time_marker(),
+                )
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 
     #[tool(description = "Reject a negotiation")]
@@ -272,23 +335,26 @@ where
         &self,
         Parameters(request): Parameters<RejectNegotiationInput>,
     ) -> Result<String, McpToolError> {
-        let fingerprint = serde_json::to_string(&request)
-            .map_err(|error| McpToolError::internal(error.to_string()))?;
-        let payload = RejectNegotiationRequest {
-            idempotency_key: request.idempotency_key,
-        };
-        let response: NegotiationResponse = self
-            .app
-            .reject_negotiation(
-                self.claims(),
-                &request.negotiation_id,
-                &payload,
-                &fingerprint,
-                &current_time_marker(),
-            )
-            .await
-            .map_err(McpToolError::from)?;
-        json_string(&response)
+        self.run_with_timeout(async {
+            let fingerprint = serde_json::to_string(&request)
+                .map_err(|error| McpToolError::internal(error.to_string()))?;
+            let payload = RejectNegotiationRequest {
+                idempotency_key: request.idempotency_key,
+            };
+            let response: NegotiationResponse = self
+                .app
+                .reject_negotiation(
+                    self.claims(),
+                    &request.negotiation_id,
+                    &payload,
+                    &fingerprint,
+                    &current_time_marker(),
+                )
+                .await
+                .map_err(McpToolError::from)?;
+            json_string(&response)
+        })
+        .await
     }
 }
 
@@ -301,8 +367,11 @@ where
     CR: ContactRevealRepository + Send + Sync + 'static,
 {
     fn get_info(&self) -> ServerInfo {
+        let timeout_ms = self.tool_timeout.as_millis();
         ServerInfo {
-            instructions: Some("Marketplace desktop MCP sidecar".into()),
+            instructions: Some(format!(
+                "Marketplace desktop MCP sidecar. Tool execution timeout: {timeout_ms}ms. Use MCP_TOOL_TIMEOUT_MS env var to configure."
+            )),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
@@ -399,7 +468,14 @@ impl McpToolError {
     }
 
     fn internal(message: impl Into<String>) -> Self {
-        Self::new("internal_error", message)
+        let msg = message.into();
+        eprintln!("[mcp] internal_error: {msg}");
+        Self::new("internal_error", msg)
+    }
+
+    fn timeout() -> Self {
+        eprintln!("[mcp] tool execution timed out");
+        Self::new("timeout", "Tool execution timed out")
     }
 }
 
@@ -766,5 +842,186 @@ mod tests {
         );
         assert_eq!(load_database_url(Some("   ".to_string())), None);
         assert_eq!(load_database_url(None), None);
+    }
+
+    #[test]
+    fn timeout_error_has_correct_code_and_message() {
+        let err = McpToolError::timeout();
+        assert_eq!(err.code, "timeout");
+        assert_eq!(err.message, "Tool execution timed out");
+        assert!(err.details.is_none());
+    }
+
+    #[test]
+    fn resolve_timeout_uses_default_when_env_not_set() {
+        let previous = std::env::var("MCP_TOOL_TIMEOUT_MS").ok();
+        std::env::remove_var("MCP_TOOL_TIMEOUT_MS");
+        let timeout = MarketplaceMcpAgent::<
+            InMemoryListingRepository,
+            InMemoryIdempotencyRepository,
+            InMemoryReservationLeaseRepository,
+            InMemoryContactRevealRepository,
+        >::resolve_timeout();
+        assert_eq!(timeout, DEFAULT_TOOL_TIMEOUT);
+        if let Some(value) = previous {
+            std::env::set_var("MCP_TOOL_TIMEOUT_MS", value);
+        }
+    }
+
+    #[tokio::test]
+    async fn with_timeout_returns_timeout_error_for_slow_operation() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let agent = MarketplaceMcpAgent::with_timeout(
+            app,
+            crate::dev_launcher_claims(),
+            Duration::from_millis(5),
+        );
+
+        let result: Result<i32, McpToolError> = agent
+            .run_with_timeout(async {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                Ok(42)
+            })
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code, "timeout");
+    }
+
+    #[tokio::test]
+    async fn with_timeout_allows_fast_operation_to_complete() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let agent = MarketplaceMcpAgent::with_timeout(
+            app,
+            crate::dev_launcher_claims(),
+            Duration::from_secs(10),
+        );
+
+        let result: Result<i32, McpToolError> = agent.run_with_timeout(async { Ok(42) }).await;
+
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn tool_execution_succeeds_with_timeout_enabled() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let server = MarketplaceMcpAgent::with_timeout(
+            app,
+            crate::dev_launcher_claims(),
+            Duration::from_secs(10),
+        );
+        let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+        let server_task = tokio::spawn(async move {
+            server.serve(server_transport).await?.waiting().await?;
+            Result::<(), Box<dyn Error + Send + Sync>>::Ok(())
+        });
+
+        let client = rmcp::serve_client((), client_transport).await.unwrap();
+        let result = client
+            .call_tool(rmcp::model::CallToolRequestParam {
+                name: "search_listings".into(),
+                arguments: Some(
+                    serde_json::json!({
+                        "query": "ThinkPad",
+                        "limit": 10,
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        let text = result
+            .content
+            .first()
+            .and_then(|content| content.raw.as_text())
+            .map(|text| text.text.clone())
+            .expect("expected json text content");
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(parsed.get("items").is_some());
+
+        client.cancel().await.unwrap();
+        server_task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn get_listing_returns_not_found_with_timeout_enabled() {
+        let app = MarketplaceApp::new(
+            InMemoryListingRepository::new(),
+            InMemoryIdempotencyRepository::new(),
+            InMemoryReservationLeaseRepository::new(),
+            InMemoryContactRevealRepository::new(),
+            Arc::new(InMemoryNegotiationRepository::new()),
+            Arc::new(InMemoryAuditEventRepository::new()),
+            Arc::new(InMemoryOutboxEventRepository::new()),
+            Arc::new(InMemorySellerAccountRepository::new()),
+        );
+        let server = MarketplaceMcpAgent::with_timeout(
+            app,
+            crate::dev_launcher_claims(),
+            Duration::from_secs(10),
+        );
+        let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+        let server_task = tokio::spawn(async move {
+            server.serve(server_transport).await?.waiting().await?;
+            Result::<(), Box<dyn Error + Send + Sync>>::Ok(())
+        });
+
+        let client = rmcp::serve_client((), client_transport).await.unwrap();
+        let result = client
+            .call_tool(rmcp::model::CallToolRequestParam {
+                name: "get_listing".into(),
+                arguments: Some(
+                    serde_json::json!({
+                        "listing_id": "non-existent-id",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        let content = result.content.first().unwrap();
+        let text = content.raw.as_text().unwrap().text.clone();
+        assert!(
+            text.contains("not_found") || text.contains("not found"),
+            "expected not_found error, got: {text}"
+        );
+
+        client.cancel().await.unwrap();
+        server_task.await.unwrap().unwrap();
     }
 }

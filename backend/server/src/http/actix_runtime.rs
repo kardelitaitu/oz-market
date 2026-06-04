@@ -15,6 +15,7 @@ use actix_web::{web, App, HttpServer};
 use moka::future::Cache;
 use std::error::Error;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 // Production hardening: tracing
 use tracing::{error, info};
@@ -48,8 +49,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let bind = std::env::var("MARKETPLACE_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
 
     // Initialize tracing subscriber — LOG_FORMAT=json for production
-    let log_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "info".into());
+    let log_filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
     if std::env::var("LOG_FORMAT").ok().as_deref() == Some("json") {
         tracing_subscriber::registry()
             .with(log_filter)
@@ -66,9 +67,9 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     // Auto-run database migrations on startup
     info!("Running database schema migrations...");
-    crate::bootstrap::apply_schema(&pool).await.map_err(|e| {
-        std::io::Error::other(format!("migration failed: {e}"))
-    })?;
+    crate::bootstrap::apply_schema(&pool)
+        .await
+        .map_err(|e| std::io::Error::other(format!("migration failed: {e}")))?;
     info!("Schema migrations complete");
 
     let app = build_app(pool.clone(), audit_repo, outbox_repo);
@@ -107,6 +108,10 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         listing_cache_max_mb, search_cache_max_mb
     );
 
+    // Real-time event bus for SSE negotiation updates
+    let (event_tx, _) = broadcast::channel::<String>(1024);
+    let event_bus_data = web::Data::new(event_tx);
+
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
     let cache_enabled_data = web::Data::new(cache_enabled);
@@ -141,6 +146,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(listing_cache_limit_data.clone())
             .app_data(search_cache_limit_data.clone())
             .app_data(pool_data.clone())
+            .app_data(event_bus_data.clone())
             // OpenAPI docs
             .route("/docs", web::get().to(crate::openapi::serve_swagger_editor))
             .route(

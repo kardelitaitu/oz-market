@@ -224,6 +224,20 @@ export async function getRateLimits(): Promise<RateLimitInfo[]> {
   return invoke('get_rate_limits');
 }
 
+// -- SSE ---
+
+export async function startNegotiationListener(
+  negotiationId: string,
+): Promise<void> {
+  return invoke('start_negotiation_listener', { negotiationId });
+}
+
+export async function stopNegotiationListener(
+  negotiationId: string,
+): Promise<void> {
+  return invoke('stop_negotiation_listener', { negotiationId });
+}
+
 // -- Agent ---
 
 export interface AgentAction {

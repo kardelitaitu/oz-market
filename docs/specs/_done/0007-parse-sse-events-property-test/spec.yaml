@@ -1,0 +1,24 @@
+version: 1
+id: 0007-parse-sse-events-property-test
+title: Property Test for parse_sse_events
+status: done
+owner: mobile-team
+implementer: agent
+priority: P2
+area:
+  - mobile
+  - testing
+files:
+  code:
+    - mobile/marketplace/src-tauri/src/client/sse.rs
+  docs:
+    - docs/testing/todo-test-improvement.md
+acceptance:
+  - Proptest crate is integrated in mobile/marketplace/src-tauri Cargo.toml if not already present
+  - A property test is added verifying parse_sse_events correctness
+  - The test generates arbitrary strings for event types and data payloads
+  - The test verifies that valid SSE serialized data round-trips without any loss
+non_goals:
+  - Rewriting parse_sse_events logic unless bugs are discovered
+risks:
+  - High memory usage or slow runs in test runner if generating excessively large inputs

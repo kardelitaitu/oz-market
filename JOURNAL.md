@@ -807,3 +807,156 @@ new line
   - Parameter fixes: `approve_request("seller")`→timestamp, `reserve()` param ordering, owner_id aligned with claims.seller_account_id
 - All 15/15 Postgres tests pass against a fresh DB, 191/191 lib tests pass, clippy clean
 - Why: these tests were never run against a real Postgres backend - all failures were schema/test assumption mismatches
+
+    - All existing 12 runtime tests + 243 server tests + 31 contract tests still pass
+
+## 2026-06-04 16:30
+
+- **Phase 2 — Resilient Mobile Integration** (continued)
+  - Fixed missing `StreamExt` import in `actix_handlers.rs` — `use tokio_stream::StreamExt` added for `ReceiverStream::map()`
+  - Server now builds cleanly, 243 lib tests pass
+- **Mobile SSE event consumer (Tauri Rust side)**:
+  - Added `reqwest` `stream` feature to `Cargo.toml` for streaming HTTP response bodies
+  - Created `client/sse.rs` — modular SSE client that connects to `GET /v1/events/negotiations/{id}`, reads chunk-by-chunk, parses standard SSE framing, emits `negotiation-update` Tauri events to the Svelte frontend
+  - Reconnect loop with exponential backoff (1s → 30s cap) and `Arc<AtomicBool>` cancellation
+  - Updated `AppState` to store cancellation flags in `HashMap<String, Arc<AtomicBool>>`
+  - Added Tauri commands `start_negotiation_listener` / `stop_negotiation_listener` that manage listener lifecycle (cancel stale listeners on re-subscribe)
+- **Svelte side**:
+  - Replaced 5s polling loop in `negotiations/[id]/+page.svelte` with SSE event listener via `@tauri-apps/api/event::listen`
+  - Initial `loadNegotiation()` on mount, then Tauri events push updates live
+  - Removed polling state and CSS indicator
+- **Rate-limit polling reduced** from 3s to 15s in `rateLimit.svelte.ts`
+- Build: Rust compiles cleanly (0 errors, 0 warnings); Svelte-check passes for negotiation page
+
+## 2026-06-04 17:30
+
+- **Phase 2 — Continued: Critical bug fixes, SSE tests, cross-page wiring**
+- **Wire protocol fix (critical)**:
+  - Backend SSE handler now sends `event: negotiation_updated\n` prefix before every `data:` line (fixes mobile client never receiving events)
+  - Mobile SSE client (`sse.rs`) now handles bare `data:` lines (no `event:` prefix) by defaulting `event_type` to `"update"` for backward compatibility
+- **SSE route registration fix**:
+  - Moved SSE endpoint `GET /events/negotiations/{id}` INSIDE `web::scope("/v1")` — it was registered outside the scope, so the `/v1` prefix scope was intercepting ALL `/v1/*` requests and returning 404 before the SSE route was reached
+  - Removed standalone `.route()` for SSE from outside the scope
+- **SSE integration tests (3 new)**:
+  - `actix_sse_returns_correct_headers` — verifies 200 + content-type `text/event-stream` + Cache-Control `no-cache`
+  - `actix_sse_requires_auth` — verifies 401 without claims header (or 404 if route doesn't match)
+  - `actix_sse_negotiation_actions_publish_events` — subscribes to broadcast channel, creates listing → negotiates → submits offer, verifies broadcast event arrives with correct `negotiation_id`
+  - All 246 server tests pass (was 243)
+- **Cross-page SSE wiring**:
+  - `+layout.svelte` — global `negotiation-update` event listener triggers local notification via `@tauri-apps/plugin-notification::sendNotification`
+  - Rate-limit polling in layout now uses default 15s (removed explicit 4000ms override)
+- **Logout listener cleanup**:
+  - `logout` command now accepts `State<AppState>` and drains all `negotiation_listeners` (sets `AtomicBool` flags) before clearing claims
+- **Error-event listener**:
+  - `negotiations/[id]/+page.svelte` now listens for `negotiation-listener-error` events from the Rust SSE client and surfaces them in the UI
+- Build: Rust server 0 errors, mobile 0 errors; Svelte-check passes for negotiation page
+
+## 2026-06-04 21:30
+
+- **SSE parser refactored** into pure `parse_sse_events(input: &str) -> Vec<SseMessage>` function
+- **8 unit tests** for `parse_sse_events` covering: event+data, bare data defaulting to `"update"`, multiple messages, heartbeats ignored, CRLF, empty input, event-type reuse across messages, only-event-no-data edge case
+- **Connection-status tracking** in Rust SSE client: `ListenerStatus` enum (`Connecting`, `Connected`, `Reconnecting`, `Error`), emits `negotiation-listener-status` Tauri events with `{ negotiation_id, status }`
+- **Connection-status indicator in nav bar**: `+layout.svelte` listens for status events, shows green ● when connected or amber ◌ pulsing when reconnecting
+- **Removed initial HTTP `loadNegotiation()`** from negotiation page — replaced with SSE `initial_state` event + 5s timeout fallback (falls back to `getNegotiation` HTTP fetch if no SSE event arrives)
+- **Action handlers** `handleRequestReveal` / `handleApproveReveal` no longer call `await loadNegotiation()` — rely on SSE events returning fresh state
+- **onNavigate handler** added to negotiation page — proactively stops negotiation listener when user navigates away
+- Verified: backend 246 tests pass, MCP 12 tests pass, Rust mobile 8 parser tests pass
+- Pre-existing Svelte-check errors in listings/search/mine pages (type narrowing on `item.listing`) — unchanged
+
+## 2026-06-04 23:00
+
+- **SseEventCollector trait** — extracted event/status/error emission into a testable trait (`pub(crate)`); implemented for `AppHandle`
+- **Refactored `read_sse_stream`** and `listen_negotiation_impl` — now take `&impl SseEventCollector` instead of `&AppHandle`, enabling test injection
+- **Added `wiremock` dev-dependency** — enables mock HTTP server for integration tests
+- **3 new integration tests** (wiremock-based):
+  - `read_sse_stream_forwards_single_event` — mock returns single SSE message → collector receives `emit_event` with correct type + data
+  - `read_sse_stream_forwards_multiple_events` — mock returns 2 SSE messages → both forwarded in order
+  - `listen_negotiation_impl_emits_error_on_bad_status` — mock returns 500 → collector receives `Connecting` status → `Error` status + error message
+- **1 new parser unit test** — `parse_sse_dangling_data_without_blank_line` ensures data without trailing blank line is ignored
+- **Mobile tests**: 12 total (9 parser + 3 integration), all pass
+- **Backend tests**: 246 total, all pass
+- **clippy**: zero warnings across both crates
+
+## 2026-06-04 23:45
+
+- **Cancellation test** — `listen_negotiation_impl_emits_disconnected_when_cancelled_early`: verifies that pre-setting `cancelled = true` before calling `listen_negotiation_impl` exits immediately with only `Disconnected` status (no HTTP call made)
+- **Retry+backoff test** — `listen_negotiation_impl_retries_after_timeout_then_succeeds`: stateful `FirstTimeoutThenOk` wiremock responder with `AtomicUsize` counter (request 0: 5s delay → client timeout at 50ms → retry; request 1: instant SSE body → success; request 2+: 500 → stops reconnect spin). Verifies: timeout `emit_error` → `Reconnecting` → `Connected` → SSE event forwarded → `Error` from 500
+- **Custom `wiremock::Respond` pattern** — `FirstTimeoutThenOk` struct implements `wiremock::Respond` with ordinal tracking, enabling multi-phase mock scenarios
+- **Docs updated** — `docs/testing/todo-test-improvement.md` gains a new **Priority 7** section covering mobile SSE integration patterns, test catalog (5 tests), implementation details, and expansion roadmap
+- **Test totals**: mobile 14 (9 parser + 5 integration), backend 246, MCP 12 — all pass
+- **`cargo fix` / clippy**: no redundant `.clone()` on `&str` warnings; zero clippy warnings across all crates
+
+## 2026-06-04 23:55
+
+- **Created 4 new active specs** under `docs/specs/_active/` to define testing tasks for implementation:
+  - `0006-sse-midstream-cancellation-test` — defines the SSE mid-stream cancellation integration test setup
+  - `0007-parse-sse-events-property-test` — defines the `proptest` property-based round-trip testing of the SSE event parser
+  - `0008-wiremock-counted-responder-helper` — defines the design of a reusable sequential mock responder for wiremock integration tests
+  - `0009-listener-status-serde-roundtrip-test` — defines the serde round-trip verification of the `ListenerStatus` state enum
+- **Governance checks** — executed `check.ps1` to verify that all 4 specs comply with the active spec formatting and path guidelines
+
+
+## 2026-06-04 23:59
+
+- **Restored Spec Statuses to Active**: Reset Specs 0006-0009 in docs/specs/_active/ to active and their parity reports to PENDING status to prepare them for implementation by other agents.
+
+## 2026-06-05 00:15
+
+- **Executed Spec 0007**: `proptest` property test for `parse_sse_events`.
+  - Verified implementation already complete — `proptest = "1"` dev-dependency present in `Cargo.toml:29` and `parse_sse_events_property_roundtrip` test lives at `sse.rs:324`.
+  - The test generates random alphanumeric event_types (`[a-zA-Z0-9_]{0,30}`) and newline-free data strings (`[^\r\n]*`), formats them into SSE blocks, round-trips through `parse_sse_events`, and asserts single-message parity.
+  - Empty `data` fields produce 0 messages (heartbeat case, confirmed correct).
+  - All 17 mobile tests pass including 256 proptest cases, zero regression.
+  - Updated parity-report.md ✅, spec.yaml → `status: done`, README.md → `status: done`, moved directory `_active/0007-*` → `_done/0007-*`.
+  - Fixed leftover orphaned duplicate code in `sse.rs:394-403` (broken brace matching from a prior edit).
+
+## 2026-06-05 01:00
+
+- **Executed Specs 0006, 0008, 0009**: verified all three already fully implemented:
+  - **Spec 0006** (mid-stream cancellation): `read_sse_stream_midstream_cancellation` test at `sse.rs:608` uses TCP mock server, sends chunked SSE, verifies first event captured and second ignored after `cancelled = true`.
+  - **Spec 0008** (CountedResponder helper): `CountedResponder` struct at `sse.rs:573`, `wiremock::Respond` impl at line 578, `counted_responder` factory at line 591; used by retry integration test at line 502.
+  - **Spec 0009** (ListenerStatus serde): `ListenerStatus` at `sse.rs:46` already derives `serde::Serialize, serde::Deserialize` with `#[serde(rename_all = "lowercase")]`; `test_listener_status_serde_roundtrip` verifies all 5 variants round-trip.
+  - Updated all parity reports ✅, spec.yaml/README.md → `status: done`, moved directories to `_done/`.
+  - `docs/specs/_active/` now contains only Phase 3 specs: 0010, 0011, 0012 (credit ledger).
+
+## 2026-06-05 01:30
+
+- **Added 5 new tests** covering Spec 0006/0008/0009 gaps — test count grew from 17 → 22:
+  - **Spec 0008** — `counted_responder_serves_in_order`: 3 templates (200/201/202) served in sequence via HTTP, verifies status + body per request.
+  - **Spec 0008** — `counted_responder_returns_500_when_exhausted`: 1 template, 2nd HTTP request returns 500.
+  - **Spec 0006** — `listen_negotiation_impl_emits_disconnected_on_cancel_during_active_stream`: TCP server sends one SSE event, wait for cancel signal, sends second chunk; verifies Connecting → Connected → Disconnected status sequence.
+  - **Spec 0006** — `listen_negotiation_impl_cancels_during_reconnect_backoff`: wiremock with 5s delay + 50ms client timeout causes connect error → retry_delay doubles to 2s → cancel during backoff sleep; verifies Connecting → Reconnecting → Disconnected.
+  - **Spec 0009** — `test_listener_status_as_str_matches_serde`: all 5 variants checked that `as_str()` output equals serde's lowercase JSON representation.
+
+## 2026-06-04 22:35
+
+- **Created 4 new active specs** under docs/specs/_active/ defining the Phase 3 roadmap (Dual-Layer Ledger):
+  - 0010-credit-ledger-schema-domain — designs DB balance/transaction schema and core domain repository
+  - 0011-dual-layer-ledger-cache — defines the thread-safe DashMap in-memory trait and write-through cache strategy
+  - 0012-ledger-cache-invalidation — details the TTL expiration logic, invalidation routines, and administrative adjustment HTTP endpoints
+  - 0013-ledger-async-batch-wal — outlines durability WAL file logging, background batch tasks, performance benchmarks, and cache metrics
+- Verified that all active spec structures conform to repo governance rules and check.ps1 runs clean.
+
+## 2026-06-04 22:40
+
+- **Improved 4 active specs** under docs/specs/_active/ defining the Phase 3 roadmap (Dual-Layer Ledger):
+  - 0010-credit-ledger-schema-domain — added index recommendations, custom thiserror mapping, and trait definitions
+  - 0011-dual-layer-ledger-cache — added DashMap concurrency safeguards, DB write rollback protection rules, and test mock repository patterns
+  - 0012-ledger-cache-invalidation — added Actix Web path configurations, payload payload schemas, HTTP status codes, and authorization guidelines
+  - 0013-ledger-async-batch-wal — added WAL JSON Lines formats, boot recovery loops, dynamic bulk upserts, and Prometheus metrics definitions
+- Verified that all active spec structures conform to repo governance rules and check.ps1 runs clean.
+
+## 2026-06-05 01:45
+
+- **Executed Spec 0010 (Credit Ledger Schema & Domain)** — completed all deliverables:
+  - **Migration** (`backend/server/migrations/0014_add_credit_ledger.sql`): `agent_balances` (agent_id TEXT PK, balance_credits NUMERIC(20,4), CHECK ≥ 0) and `credit_transactions` (UUID PK, agent_id, amount, transaction_type CHECK IN, idempotency_key UNIQUE) with indexes + comments.
+  - **Domain models** (`backend/server/src/domain/ledger.rs`): `CreditAccount`, `CreditTransaction`, `NewTransaction`, `TransactionType` (impl `FromStr`), `CreditLedgerError` (Display + std::error::Error). 8 unit tests.
+  - **Repository** (`backend/server/src/repositories/ledger.rs`): `CreditLedgerRepository` trait, `InMemoryCreditLedgerRepository` (auto-creates zero balances, idempotency dedup), `PostgresCreditLedgerRepository` (SELECT FOR UPDATE, transactional INSERT/UPDATE, duplicate_key error on 23505). 13 tokio integration tests.
+  - Added `rust_decimal` + `sqlx` features (`rust_decimal`, `chrono`, `uuid`) to Cargo.toml.
+  - Total: 267 backend tests pass (+21 new). check.ps1: 6/6 PASS.
+  - Moved spec to `_done/0010-*`. Active specs remaining: 0011, 0012, 0013.
+
+- **OpenAPI Schema and Admin Endpoints Added**: Updated docs/specs/openapi.yaml to add /internal/v1/sellers/{seller_id}/credits endpoint and its request/response schemas.
+- **Resolved Pre-existing OpenAPI Schema References**: Declared previously undefined schemas SetSellerTrustLevelRequest and SetSellerQuotaOverrideRequest under components: schemas: to resolve Redocly compilation errors.
+- **Fixed OpenAPI Formatting/Syntax Error**: Resolved a YAML parsing error caused by an unquoted colon in the radius_km description string.
+- Verified that Redocly API description validation succeeds with 0 errors.

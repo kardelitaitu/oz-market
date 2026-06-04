@@ -1,0 +1,26 @@
+version: 1
+id: 0013-ledger-async-batch-wal
+title: Write-Ahead Log (WAL) and Async Batch Committer
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - ledger
+  - performance
+files:
+  code:
+    - backend/server/src/services/async_committer.rs
+    - backend/server/src/services/wal.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - An async batching layer accumulates credit changes in-memory
+  - A Write-Ahead Log (WAL) is appended to disk synchronously before memory balance changes, allowing recovery on server crash
+  - Metrics are exposed for `cache_hit`, `cache_miss`, and `batch_lag`
+  - Benchmarks compare async batch throughput vs direct SQL write throughput
+non_goals:
+  - Enabling multi-process WAL sharing or distributed WAL coordination (single local file WAL is sufficient)
+risks:
+  - System crash leading to credit loss (mitigated by synchronously writing transaction entries to WAL file before memory mutation)

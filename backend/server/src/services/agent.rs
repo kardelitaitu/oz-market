@@ -1,9 +1,9 @@
+use crate::repositories::ListingRepository;
+use crate::services::search::SearchService;
 use marketplace_api_contract::{
     AgentAction, AgentQueryRequest, AgentQueryResponse, SearchRequest, SearchResponse,
 };
 use marketplace_auth_core::Claims;
-use crate::repositories::ListingRepository;
-use crate::services::search::SearchService;
 
 #[derive(Debug)]
 pub enum AgentError {
@@ -57,8 +57,7 @@ where
                 .map_err(|e| AgentError::Search(e.to_string()))?;
         }
 
-        let (message, actions, listing_ids) =
-            build_response(&request.query, &search_response);
+        let (message, actions, listing_ids) = build_response(&request.query, &search_response);
 
         Ok(AgentQueryResponse {
             message,
@@ -77,8 +76,22 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
     let lower = query.to_lowercase();
 
     // Detect price constraints
-    let max_price = extract_amount(&lower, &["under", "less than", "below", "max", "up to", "cheaper than", "<"]);
-    let min_price = extract_amount(&lower, &["over", "more than", "above", "min", "from", "at least", ">"]);
+    let max_price = extract_amount(
+        &lower,
+        &[
+            "under",
+            "less than",
+            "below",
+            "max",
+            "up to",
+            "cheaper than",
+            "<",
+        ],
+    );
+    let min_price = extract_amount(
+        &lower,
+        &["over", "more than", "above", "min", "from", "at least", ">"],
+    );
     let exact_price = extract_amount(&lower, &["for", "around", "about", "~"]);
 
     // Detect listing type
@@ -131,9 +144,11 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
         .trim_start_matches("where can i find ")
         .to_string();
 
-    if query_text.is_empty() && listing_type.is_none() && max_price.is_none() && min_price.is_none() {
+    if query_text.is_empty() && listing_type.is_none() && max_price.is_none() && min_price.is_none()
+    {
         return Err(AgentError::Parse(
-            "I couldn't understand your request. Try something like 'find laptops under $1000'".to_string(),
+            "I couldn't understand your request. Try something like 'find laptops under $1000'"
+                .to_string(),
         ));
     }
 
@@ -152,7 +167,11 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
     let condition = detect_condition(&lower);
 
     Ok(Some(SearchRequest {
-        query: if query_text.is_empty() { None } else { Some(query_text) },
+        query: if query_text.is_empty() {
+            None
+        } else {
+            Some(query_text)
+        },
         category,
         condition,
         price: price_filter,
@@ -187,9 +206,7 @@ fn extract_amount(text: &str, prefixes: &[&str]) -> Option<f64> {
 }
 
 fn detect_location(text: &str) -> Option<marketplace_api_contract::SearchLocationFilter> {
-    let keywords = [
-        "in ", "near ", "around ",
-    ];
+    let keywords = ["in ", "near ", "around "];
     for kw in &keywords {
         if let Some(idx) = text.find(kw) {
             let after = text[idx + kw.len()..].trim().to_string();
@@ -208,29 +225,77 @@ fn detect_location(text: &str) -> Option<marketplace_api_contract::SearchLocatio
 fn detect_category(text: &str) -> Option<marketplace_api_contract::Category> {
     use marketplace_api_contract::Category;
     let lower = &text.to_lowercase();
-    if lower.contains("laptop") || lower.contains("notebook") || lower.contains("macbook") || lower.contains("thinkpad") {
+    if lower.contains("laptop")
+        || lower.contains("notebook")
+        || lower.contains("macbook")
+        || lower.contains("thinkpad")
+    {
         Some(Category::Laptop)
-    } else if lower.contains("phone") || lower.contains("iphone") || lower.contains("smartphone") || lower.contains("pixel") || lower.contains("galaxy") {
+    } else if lower.contains("phone")
+        || lower.contains("iphone")
+        || lower.contains("smartphone")
+        || lower.contains("pixel")
+        || lower.contains("galaxy")
+    {
         Some(Category::Phone)
     } else if lower.contains("tablet") || lower.contains("ipad") {
         Some(Category::Tablet)
-    } else if lower.contains("desktop") || lower.contains("pc") || lower.contains("computer") || lower.contains("mac") {
+    } else if lower.contains("desktop")
+        || lower.contains("pc")
+        || lower.contains("computer")
+        || lower.contains("mac")
+    {
         Some(Category::Desktop)
     } else if lower.contains("monitor") || lower.contains("screen") || lower.contains("display") {
         Some(Category::Monitor)
-    } else if lower.contains("camera") || lower.contains("dslr") || lower.contains("lens") || lower.contains("gopro") {
+    } else if lower.contains("camera")
+        || lower.contains("dslr")
+        || lower.contains("lens")
+        || lower.contains("gopro")
+    {
         Some(Category::Camera)
-    } else if lower.contains("headphone") || lower.contains("earphone") || lower.contains("speaker") || lower.contains("audio") || lower.contains("sound") {
+    } else if lower.contains("headphone")
+        || lower.contains("earphone")
+        || lower.contains("speaker")
+        || lower.contains("audio")
+        || lower.contains("sound")
+    {
         Some(Category::Audio)
-    } else if lower.contains("gaming") || lower.contains("xbox") || lower.contains("playstation") || lower.contains("nintendo") || lower.contains("ps5") {
+    } else if lower.contains("gaming")
+        || lower.contains("xbox")
+        || lower.contains("playstation")
+        || lower.contains("nintendo")
+        || lower.contains("ps5")
+    {
         Some(Category::Gaming)
-    } else if lower.contains("furniture") || lower.contains("chair") || lower.contains("table") || lower.contains("desk") || lower.contains("sofa") || lower.contains("bed") {
+    } else if lower.contains("furniture")
+        || lower.contains("chair")
+        || lower.contains("table")
+        || lower.contains("desk")
+        || lower.contains("sofa")
+        || lower.contains("bed")
+    {
         Some(Category::Furniture)
-    } else if lower.contains("appliance") || lower.contains("fridge") || lower.contains("washer") || lower.contains("oven") || lower.contains("microwave") {
+    } else if lower.contains("appliance")
+        || lower.contains("fridge")
+        || lower.contains("washer")
+        || lower.contains("oven")
+        || lower.contains("microwave")
+    {
         Some(Category::Appliance)
-    } else if lower.contains("vehicle") || lower.contains("car") || lower.contains("bike") || lower.contains("tire") || lower.contains("auto") {
+    } else if lower.contains("vehicle")
+        || lower.contains("car")
+        || lower.contains("bike")
+        || lower.contains("tire")
+        || lower.contains("auto")
+    {
         Some(Category::VehiclePart)
-    } else if lower.contains("accessory") || lower.contains("charger") || lower.contains("case") || lower.contains("cable") || lower.contains("adapter") {
+    } else if lower.contains("accessory")
+        || lower.contains("charger")
+        || lower.contains("case")
+        || lower.contains("cable")
+        || lower.contains("adapter")
+    {
         Some(Category::Accessory)
     } else {
         None
@@ -242,9 +307,17 @@ fn detect_condition(text: &str) -> Option<marketplace_api_contract::Condition> {
     let lower = text.to_lowercase();
     if lower.contains("new") && !lower.contains("new york") && !lower.contains("new jersey") {
         Some(Condition::New)
-    } else if lower.contains("used") || lower.contains("second") || lower.contains("pre-owned") || lower.contains("gently") {
+    } else if lower.contains("used")
+        || lower.contains("second")
+        || lower.contains("pre-owned")
+        || lower.contains("gently")
+    {
         Some(Condition::Used)
-    } else if lower.contains("refurbished") || lower.contains("refurb") || lower.contains("renewed") || lower.contains("certified") {
+    } else if lower.contains("refurbished")
+        || lower.contains("refurb")
+        || lower.contains("renewed")
+        || lower.contains("certified")
+    {
         Some(Condition::Refurbished)
     } else {
         None

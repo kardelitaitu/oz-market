@@ -677,8 +677,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(result) => match tool_json_value(&result) {
                 Ok(payload) => {
                     let status = payload.get("status").and_then(|v| v.as_str());
-                    let final_amount =
-                        payload.get("final_offer_amount").and_then(|v| v.as_f64());
+                    let final_amount = payload.get("final_offer_amount").and_then(|v| v.as_f64());
                     log_test(
                         "accept_negotiation",
                         status == Some("closed") && final_amount == Some(775.0),
@@ -750,7 +749,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(result) => match tool_json_value(&result) {
                 Ok(payload) => {
                     let reveal_status = payload.get("reveal_status").and_then(|v| v.as_str());
-                    let phone = payload.get("revealed_phone_reference").and_then(|v| v.as_str());
+                    let phone = payload
+                        .get("revealed_phone_reference")
+                        .and_then(|v| v.as_str());
                     log_test(
                         "approve_contact_reveal",
                         reveal_status == Some("approved") && phone.is_some(),

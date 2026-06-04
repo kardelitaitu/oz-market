@@ -1,4 +1,6 @@
 use crate::client::rate_limit::RateLimitTracker;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -6,6 +8,7 @@ pub struct AppState {
     pub client: reqwest::Client,
     pub base_url: Arc<RwLock<String>>,
     pub rate_limiter: Arc<RwLock<RateLimitTracker>>,
+    pub negotiation_listeners: Arc<RwLock<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 impl AppState {
@@ -17,6 +20,7 @@ impl AppState {
                 .expect("Failed to create HTTP client"),
             base_url: Arc::new(RwLock::new("http://127.0.0.1:3000".to_string())),
             rate_limiter: Arc::new(RwLock::new(RateLimitTracker::new())),
+            negotiation_listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
