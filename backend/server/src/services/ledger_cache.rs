@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use crate::domain::ledger::{
     CreditAccount, CreditLedgerError, CreditLedgerRepository, CreditTransaction, NewTransaction,
 };
+use crate::observability::ServerObservability;
 
 const DEFAULT_TTL_SECS: u64 = 300;
 
@@ -26,13 +27,18 @@ pub struct LedgerCache {
     balances: DashMap<String, CachedEntry>,
     db_repo: Arc<dyn CreditLedgerRepository>,
     ttl: Duration,
+    observability: Option<Arc<ServerObservability>>,
 }
 
 impl LedgerCache {
     /// Create a new `LedgerCache` with the given TTL.
     ///
     /// Uses `LEDGER_CACHE_TTL_SECS` env var if set, otherwise defaults to 300s.
-    pub fn new(db_repo: Arc<dyn CreditLedgerRepository>) -> Self {
+    /// `observability` may be `None` to disable hit/miss metric recording (tests).
+    pub fn new(
+        db_repo: Arc<dyn CreditLedgerRepository>,
+        observability: Option<Arc<ServerObservability>>,
+    ) -> Self {
         let ttl_secs = std::env::var("LEDGER_CACHE_TTL_SECS")
             .ok()
             .and_then(|v| v.parse().ok())
@@ -41,6 +47,7 @@ impl LedgerCache {
             balances: DashMap::new(),
             db_repo,
             ttl: Duration::from_secs(ttl_secs),
+            observability,
         }
     }
 
@@ -50,6 +57,7 @@ impl LedgerCache {
             balances: DashMap::new(),
             db_repo,
             ttl,
+            observability: None,
         }
     }
 
@@ -59,10 +67,17 @@ impl LedgerCache {
     pub async fn get_balance(&self, agent_id: &str) -> Result<CreditAccount, CreditLedgerError> {
         if let Some(entry) = self.balances.get(agent_id) {
             if entry.inserted_at.elapsed() < self.ttl {
+                if let Some(obs) = self.observability.as_ref() {
+                    obs.record_ledger_cache_hit();
+                }
                 return Ok(entry.account.clone());
             }
             drop(entry);
             self.balances.remove(agent_id);
+        }
+
+        if let Some(obs) = self.observability.as_ref() {
+            obs.record_ledger_cache_miss();
         }
 
         let account = self.db_repo.get_balance(agent_id).await?;
@@ -134,6 +149,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::domain::ledger::TransactionType;
+    use crate::observability::ServerObservability;
 
     /// A constant-length TTL that will never expire during a test.
     const LONG_TTL: Duration = Duration::from_secs(3600);
@@ -476,6 +492,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn records_observability_on_hit_and_miss() {
+        let mock = Arc::new(MockRepo::new(Decimal::new(1000, 4)));
+        let obs = Arc::new(ServerObservability::new());
+        let cache = LedgerCache {
+            balances: dashmap::DashMap::new(),
+            db_repo: mock.clone(),
+            ttl: LONG_TTL,
+            observability: Some(obs.clone()),
+        };
+
+        // First call — miss.
+        let _ = cache.get_balance("agent-1").await.unwrap();
+        // Second call — hit.
+        let _ = cache.get_balance("agent-1").await.unwrap();
+        // Different agent — miss.
+        let _ = cache.get_balance("agent-2").await.unwrap();
+
+        let snapshot = obs.snapshot();
+        assert_eq!(snapshot.ledger_cache_hit_total, 1);
+        assert_eq!(snapshot.ledger_cache_miss_total, 2);
+    }
+
+    #[tokio::test]
     async fn invalidate_all_handles_many_agents() {
         let mock = Arc::new(MockRepo::new(Decimal::new(100, 4)));
         let cache = LedgerCache::with_ttl(mock.clone(), LONG_TTL);
@@ -509,12 +548,12 @@ mod tests {
 
         std::env::set_var("LEDGER_CACHE_TTL_SECS", "7");
         let mock = Arc::new(MockRepo::new(Decimal::ZERO));
-        let cache = LedgerCache::new(mock);
+        let cache = LedgerCache::new(mock, None);
         assert_eq!(cache.ttl, Duration::from_secs(7));
 
         std::env::set_var("LEDGER_CACHE_TTL_SECS", "not-a-number");
         let mock = Arc::new(MockRepo::new(Decimal::ZERO));
-        let cache_bad = LedgerCache::new(mock);
+        let cache_bad = LedgerCache::new(mock, None);
         assert_eq!(
             cache_bad.ttl,
             Duration::from_secs(DEFAULT_TTL_SECS),
@@ -523,7 +562,7 @@ mod tests {
 
         std::env::remove_var("LEDGER_CACHE_TTL_SECS");
         let mock = Arc::new(MockRepo::new(Decimal::ZERO));
-        let cache_default = LedgerCache::new(mock);
+        let cache_default = LedgerCache::new(mock, None);
         assert_eq!(cache_default.ttl, Duration::from_secs(DEFAULT_TTL_SECS));
 
         if let Some(val) = original {

@@ -1191,3 +1191,37 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Spec stats**: paths 19 → 31 (+12), schemas 36 → 43 (+7), tags 5 → 8 (+3).
 - **Note on the deprecated endpoints**: their `Sunset: 2026-06-01` date is already 4 days in the past (today is 2026-06-05). The endpoints still serve 301 redirects. They should be removed in a follow-up. The spec now correctly marks them with `deprecated: true` so tooling like Redocly will flag them.
 - **Next**: TODO.md M3 — add the four ledger Prometheus counters (spec 0013 §4). Small, contained change in `observability/mod.rs` + emit sites in `ledger_cache.rs` and `async_committer.rs`. Code-only, no spec/doc changes.
+
+## 2026-06-05 10:30 — M3: Add 4 ledger Prometheus counters per spec 0013 §4 (audit MAJOR item)
+
+- **Goal**: TODO.md MAJOR item M3 — implement the four ledger performance indicators that spec 0013 §4 (`docs/specs/_done/0013-ledger-async-batch-wal/plan.md:39-43`) mandates be exposed on the metrics route: `ledger_cache_hit_total`, `ledger_cache_miss_total`, `ledger_batch_lag_milliseconds`, `ledger_batch_size`. Up to now none of the four existed in code.
+- **Architecture decision**: extended `ServerObservability` rather than creating a new struct. The 6 existing counters (`requests_total`, `internal_requests_total`, etc.) already live there with the `AtomicU64` + `snapshot()` pattern, so 4 more fields keep the mental model uniform. Trade-off: `ServerObservability` was previously unused by the `/metrics` handler (the handler hard-coded `requests_total 0` on line 298, an unrelated pre-existing bug left for future cleanup). M3 wires the snapshot in for the 4 ledger metrics only, leaving the rest of the handler's existing inline logic untouched.
+- **What changed (4 files, +149 / −13 lines, additive)**:
+  - `backend/server/src/observability/mod.rs` (+~50 lines):
+    - 4 new `AtomicU64` fields on `ServerObservability` (and mirrored `ServerObservabilitySnapshot` fields).
+    - 3 new record methods: `record_ledger_cache_hit()`, `record_ledger_cache_miss()`, `record_ledger_batch(size, lag_milliseconds)` (latter uses `store` semantics — gauges reflect the most recent batch, not cumulative).
+    - `snapshot()` updated to load all 4.
+    - 2 new unit tests (`records_ledger_cache_hit_and_miss`, `records_ledger_batch_size_and_lag_with_latest_values`). The pre-existing test is untouched.
+  - `backend/server/src/services/ledger_cache.rs` (+~15 lines, 1 test):
+    - `LedgerCache` gains an `observability: Option<Arc<ServerObservability>>` field. The constructor `new(repo, obs)` now takes the observability handle; `with_ttl` (test-only) defaults to `None`. The `apply_transaction` path is unchanged — the spec only tracks cache hit/miss on `get_balance`, not on the write path.
+    - `get_balance` hit path → `record_ledger_cache_hit()`; expired-entry and miss paths → `record_ledger_cache_miss()`. The test `records_observability_on_hit_and_miss` uses a `ServerObservability::new()` and asserts `hit=1, miss=2` after 3 lookups.
+  - `backend/server/src/services/async_committer.rs` (+~30 lines, 1 test):
+    - `AsyncBatchCommitter` gains an `observability: Option<Arc<ServerObservability>>` field; `batch_channel(repo, wal, obs)` signature change. One production call site (`actix_runtime.rs:140`).
+    - Loop tracks `buffer_first_pushed_at: Option<Instant>`. On entry push, if `None`, set `Some(Instant::now())`. On flush (both size-triggered and tick-triggered), capture `size = buffer.len()` and `first_pushed`, call `flush_batch`, then emit `record_ledger_batch(size, first_pushed.elapsed().as_millis())`, then reset `first_pushed = None`. The shutdown-drain branch follows the same pattern.
+    - Test `records_batch_size_and_lag` sends 3 entries, waits 500ms (default tick is 100ms), asserts `ledger_batch_size == 3` and `0 < ledger_batch_lag_milliseconds < 1000`.
+    - 7 existing tests updated to pass `None` as the new 3rd arg.
+  - `backend/server/src/http/actix_runtime.rs` (+~25 lines):
+    - `LedgerCache::new(ledger_repo, Some(observability.clone()))` (line 127).
+    - `batch_channel(ledger_repo, wal, Some(observability.clone()))` (line 141).
+    - `metrics_handler` signature now takes `observability: web::Data<Arc<ServerObservability>>` and appends 4 new lines to the Prometheus exposition: `# HELP` + `# TYPE` + value for each of the 4 spec-mandated names exactly as written.
+- **Verification**:
+  - `cargo check --workspace` clean.
+  - `cargo clippy -p marketplace-server --all-targets -- -D warnings` clean.
+  - `cargo test -p marketplace-server` lib tests: **399 passed; 0 failed** (was 395 → +4 new tests: 2 observability, 1 ledger_cache, 1 async_committer).
+  - `cargo test -p marketplace-server --test postgres_flows --no-run` compiles cleanly (CI gate).
+  - `check.ps1` 6/6 pass: Journal, ActiveSpecs, Build, Format, Clippy, Tests.
+- **Out of scope (deliberate, kept for followups)**:
+  - Pre-existing `requests_total 0` hardcode on the metrics handler line 298 is a known bug — not in M3 scope, will be a separate small commit.
+  - Spec 0013 §4 says the metrics route is `/v1/metrics`; code exposes it at `/metrics`. This is the existing audit MINOR item m3. Route name change is a separate decision; not making it as part of M3.
+- **Net diff**: 4 files, +149 / −13 lines, no schema migration, no mobile/MCP changes, no spec/doc changes.
+- **Next**: TODO.md M4 — pure spec drift (spec 0017 health-api behavior). Plus the 5 MINOR spec drifts (m1 idempotency status code, m2 `owner_id` query, m4 `X-RateLimit-*` already done in M2, m6 SSE payload format, m7 `CreateReviewRequest` not bound). Most are openapi.yaml edits only.

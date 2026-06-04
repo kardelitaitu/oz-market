@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use rust_decimal::Decimal;
 use tokio::sync::mpsc;
@@ -7,6 +8,7 @@ use tokio::time::{interval, Duration};
 use uuid::Uuid;
 
 use crate::domain::ledger::{CreditLedgerRepository, NewTransaction, TransactionType};
+use crate::observability::ServerObservability;
 use crate::services::wal::{WalEntry, WalManager};
 
 const DEFAULT_FLUSH_INTERVAL_MS: u64 = 100;
@@ -27,6 +29,7 @@ pub struct AsyncBatchCommitter {
     wal: Arc<WalManager>,
     flush_interval: Duration,
     batch_size: usize,
+    observability: Option<Arc<ServerObservability>>,
 }
 
 /// Public handle for enqueuing transactions into the batch committer.
@@ -36,9 +39,11 @@ pub type BatchSender = mpsc::Sender<WalEntry>;
 ///
 /// Returns a sender (for enqueuing transactions) and a committer (which must
 /// have `start()` called to begin processing).
+/// `observability` may be `None` to disable batch-size and lag metric recording.
 pub fn batch_channel(
     db_repo: Arc<dyn CreditLedgerRepository>,
     wal: Arc<WalManager>,
+    observability: Option<Arc<ServerObservability>>,
 ) -> (BatchSender, AsyncBatchCommitter) {
     let (tx, rx) = mpsc::channel::<WalEntry>(1024);
     let committer = AsyncBatchCommitter {
@@ -47,6 +52,7 @@ pub fn batch_channel(
         wal,
         flush_interval: Duration::from_millis(DEFAULT_FLUSH_INTERVAL_MS),
         batch_size: DEFAULT_BATCH_SIZE,
+        observability,
     };
     (tx, committer)
 }
@@ -60,18 +66,30 @@ impl AsyncBatchCommitter {
             let mut ticker = interval(self.flush_interval);
             ticker.tick().await; // Skip the immediate tick
             let mut buffer = Vec::with_capacity(self.batch_size);
+            let mut buffer_first_pushed_at: Option<Instant> = None;
 
             loop {
                 tokio::select! {
                     Some(entry) = self.rx.recv() => {
+                        if buffer_first_pushed_at.is_none() {
+                            buffer_first_pushed_at = Some(Instant::now());
+                        }
                         buffer.push(entry);
                         if buffer.len() >= self.batch_size {
+                            let size = buffer.len();
+                            let first_pushed = buffer_first_pushed_at;
                             Self::flush_batch(&mut buffer, &self.db_repo, &self.wal).await;
+                            self.emit_batch_metrics(size, first_pushed);
+                            buffer_first_pushed_at = None;
                         }
                     }
                     _ = ticker.tick() => {
                         if !buffer.is_empty() {
+                            let size = buffer.len();
+                            let first_pushed = buffer_first_pushed_at;
                             Self::flush_batch(&mut buffer, &self.db_repo, &self.wal).await;
+                            self.emit_batch_metrics(size, first_pushed);
+                            buffer_first_pushed_at = None;
                         }
                     }
                 }
@@ -84,12 +102,27 @@ impl AsyncBatchCommitter {
 
             // Drain remaining entries on shutdown
             while let Some(entry) = self.rx.recv().await {
+                if buffer_first_pushed_at.is_none() {
+                    buffer_first_pushed_at = Some(Instant::now());
+                }
                 buffer.push(entry);
             }
             if !buffer.is_empty() {
+                let size = buffer.len();
+                let first_pushed = buffer_first_pushed_at;
                 Self::flush_batch(&mut buffer, &self.db_repo, &self.wal).await;
+                self.emit_batch_metrics(size, first_pushed);
             }
         });
+    }
+
+    fn emit_batch_metrics(&self, size: usize, first_pushed_at: Option<Instant>) {
+        if let Some(obs) = self.observability.as_ref() {
+            let lag_ms = first_pushed_at
+                .map(|t| t.elapsed().as_millis() as u64)
+                .unwrap_or(0);
+            obs.record_ledger_batch(size as u64, lag_ms);
+        }
     }
 
     async fn flush_batch(
@@ -137,6 +170,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::domain::ledger::CreditLedgerRepository;
+    use crate::observability::ServerObservability;
     use crate::repositories::ledger::InMemoryCreditLedgerRepository;
 
     fn make_entry(agent_id: &str, amount: &str, tx_type: &str) -> WalEntry {
@@ -159,7 +193,7 @@ mod tests {
     async fn batch_committer_flushes_on_tick() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), wal);
+        let (tx, committer) = batch_channel(repo.clone(), wal, None);
 
         tx.send(make_entry("agent-1", "100.0000", "deposit"))
             .await
@@ -180,7 +214,7 @@ mod tests {
     async fn batch_committer_consolidates_same_agent() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), wal);
+        let (tx, committer) = batch_channel(repo.clone(), wal, None);
 
         for _ in 0..10 {
             tx.send(make_entry("agent-1", "10.0000", "deposit"))
@@ -199,7 +233,7 @@ mod tests {
     async fn batch_committer_separates_different_agents() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), wal);
+        let (tx, committer) = batch_channel(repo.clone(), wal, None);
 
         tx.send(make_entry("agent-a", "200.0000", "deposit"))
             .await
@@ -221,7 +255,7 @@ mod tests {
     async fn batch_committer_drains_on_shutdown() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), wal);
+        let (tx, committer) = batch_channel(repo.clone(), wal, None);
 
         tx.send(make_entry("agent-1", "75.0000", "deposit"))
             .await
@@ -241,7 +275,7 @@ mod tests {
     async fn batch_committer_wal_truncated_after_flush() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), Arc::clone(&wal));
+        let (tx, committer) = batch_channel(repo.clone(), Arc::clone(&wal), None);
 
         let entry = make_entry("agent-1", "50.0000", "deposit");
         wal.append(&entry).unwrap();
@@ -259,7 +293,7 @@ mod tests {
     async fn batch_committer_mixed_spend_and_refund_nets_to_correct_balance() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), wal);
+        let (tx, committer) = batch_channel(repo.clone(), wal, None);
 
         // 100 + 100 + 100 - 200 + 100 = 200.0000
         tx.send(make_entry("agent-mix", "100.0000", "deposit"))
@@ -289,7 +323,7 @@ mod tests {
     async fn batch_committer_large_batch_triggers_size_flush() {
         let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
         let wal = temp_wal();
-        let (tx, committer) = batch_channel(repo.clone(), wal);
+        let (tx, committer) = batch_channel(repo.clone(), wal, None);
 
         // Default batch size is 100; sending 250 must flush at least twice.
         // Use 250 distinct agents so the per-agent consolidation doesn't mask the size-trigger.
@@ -313,6 +347,46 @@ mod tests {
             total,
             Decimal::new(2500000, 4),
             "250 deposits of 1.0000 must total 250.0000"
+        );
+    }
+
+    #[tokio::test]
+    async fn records_batch_size_and_lag() {
+        let repo: Arc<dyn CreditLedgerRepository> = Arc::new(InMemoryCreditLedgerRepository::new());
+        let wal = temp_wal();
+        let obs = Arc::new(ServerObservability::new());
+        let (tx, committer) = batch_channel(repo.clone(), wal, Some(obs.clone()));
+
+        tx.send(make_entry("agent-1", "10.0000", "deposit"))
+            .await
+            .unwrap();
+        tx.send(make_entry("agent-1", "20.0000", "deposit"))
+            .await
+            .unwrap();
+        tx.send(make_entry("agent-2", "30.0000", "deposit"))
+            .await
+            .unwrap();
+
+        committer.start();
+        // Default flush interval is 100ms; wait long enough for the tick to fire.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let snapshot = obs.snapshot();
+        assert!(
+            snapshot.ledger_batch_size >= 1,
+            "ledger_batch_size must be >= 1 after a flush, got {}",
+            snapshot.ledger_batch_size
+        );
+        assert_eq!(snapshot.ledger_batch_size, 3);
+        assert!(
+            snapshot.ledger_batch_lag_milliseconds > 0,
+            "ledger_batch_lag_milliseconds must be > 0, got {}",
+            snapshot.ledger_batch_lag_milliseconds
+        );
+        assert!(
+            snapshot.ledger_batch_lag_milliseconds < 1000,
+            "ledger_batch_lag_milliseconds must be < 1000, got {}",
+            snapshot.ledger_batch_lag_milliseconds
         );
     }
 }

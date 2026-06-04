@@ -10,6 +10,10 @@ pub struct ServerObservability {
     conflict_responses_total: AtomicU64,
     quota_rejections_total: AtomicU64,
     error_responses_total: AtomicU64,
+    ledger_cache_hit_total: AtomicU64,
+    ledger_cache_miss_total: AtomicU64,
+    ledger_batch_lag_milliseconds: AtomicU64,
+    ledger_batch_size: AtomicU64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +24,10 @@ pub struct ServerObservabilitySnapshot {
     pub conflict_responses_total: u64,
     pub quota_rejections_total: u64,
     pub error_responses_total: u64,
+    pub ledger_cache_hit_total: u64,
+    pub ledger_cache_miss_total: u64,
+    pub ledger_batch_lag_milliseconds: u64,
+    pub ledger_batch_size: u64,
 }
 
 impl ServerObservability {
@@ -47,6 +55,20 @@ impl ServerObservability {
         }
     }
 
+    pub fn record_ledger_cache_hit(&self) {
+        self.ledger_cache_hit_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_ledger_cache_miss(&self) {
+        self.ledger_cache_miss_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_ledger_batch(&self, size: u64, lag_milliseconds: u64) {
+        self.ledger_batch_size.store(size, Ordering::Relaxed);
+        self.ledger_batch_lag_milliseconds
+            .store(lag_milliseconds, Ordering::Relaxed);
+    }
+
     pub fn snapshot(&self) -> ServerObservabilitySnapshot {
         ServerObservabilitySnapshot {
             requests_total: self.requests_total.load(Ordering::Relaxed),
@@ -55,6 +77,12 @@ impl ServerObservability {
             conflict_responses_total: self.conflict_responses_total.load(Ordering::Relaxed),
             quota_rejections_total: self.quota_rejections_total.load(Ordering::Relaxed),
             error_responses_total: self.error_responses_total.load(Ordering::Relaxed),
+            ledger_cache_hit_total: self.ledger_cache_hit_total.load(Ordering::Relaxed),
+            ledger_cache_miss_total: self.ledger_cache_miss_total.load(Ordering::Relaxed),
+            ledger_batch_lag_milliseconds: self
+                .ledger_batch_lag_milliseconds
+                .load(Ordering::Relaxed),
+            ledger_batch_size: self.ledger_batch_size.load(Ordering::Relaxed),
         }
     }
 }
@@ -79,5 +107,30 @@ mod tests {
         assert_eq!(snapshot.conflict_responses_total, 1);
         assert_eq!(snapshot.quota_rejections_total, 1);
         assert_eq!(snapshot.error_responses_total, 3);
+    }
+
+    #[test]
+    fn records_ledger_cache_hit_and_miss() {
+        let observability = ServerObservability::new();
+        observability.record_ledger_cache_hit();
+        observability.record_ledger_cache_hit();
+        observability.record_ledger_cache_hit();
+        observability.record_ledger_cache_miss();
+
+        let snapshot = observability.snapshot();
+        assert_eq!(snapshot.ledger_cache_hit_total, 3);
+        assert_eq!(snapshot.ledger_cache_miss_total, 1);
+    }
+
+    #[test]
+    fn records_ledger_batch_size_and_lag_with_latest_values() {
+        let observability = ServerObservability::new();
+        observability.record_ledger_batch(50, 100);
+        observability.record_ledger_batch(75, 200);
+        observability.record_ledger_batch(120, 350);
+
+        let snapshot = observability.snapshot();
+        assert_eq!(snapshot.ledger_batch_size, 120);
+        assert_eq!(snapshot.ledger_batch_lag_milliseconds, 350);
     }
 }

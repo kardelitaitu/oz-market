@@ -124,7 +124,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Credit ledger cache (write-through with TTL)
     let ledger_repo: Arc<dyn CreditLedgerRepository> =
         Arc::new(PostgresCreditLedgerRepository::new(pool.clone()));
-    let ledger_cache = LedgerCache::new(ledger_repo.clone());
+    let ledger_cache = LedgerCache::new(ledger_repo.clone(), Some(observability.clone()));
     let ledger_cache_data = web::Data::new(ledger_cache);
 
     // WAL recovery — replay any uncommitted transactions from a prior crash
@@ -137,7 +137,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     info!("WAL recovery complete");
 
     // Async batch committer — background task for batching credit transactions
-    let (batch_tx, batch_committer) = batch_channel(ledger_repo, Arc::new(wal));
+    let (batch_tx, batch_committer) =
+        batch_channel(ledger_repo, Arc::new(wal), Some(observability.clone()));
     batch_committer.start();
     let batch_tx_data = web::Data::new(batch_tx);
 
@@ -230,6 +231,7 @@ async fn metrics_handler(
     search_cache: web::Data<Cache<String, String>>,
     listing_max_bytes: web::Data<u64>,
     search_max_bytes: web::Data<u64>,
+    observability: web::Data<Arc<ServerObservability>>,
 ) -> impl actix_web::Responder {
     // Connection pool metrics
     let pool_size = pool.size();
@@ -240,7 +242,7 @@ async fn metrics_handler(
     let max_worker_threads = 8usize; // Must match the cap in run()
     let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
         .ok()
-        .and_then(|v| v.parse::<usize>().ok())
+        .and_then(|v| v.parse().ok())
         .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
 
     // Cache metrics — derive size from the actual configured limits
@@ -279,6 +281,9 @@ async fn metrics_handler(
     let listing_max_mb = listing_weight_capacity / (1024 * 1024);
     let search_max_mb = search_weight_capacity / (1024 * 1024);
 
+    // Ledger observability snapshot (spec 0013 §4)
+    let obs = observability.get_ref().snapshot();
+
     let metrics = format!(
         "# HELP database_connections_total Total database connections\n# TYPE database_connections_total gauge\ndatabase_connections_total {}\n\
          # HELP database_connections_idle Idle database connections\n# TYPE database_connections_idle gauge\ndatabase_connections_idle {}\n\
@@ -295,11 +300,17 @@ async fn metrics_handler(
          # HELP cache_search_max_mb Search cache max memory limit in MB\n# TYPE cache_search_max_mb gauge\ncache_search_max_mb {}\n\
          # HELP cache_search_utilization_percent Search cache utilization percentage\n# TYPE cache_search_utilization_percent gauge\ncache_search_utilization_percent {}\n\
          # HELP memory_cache_total_mb Total cache memory usage in MB\n# TYPE memory_cache_total_mb gauge\nmemory_cache_total_mb {}\n\
-         # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n",
+         # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n\
+         # HELP ledger_cache_hit_total Total ledger cache hits\n# TYPE ledger_cache_hit_total counter\nledger_cache_hit_total {}\n\
+         # HELP ledger_cache_miss_total Total ledger cache misses\n# TYPE ledger_cache_miss_total counter\nledger_cache_miss_total {}\n\
+         # HELP ledger_batch_lag_milliseconds Duration from queue push to DB commit for the most recent batch\n# TYPE ledger_batch_lag_milliseconds gauge\nledger_batch_lag_milliseconds {}\n\
+         # HELP ledger_batch_size Number of entries in the most recent flushed batch\n# TYPE ledger_batch_size gauge\nledger_batch_size {}\n",
         pool_size, idle_connections, connection_utilization, worker_threads, max_worker_threads, num_cpus,
         listing_count, listing_memory_mb, listing_max_mb, listing_cache_utilization,
         search_count, search_memory_mb, search_max_mb, search_cache_utilization,
-        total_cache_mb
+        total_cache_mb,
+        obs.ledger_cache_hit_total, obs.ledger_cache_miss_total,
+        obs.ledger_batch_lag_milliseconds, obs.ledger_batch_size
     );
 
     actix_web::HttpResponse::Ok()
