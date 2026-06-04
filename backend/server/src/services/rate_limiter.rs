@@ -154,7 +154,7 @@ impl SlidingWindowRateLimiter {
             });
         }
         // Sort so most active buckets appear first
-        result.sort_by(|a, b| b.count.cmp(&a.count));
+        result.sort_by_key(|bucket| std::cmp::Reverse(bucket.count));
         result
     }
 }

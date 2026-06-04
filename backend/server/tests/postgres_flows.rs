@@ -1234,21 +1234,22 @@ async fn postgres_credit_ledger_deposit_creates_balance_and_persists_transaction
     );
 
     // Row in credit_transactions must exist.
-    let row = sqlx::query("SELECT amount, transaction_type FROM credit_transactions WHERE id = ")
-        .bind(tx.id)
-        .fetch_one(&pool)
-        .await?;
+    let row =
+        sqlx::query("SELECT amount, transaction_type FROM credit_transactions WHERE id = $1 ")
+            .bind(tx.id)
+            .fetch_one(&pool)
+            .await?;
     let stored_amount: Decimal = row.try_get("amount")?;
     let stored_type: String = row.try_get("transaction_type")?;
     assert_eq!(stored_amount, Decimal::from_str("100.0000").unwrap());
     assert_eq!(stored_type, "deposit");
 
     // Cleanup.
-    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
@@ -1288,11 +1289,11 @@ async fn postgres_credit_ledger_spend_decrements_existing_balance(
     assert_eq!(after.balance_credits, Decimal::from_str("20.0000").unwrap());
 
     // Cleanup.
-    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
@@ -1345,11 +1346,11 @@ async fn postgres_credit_ledger_spend_overdraw_returns_insufficient_credits(
     assert_eq!(bal.balance_credits, Decimal::from_str("10.0000").unwrap());
 
     // Cleanup.
-    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
@@ -1409,7 +1410,7 @@ async fn postgres_credit_ledger_idempotency_key_replay_returns_existing_balance(
 
     // Exactly one row in credit_transactions for that agent.
     let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM credit_transactions WHERE agent_id = ")
+        sqlx::query_scalar("SELECT COUNT(*) FROM credit_transactions WHERE agent_id = $1 ")
             .bind(&agent_id)
             .fetch_one(&pool)
             .await?;
@@ -1419,11 +1420,11 @@ async fn postgres_credit_ledger_idempotency_key_replay_returns_existing_balance(
     );
 
     // Cleanup.
-    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = ")
+    sqlx::query("DELETE FROM credit_transactions WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
-    sqlx::query("DELETE FROM agent_balances WHERE agent_id = ")
+    sqlx::query("DELETE FROM agent_balances WHERE agent_id = $1 ")
         .bind(&agent_id)
         .execute(&pool)
         .await?;
