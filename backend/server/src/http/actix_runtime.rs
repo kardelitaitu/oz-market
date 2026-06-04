@@ -13,7 +13,9 @@ use crate::repositories::{
     AuditEventRepository, OutboxEventRepository, PostgresIdempotencyKeyRepository,
     SellerAccountRepository,
 };
+use crate::services::async_committer::batch_channel;
 use crate::services::ledger_cache::LedgerCache;
+use crate::services::wal::WalManager;
 use actix_web::{web, App, HttpServer};
 use moka::future::Cache;
 use std::error::Error;
@@ -118,8 +120,22 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Credit ledger cache (write-through with TTL)
     let ledger_repo: Arc<dyn CreditLedgerRepository> =
         Arc::new(PostgresCreditLedgerRepository::new(pool.clone()));
-    let ledger_cache = LedgerCache::new(ledger_repo);
+    let ledger_cache = LedgerCache::new(ledger_repo.clone());
     let ledger_cache_data = web::Data::new(ledger_cache);
+
+    // WAL recovery — replay any uncommitted transactions from a prior crash
+    info!("Recovering credit ledger WAL...");
+    let wal = WalManager::from_env()
+        .map_err(|e| std::io::Error::other(format!("WAL initialization failed: {e}")))?;
+    wal.recover(&*ledger_repo)
+        .await
+        .map_err(|e| std::io::Error::other(format!("WAL recovery failed: {e}")))?;
+    info!("WAL recovery complete");
+
+    // Async batch committer — background task for batching credit transactions
+    let (batch_tx, batch_committer) = batch_channel(ledger_repo, Arc::new(wal));
+    batch_committer.start();
+    let batch_tx_data = web::Data::new(batch_tx);
 
     let app_data = web::Data::new(app);
     let obs_data = web::Data::new(observability);
@@ -155,6 +171,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .app_data(listing_cache_limit_data.clone())
             .app_data(search_cache_limit_data.clone())
             .app_data(ledger_cache_data.clone())
+            .app_data(batch_tx_data.clone())
             .app_data(pool_data.clone())
             .app_data(event_bus_data.clone())
             // OpenAPI docs

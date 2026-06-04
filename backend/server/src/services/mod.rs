@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod async_committer;
 pub mod audit_events;
 pub mod authz;
 pub mod contact_reveals;
@@ -8,5 +9,6 @@ pub mod outbox_events;
 pub mod rate_limiter;
 pub mod reservations;
 pub mod search;
+pub mod wal;
 
 pub const MODULE_NAME: &str = "services";

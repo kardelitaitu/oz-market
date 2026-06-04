@@ -996,6 +996,18 @@ new line
   - All 6 gates PASS (281 tests, clean clippy, clean fmt).
   - Moved spec from `_active/0012-*` to `_done/0012-*`. Active specs remaining: 0013, 0014, 0015, 0016, 0017.
 
+## 2026-06-05 03:00
+
+- **Executed Spec 0013 (WAL + Async Batch Committer)**:
+  - **`services/wal.rs`**: `WalManager` struct — JSON Lines append-only WAL with `sync_all()` durability, `read_all()` parsing (skips corrupt lines), `truncate()` via fresh write-truncated handle (Windows-compatible), and `recover()` async reconciliation by idempotency key. Configurable via `LEDGER_WAL_PATH` env var (default `./data/ledger.wal`).
+  - **`services/async_committer.rs`**: `AsyncBatchCommitter` struct with `batch_channel()` factory — mpsc channel (1024 capacity), background tokio task with 100ms interval ticker and 100-entry batch size. Consolidates same-agent deltas before DB apply. Truncates WAL after successful flush. Drains remaining entries on sender drop (graceful shutdown).
+  - **`services/mod.rs`**: Added `pub mod async_committer` and `pub mod wal`.
+  - **Production wiring** (`actix_runtime.rs`): WAL recovery runs after DB migrations, before HTTP listener starts. Batch committer spawns as background task. `BatchSender` injected as `web::Data` for future handler use.
+  - **12 new tests**: 7 WAL (append/read, multi-entry, truncate, skip-corrupt, recover with duplicate, recover new agent, empty recover) + 5 batch (tick flush, agent consolidation, separate agents, drain on shutdown, WAL truncation after flush).
+  - Added `serde` feature to `uuid` dependency.
+  - All 6 gates PASS (293 tests, clean clippy, clean fmt).
+  - Moved spec from `_active/0013-*` to `_done/0013-*`. Active specs remaining: 0014, 0015, 0016, 0017.
+
 ## 2026-06-04 23:10
 
 - **Created Active Spec 0018 (Update Affected Documents)**: Added all 10 specification files under docs/specs/_active/0018-update-affected-documents/ to establish requirements, checklists, and plan for syncing checklists in TODO.md, mapping indexes in docs/specs/README.md, and references in docs/DOCS-README.md.
