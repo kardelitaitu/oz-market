@@ -1432,3 +1432,36 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Validation**: `check.ps1` 6/6 pass. `cargo test --lib` 400/400 pass. No code changes (only docs + config), so the test count is unchanged.
 - **Files changed (3)**: `.env.example` (+43 / -6), `docker-compose.yml` (+2 / -0), `docs/deploy.md` (+1 / -1).
 - **Remaining audit items after this commit**: spec drift only (seller_id vs agent_id path variable; requests_total 0 hardcode on metrics handler line 298). All 5 MAJOR items (M1-M5), all 9 MINOR items (m1-m9), and all 8 ENV items (e1-e8) are now closed.
+
+## 2026-06-05 16:30 — Doc drift cleanup: fix 5 docs from audit findings
+
+- **Problem**: Comprehensive docs audit revealed 5+ drifts across the documentation tree — stale env var names (MARKETPLACE_DISABLE_CACHE), incorrect auth docs (claimed base64 + Bearer JWT that do not exist), missing endpoint tables, wrong port references (3003 vs 3000), fictional AI Prompt Cache section, stale benchmark numbers, and out-of-date route paths.
+- **Fix**:
+  - `backend/server/README.md`: Replaced base64 + Bearer JWT auth docs with accurate x-marketplace-claims + x-marketplace-api-key description. Rewrote rate limits (per-action sliding window). Added 9 missing endpoints (reviews, SSE events, agent query, health agents, recalculate-rating, credits, approve/reject review, rate-limits, docs). Updated roles/error tables.
+  - `docs/deploy.md`: MARKETPLACE_DISABLE_CACHE -> MARKETPLACE_CACHE_ENABLED. MCP test count 6->15. contact_phone -> revealed_phone_reference.
+  - `docs/server/README.md`: Removed AI Prompt Cache section (file did not exist). Port 3003->3000 in 5 places. MCP tools count 10->11.
+  - `docs/specs/README.md`: /api/ -> /v1/ path prefixes throughout. Removed non-existent /counter and /reject endpoints. Replaced stale endpoint tables with current 30+ endpoint list.
+  - `docs/CLI-README.md`: Updated benchmark numbers from May 10 to May 12 baseline with claims-mode breakdown.
+- **Validation**: check.ps1 6/6 pass (431 tests). Redocly lint 0 warnings. Code review approved.
+- **Net diff**: 5 files, +121 / -108. Documentation only, no code changes.
+- **Commit**: e4d7269, pushed to origin/main.
+
+## 2026-06-05 16:45 — Wrap wrap_fn counter into /metrics handler
+
+- **Problem**: The `metrics_handler` was hardcoding `requests_total 0` in its Prometheus output (line 298 of `actix_runtime.rs`). The `obs.requests_total` field on the observability struct existed and was incremented by ad-hoc internal call sites, but no middleware captured per-request HTTP traffic. The published `requests_total` metric was therefore permanently zero, and any operator dashboard or alert threshold tied to it would never fire.
+- **Fix**:
+  - `backend/server/src/http/actix_runtime.rs`: added `actix_web::dev::Service` to imports and registered a `wrap_fn` middleware right after `TracingLogger` in the `HttpServer::new` factory. The middleware captures `req.path()` before dispatch, then awaits `srv.call(req)` and on success calls `obs.record_request(&path, response.status().as_u16())`. Cloned `obs_data` into a local `obs_for_mw` before the factory body because `HttpServer::new` is `Fn` (called per worker thread) and the factory's captures must be `Clone`. Changed `requests_total 0` literal to `requests_total {}` and added `obs.requests_total` to the `format_args!` positional list.
+  - `backend/server/src/http/actix_handlers.rs`: added a regression test in the test module that builds a minimal `App` with the same `wrap_fn` and hits a dummy `/ping` route 3 times plus a 404 route once, then asserts `snapshot.requests_total == 4` and `snapshot.error_responses_total == 1`. This test was already in `actix_runtime.rs` from an earlier in-progress edit; the handlers copy is the canonical location because the test exercises the same middleware pattern and the file already has a `#[cfg(test)] mod tests` block.
+- **Why not push the test in `actix_runtime.rs` too**: would have produced a duplicate test name in two different modules (Rust allows it but it's noise). One copy is enough; the handlers module is the more conventional home for HTTP-level integration tests.
+- **Validation**: `check.ps1` 6/6 pass. `cargo test --lib` 401/401 pass. New regression test: `request_counter_middleware_increments_per_request`.
+- **Files changed (2)**: `actix_runtime.rs` (+21 / -2), `actix_handlers.rs` (+48 / -0).
+- **Commit**: fc157c4, pushed to origin/main.
+
+## 2026-06-05 17:00 — Spec drift: rename /internal/v1/sellers/{seller_id}/credits to {agent_id}
+
+- **Problem**: The OpenAPI spec had `/internal/v1/sellers/{seller_id}/credits` with the path variable named `seller_id`, but the actual handler in `actix_handlers.rs:1469` reads `web::Path<String>` bound to `agent_id`, the URL placeholder in the surrounding code comment says `agent_id`, and the DB schema (`0014_add_credit_ledger.sql`) has `agent_id TEXT PRIMARY KEY` as the foreign key for credit accounts. The other 3 admin seller handlers (`set_seller_trust_level:907`, `set_seller_quota_override:934`, `recalculate_seller_rating:960`) correctly use `seller_id`. The drift was confusing because the URL still says `/sellers/` (the spec's multi-account design treats "agent" as the per-account identity, not the per-listing "seller") but the path variable name should match the code.
+- **Fix**: `docs/specs/openapi.yaml:701` — renamed both the URL placeholder `{seller_id}` -> `{agent_id}` and the `parameters[].name: seller_id` -> `agent_id`. No code changes (code was already correct).
+- **Why not rename the URL from `/sellers/` to `/agents/`**: the route is a "manage a seller's credit account" endpoint and the spec's design keeps "seller" as the public-facing account role label. The internal schema column name `agent_id` is the implementation detail (each account is uniquely identified by an opaque agent string per spec 0010). The drift was only in the path-parameter NAME, not the URL path itself.
+- **Validation**: `check.ps1` 6/6 pass. `redocly lint` 0 warnings. `docs/specs/openapi.yaml` now consistent with code at `actix_handlers.rs:1469` and DB schema at `0014_add_credit_ledger.sql`.
+- **Files changed (1)**: `docs/specs/openapi.yaml` (+2 / -2).
+- **Final audit status**: ALL drift items closed. All 5 MAJOR (M1-M5), all 9 MINOR (m1-m9), all 8 ENV (e1-e8), all 4 doc-drift items, and both spec-drift items (requests_total hardcode + seller_id/agent_id) are now resolved.

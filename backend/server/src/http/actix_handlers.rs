@@ -1567,12 +1567,12 @@ pub async fn adjust_credits(
 mod tests {
     use super::*;
     use crate::observability::ServerObservability;
+    use actix_web::dev::Service;
     use actix_web::http::StatusCode;
     use actix_web::test::TestRequest;
     use actix_web::web;
     use actix_web::App;
     use actix_web::HttpResponse;
-    use actix_web::dev::Service;
     use std::sync::Arc;
 
     /// Regression test for the metrics request-counter middleware.
@@ -1606,10 +1606,14 @@ mod tests {
 
         // Three pings, then one to a non-existent route to confirm 4xx is also counted.
         for _ in 0..3 {
-            let req = actix_web::test::TestRequest::get().uri("/ping").to_request();
+            let req = actix_web::test::TestRequest::get()
+                .uri("/ping")
+                .to_request();
             let _resp = actix_web::test::call_service(&app, req).await;
         }
-        let req = actix_web::test::TestRequest::get().uri("/nope").to_request();
+        let req = actix_web::test::TestRequest::get()
+            .uri("/nope")
+            .to_request();
         let _resp = actix_web::test::call_service(&app, req).await;
 
         let snapshot = obs.snapshot();

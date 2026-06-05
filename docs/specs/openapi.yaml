@@ -698,7 +698,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-  /internal/v1/sellers/{seller_id}/credits:
+  /internal/v1/sellers/{agent_id}/credits:
     post:
       tags: [admin]
       summary: Adjust seller credits (admin)
@@ -707,7 +707,7 @@ paths:
         This operation requires admin authorization and is idempotent.
       operationId: adjustSellerCredits
       parameters:
-        - name: seller_id
+        - name: agent_id
           in: path
           required: true
           schema:

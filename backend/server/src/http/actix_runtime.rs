@@ -485,4 +485,3 @@ mod tests {
         assert_eq!(snapshot.error_responses_total, 1); // the 404 above
     }
 }
-
