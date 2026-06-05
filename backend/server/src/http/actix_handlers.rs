@@ -1566,8 +1566,56 @@ pub async fn adjust_credits(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::observability::ServerObservability;
     use actix_web::http::StatusCode;
     use actix_web::test::TestRequest;
+    use actix_web::web;
+    use actix_web::App;
+    use actix_web::HttpResponse;
+    use actix_web::dev::Service;
+    use std::sync::Arc;
+
+    /// Regression test for the metrics request-counter middleware.
+    /// Verifies that wrap_fn middleware actually records requests (not a hardcoded 0).
+    #[actix_web::test]
+    async fn request_counter_middleware_increments_per_request() {
+        let obs = Arc::new(ServerObservability::new());
+        let obs_data = web::Data::new(obs.clone());
+
+        let app = actix_web::test::init_service(
+            App::new()
+                .app_data(obs_data.clone())
+                .wrap_fn(move |req, srv| {
+                    let obs = obs_data.clone();
+                    let path = req.path().to_owned();
+                    let fut = srv.call(req);
+                    async move {
+                        let res: Result<_, actix_web::Error> = fut.await;
+                        if let Ok(ref response) = res {
+                            obs.record_request(&path, response.status().as_u16());
+                        }
+                        res
+                    }
+                })
+                .route(
+                    "/ping",
+                    web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+                ),
+        )
+        .await;
+
+        // Three pings, then one to a non-existent route to confirm 4xx is also counted.
+        for _ in 0..3 {
+            let req = actix_web::test::TestRequest::get().uri("/ping").to_request();
+            let _resp = actix_web::test::call_service(&app, req).await;
+        }
+        let req = actix_web::test::TestRequest::get().uri("/nope").to_request();
+        let _resp = actix_web::test::call_service(&app, req).await;
+
+        let snapshot = obs.snapshot();
+        assert_eq!(snapshot.requests_total, 4);
+        assert_eq!(snapshot.error_responses_total, 1); // the 404 above
+    }
 
     #[test]
     fn test_parse_fields_param_single() {

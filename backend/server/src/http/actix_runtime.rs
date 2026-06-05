@@ -20,7 +20,7 @@ use crate::services::async_committer::batch_channel;
 use crate::services::circuit_breaker::CircuitBreakerRegistry;
 use crate::services::ledger_cache::LedgerCache;
 use crate::services::wal::WalManager;
-use actix_web::{web, App, HttpServer};
+use actix_web::{dev::Service, web, App, HttpServer};
 use moka::future::Cache;
 use std::error::Error;
 use std::sync::Arc;
@@ -168,9 +168,25 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .unwrap_or(30);
 
     let server = HttpServer::new(move || {
+        let obs_for_mw = obs_data.clone();
         App::new()
             .wrap(actix_web::middleware::Compress::default()) // Response compression (gzip)
             .wrap(TracingLogger::default()) // Add tracing middleware
+            .wrap_fn(move |req, srv| {
+                // Request counter for the /metrics handler. Wraps every request
+                // so the obs.requests_total field reflects actual HTTP traffic,
+                // not a hardcoded 0.
+                let obs = obs_for_mw.clone();
+                let path = req.path().to_owned();
+                let fut = srv.call(req);
+                async move {
+                    let res: Result<_, actix_web::Error> = fut.await;
+                    if let Ok(ref response) = res {
+                        obs.record_request(&path, response.status().as_u16());
+                    }
+                    res
+                }
+            })
             .app_data(app_data.clone())
             .app_data(obs_data.clone())
             .app_data(cache_enabled_data.clone())
@@ -301,7 +317,7 @@ async fn metrics_handler(
          # HELP cache_search_max_mb Search cache max memory limit in MB\n# TYPE cache_search_max_mb gauge\ncache_search_max_mb {}\n\
          # HELP cache_search_utilization_percent Search cache utilization percentage\n# TYPE cache_search_utilization_percent gauge\ncache_search_utilization_percent {}\n\
          # HELP memory_cache_total_mb Total cache memory usage in MB\n# TYPE memory_cache_total_mb gauge\nmemory_cache_total_mb {}\n\
-         # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total 0\n\
+         # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total {}\n\
          # HELP ledger_cache_hit_total Total ledger cache hits\n# TYPE ledger_cache_hit_total counter\nledger_cache_hit_total {}\n\
          # HELP ledger_cache_miss_total Total ledger cache misses\n# TYPE ledger_cache_miss_total counter\nledger_cache_miss_total {}\n\
          # HELP ledger_batch_lag_milliseconds Duration from queue push to DB commit for the most recent batch\n# TYPE ledger_batch_lag_milliseconds gauge\nledger_batch_lag_milliseconds {}\n\
@@ -310,6 +326,7 @@ async fn metrics_handler(
         listing_count, listing_memory_mb, listing_max_mb, listing_cache_utilization,
         search_count, search_memory_mb, search_max_mb, search_cache_utilization,
         total_cache_mb,
+        obs.requests_total,
         obs.ledger_cache_hit_total, obs.ledger_cache_miss_total,
         obs.ledger_batch_lag_milliseconds, obs.ledger_batch_size
     );
@@ -416,3 +433,56 @@ fn build_app(
 
     Arc::new(app)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::observability::ServerObservability;
+    use actix_web::{test, web, App, HttpResponse};
+    use std::sync::Arc;
+
+    /// Regression test for the audit "requests_total 0 hardcode" item.
+    /// Verifies that the wrap_fn middleware used in `run()` actually wires
+    /// `record_request` into the request path, so the metrics handler reads
+    /// a real counter instead of a constant 0.
+    #[actix_web::test]
+    async fn request_counter_middleware_increments_per_request() {
+        let obs = Arc::new(ServerObservability::new());
+        let obs_data = web::Data::new(obs.clone());
+
+        let app = test::init_service(
+            App::new()
+                .app_data(obs_data.clone())
+                .wrap_fn(move |req, srv| {
+                    let obs = obs_data.clone();
+                    let path = req.path().to_owned();
+                    let fut = srv.call(req);
+                    async move {
+                        let res: Result<_, actix_web::Error> = fut.await;
+                        if let Ok(ref response) = res {
+                            obs.record_request(&path, response.status().as_u16());
+                        }
+                        res
+                    }
+                })
+                .route(
+                    "/ping",
+                    web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+                ),
+        )
+        .await;
+
+        // Three pings, then one to a non-existent route to confirm 4xx is also counted.
+        for _ in 0..3 {
+            let req = test::TestRequest::get().uri("/ping").to_request();
+            let _resp = test::call_service(&app, req).await;
+        }
+        let req = test::TestRequest::get().uri("/nope").to_request();
+        let _resp = test::call_service(&app, req).await;
+
+        let snapshot = obs.snapshot();
+        assert_eq!(snapshot.requests_total, 4);
+        assert_eq!(snapshot.error_responses_total, 1); // the 404 above
+    }
+}
+
