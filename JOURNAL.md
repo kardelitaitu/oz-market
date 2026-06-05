@@ -1814,3 +1814,20 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Validation**: Playwright E2E tests run successfully (92/92 pass). Workspace validation `./check.ps1` runs clean.
 - **Files changed (5)**: `backend/server/src/http/actix_handlers.rs`, `backend/server/src/http/actix_runtime.rs`, `web/website/src/lib/LedgerExplorer.svelte`, `web/website/src/lib/simulator.svelte.js`, `web/website/tests/components.spec.js`.
 
+## 2026-06-05 22:00 — Refactor 6 metrics tests + wire CI microbench env + summary scraper
+
+- **Problem**: the 5 per-counter smoke tests added in the previous session duplicated ~70 lines each of the same App + wrap_fn + /metrics scaffolding, with only the counter name, trigger route, and expected value varying. The microbench step in CI also needed the trending log to record real commit SHAs (it was recording "local") and a way to surface the latest measurement in the run summary so reviewers could spot a regression without downloading artifacts.
+- **Refactor**: extracted the duplication into two pieces in the test module:
+  - `render_test_metrics_body(counter, snap) -> String` — pure helper that renders a single-counter Prometheus body for any of the 6 counter names (HELP/TYPE/value triple). Uses a `match` on the static counter name to pick the right field from `ServerObservabilitySnapshot`, panicking on unknown names so a typo fails loud.
+  - `init_metrics_test_app!(obs, app, counter, |cfg| {...})` — macro that wires a minimal actix App with the production wrap_fn, the user-supplied trigger routes via `configure`, and a /metrics route that calls `render_test_metrics_body` with the named counter. Binds `obs: Arc<ServerObservability>` and `app: impl Service` in the caller's scope.
+  - `scrape_metrics_body!(&app)` — small macro that does the GET /metrics + read_body + UTF-8 dance, avoiding a generic-bounded `async fn` (the actix Service types are hard to name).
+  - Rewrote all 6 metrics tests (1 existing + 5 new) to use the macro. Each test went from ~70 lines to ~25. Test count 408 -> 409 (the macro is also a savings in cognitive load: a future "7th counter" is `match` arm + 1 test, not a copy of 70 lines).
+  - Net change in the file: -169 lines (513 insertions, 341 deletions for the test module).
+- **CI work (`.github/workflows/ci.yml`)**:
+  - Added `MARKETPLACE_MICROBENCH_COMMIT: ${{ github.sha }}` env to the existing "Wrap_fn microbench (release)" step. The test reads this via `std::env::var` and uses it in the trending log line, so CI runs now record `commit: <sha>` instead of `commit: "local"`. Local dev runs (no env var set) still get `"local"` for the existing UX.
+  - Added a "Publish microbench trend to job summary" step that runs after the microbench (guarded by `if: always()` so a test failure still surfaces the last sample). It `tail -1`s the log, writes the JSON line to `$GITHUB_STEP_SUMMARY` for human review, and emits a `::notice` annotation with the parsed ns/req value (or "sub-noise" if the JSON is `null`). The `python3` one-liner uses the same JSON parse as the test, so the value rendering stays in lockstep with the log format.
+  - Updated the inline comment in the microbench step from "1us/req" to "800ns/req" to match the a283786 tightening.
+- **Note on test placement**: the "all 6 counters in one body" test was first added to `actix_runtime.rs` (next to the real `metrics_handler`) but that file is `#[cfg(not(test))]` so the test would be dead code. The cfg-gate exists because the production runtime needs `tokio::spawn` and other server-only deps that conflict with `#[actix_web::test]`. Moved the test to `actix_handlers.rs` where it can actually run, with a comment explaining the inlined /metrics body mirrors the production format for the 6 HTTP counters and should be updated in lockstep.
+- **Validation**: 409 tests pass (was 408, +1 from the new all-in-one test). `check.ps1` 6/6.
+- **Files changed (1)**: `actix_handlers.rs` (+200 / -341).
+

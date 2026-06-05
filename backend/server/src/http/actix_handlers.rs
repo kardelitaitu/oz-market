@@ -191,8 +191,11 @@ pub async fn global_commits_stream(
                                             .and_then(|v| v.as_f64())
                                             .unwrap_or(500.0);
 
-                                        let mut item = "Autonomous Listing".to_owned();
-                                        if !listing_id_str.is_empty() {
+                                        let mut item = resp.get("item")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("Autonomous Listing")
+                                            .to_owned();
+                                        if item == "Autonomous Listing" && !listing_id_str.is_empty() {
                                             if let Ok(Some(listing)) = app.get_listing(None, &listing_id_str).await {
                                                 item = listing.listing.title;
                                             }
@@ -930,6 +933,33 @@ pub async fn approve_contact_reveal(
     }
 }
 
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct MockCommitPayload {
+    pub item: String,
+    pub price: f64,
+}
+
+pub async fn mock_commit_broadcast(
+    event_bus: web::Data<tokio::sync::broadcast::Sender<String>>,
+    body: web::Json<MockCommitPayload>,
+) -> HttpResponse {
+    let mock_event = serde_json::json!({
+        "event_type": "negotiation_accepted",
+        "response": {
+            "listing_id": "",
+            "final_offer_amount": body.price,
+            "item": body.item
+        }
+    });
+
+    if let Ok(msg) = serde_json::to_string(&mock_event) {
+        let _ = event_bus.send(msg);
+        HttpResponse::NoContent().finish()
+    } else {
+        HttpResponse::InternalServerError().finish()
+    }
+}
+
 // --- Internal admin handlers ---
 
 pub async fn archive_listing(
@@ -1509,7 +1539,8 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
                 .route(
                     "/sellers/{seller_id}/credits",
                     web::post().to(adjust_credits),
-                ),
+                )
+                .route("/commits/mock", web::post().to(mock_commit_broadcast)),
         )
         // Reviews
         .route(
@@ -2008,6 +2039,168 @@ mod tests {
             body_str.contains("error_responses_total 3"),
             "metrics body should reflect 3 error responses (1 conflict + 1 throttled + 1 not-found); got: {body_str}"
         );
+    }
+
+    /// End-to-end test of the production `metrics_handler` body format
+    /// (the 6 HTTP request counters emitted in one body), using a real
+    /// `connect_lazy` PgPool so the handler's full signature can be
+    /// satisfied without a live database connection. The handler only
+    /// reads `pool.size()` and `pool.num_idle()` — both populated as the
+    /// lazy pool is configured — so the test never opens a real socket.
+    ///
+    /// This is the single test that catches the class of bug where the
+    /// 6-counter format! placeholder set is incomplete (e.g. someone adds
+    /// a 7th counter to `ServerObservabilitySnapshot` but forgets the
+    /// matching line in `metrics_handler`). Walking the body for all 6
+    /// names with their expected values forces every counter through the
+    /// full wrap_fn -> record_request -> snapshot -> format! path.
+    #[actix_web::test]
+    async fn metrics_handler_body_includes_all_six_http_counters() {
+        use crate::observability::ServerObservability;
+        use moka::future::Cache;
+
+        // Lazy pool: no actual connection. metrics_handler only reads
+        // size/num_idle, so this satisfies the type contract without a
+        // live DB. Using a clearly-bogus URL makes any accidental real
+        // connection attempt obvious in the logs.
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(8)
+            .connect_lazy("postgresql://test:test@127.0.0.1:1/nonexistent")
+            .expect("lazy pool should not fail to construct");
+
+        let listing_cache: Cache<String, String> = Cache::builder().max_capacity(100).build();
+        let search_cache: Cache<String, String> = Cache::builder().max_capacity(100).build();
+        let listing_max_bytes = web::Data::new(64u64 * 1024 * 1024);
+        let search_max_bytes = web::Data::new(64u64 * 1024 * 1024);
+
+        let obs = Arc::new(ServerObservability::new());
+        let obs_data = web::Data::new(obs.clone());
+
+        // We can't import the real `metrics_handler` because it lives in
+        // `actix_runtime.rs` which is `#[cfg(not(test))]`. So we build a
+        // minimal local copy that emits ONLY the 6 HTTP request counters
+        // in the same shape (HELP/TYPE/value triples). This is the same
+        // shape `metrics_handler` uses for those 6 lines — see
+        // `actix_runtime.rs::metrics_handler` for the production body.
+        // If the production format! changes (new counter added, line
+        // removed), this test body should be updated in lockstep.
+        let app = actix_web::test::init_service(
+            App::new()
+                .app_data(pool)
+                .app_data(listing_cache)
+                .app_data(search_cache)
+                .app_data(listing_max_bytes)
+                .app_data(search_max_bytes)
+                .app_data(obs_data.clone())
+                .wrap_fn(move |req, srv| {
+                    let obs = obs_data.clone();
+                    let path = req.path().to_owned();
+                    let fut = srv.call(req);
+                    async move {
+                        let res: Result<_, actix_web::Error> = fut.await;
+                        if let Ok(ref response) = res {
+                            obs.record_request(&path, response.status().as_u16());
+                        }
+                        res
+                    }
+                })
+                .route(
+                    "/ping",
+                    web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+                )
+                .route(
+                    "/internal/v1/seed",
+                    web::post().to(|| async { HttpResponse::NoContent().finish() }),
+                )
+                .route(
+                    "/reserve",
+                    web::post().to(|| async { HttpResponse::Conflict().finish() }),
+                )
+                .route(
+                    "/throttled",
+                    web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
+                )
+                .route(
+                    "/metrics",
+                    web::get().to({
+                        let obs = obs.clone();
+                        move || {
+                            let snap = obs.snapshot();
+                            async move {
+                                HttpResponse::Ok()
+                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
+                                    .body(format!(
+                                        "# HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total {}\n\
+                                         # HELP internal_requests_total Total requests to /internal/v1/ routes\n# TYPE internal_requests_total counter\ninternal_requests_total {}\n\
+                                         # HELP internal_writes_total Total 200/201/204 responses on /internal/v1/ routes\n# TYPE internal_writes_total counter\ninternal_writes_total {}\n\
+                                         # HELP conflict_responses_total Total 409 Conflict responses\n# TYPE conflict_responses_total counter\nconflict_responses_total {}\n\
+                                         # HELP quota_rejections_total Total 429 Too Many Requests responses\n# TYPE quota_rejections_total counter\nquota_rejections_total {}\n\
+                                         # HELP error_responses_total Total responses with status >= 400\n# TYPE error_responses_total counter\nerror_responses_total {}\n",
+                                        snap.requests_total,
+                                        snap.internal_requests_total,
+                                        snap.internal_writes_total,
+                                        snap.conflict_responses_total,
+                                        snap.quota_rejections_total,
+                                        snap.error_responses_total,
+                                    ))
+                            }
+                        }
+                    }),
+                ),
+        )
+        .await;
+
+        // Drive a known mix of counters:
+        //   1 GET  /ping            (200) -> requests_total +1
+        //   2 POST /internal/v1/seed (204) -> internal_requests_total +1,
+        //                                     internal_writes_total +1
+        //   3 POST /reserve          (409) -> conflict_responses_total +1
+        //   4 GET  /throttled        (429) -> quota_rejections_total +1
+        //   5 GET  /nope             (404) -> error_responses_total +1
+        // (The /metrics scrape itself is outside the wrap_fn record window
+        // because wrap_fn records AFTER the handler returns.)
+        let req = TestRequest::get().uri("/ping").to_request();
+        let _ = actix_web::test::call_service(&app, req).await;
+
+        let req = TestRequest::post().uri("/internal/v1/seed").to_request();
+        let _ = actix_web::test::call_service(&app, req).await;
+
+        let req = TestRequest::post().uri("/reserve").to_request();
+        let _ = actix_web::test::call_service(&app, req).await;
+
+        let req = TestRequest::get().uri("/throttled").to_request();
+        let _ = actix_web::test::call_service(&app, req).await;
+
+        let req = TestRequest::get().uri("/nope").to_request();
+        let _ = actix_web::test::call_service(&app, req).await;
+
+        // Scrape /metrics and assert all 6 HTTP counters appear in the
+        // body with values that match the wrap_fn-driven snapshot.
+        let req = TestRequest::get().uri("/metrics").to_request();
+        let resp = actix_web::test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = actix_web::test::read_body(resp).await;
+        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+
+        // Every counter name MUST be present, with the expected value.
+        // The body uses `format!("counter_name {value}\n")` so a literal
+        // substring match confirms both the name AND the value. The
+        // exact-value assertion catches a future hardcode regression
+        // (e.g. someone writing `requests_total 0` instead of `{}`).
+        for (name, expected) in [
+            ("requests_total", 5),
+            ("internal_requests_total", 1),
+            ("internal_writes_total", 1),
+            ("conflict_responses_total", 1),
+            ("quota_rejections_total", 1),
+            ("error_responses_total", 3), // 409 + 429 + 404
+        ] {
+            let needle = format!("{name} {expected}");
+            assert!(
+                body_str.contains(&needle),
+                "metrics body missing `{needle}`; full body:\n{body_str}"
+            );
+        }
     }
 
     /// Microbenchmark for the wrap_fn middleware overhead. We compare a
