@@ -70,14 +70,14 @@
   }
 
   .dot-on {
-    background: #22c55e;
-    box-shadow: 0 0 6px #22c55e;
+    background: var(--color-success);
+    box-shadow: 0 0 6px var(--color-success);
     animation: pulse-dot 2s ease-in-out infinite;
   }
 
   @keyframes pulse-dot {
-    0%, 100% { box-shadow: 0 0 4px #22c55e55; }
-    50% { box-shadow: 0 0 12px #22c55e; }
+    0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--color-success) 33%, transparent); }
+    50% { box-shadow: 0 0 12px var(--color-success); }
   }
 </style>
 
