@@ -318,6 +318,11 @@ async fn metrics_handler(
          # HELP cache_search_utilization_percent Search cache utilization percentage\n# TYPE cache_search_utilization_percent gauge\ncache_search_utilization_percent {}\n\
          # HELP memory_cache_total_mb Total cache memory usage in MB\n# TYPE memory_cache_total_mb gauge\nmemory_cache_total_mb {}\n\
          # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total {}\n\
+         # HELP internal_requests_total Total requests to /internal/v1/ routes\n# TYPE internal_requests_total counter\ninternal_requests_total {}\n\
+         # HELP internal_writes_total Total 200/201/204 responses on /internal/v1/ routes\n# TYPE internal_writes_total counter\ninternal_writes_total {}\n\
+         # HELP conflict_responses_total Total 409 Conflict responses\n# TYPE conflict_responses_total counter\nconflict_responses_total {}\n\
+         # HELP quota_rejections_total Total 429 Too Many Requests responses\n# TYPE quota_rejections_total counter\nquota_rejections_total {}\n\
+         # HELP error_responses_total Total responses with status >= 400\n# TYPE error_responses_total counter\nerror_responses_total {}\n\
          # HELP ledger_cache_hit_total Total ledger cache hits\n# TYPE ledger_cache_hit_total counter\nledger_cache_hit_total {}\n\
          # HELP ledger_cache_miss_total Total ledger cache misses\n# TYPE ledger_cache_miss_total counter\nledger_cache_miss_total {}\n\
          # HELP ledger_batch_lag_milliseconds Duration from queue push to DB commit for the most recent batch\n# TYPE ledger_batch_lag_milliseconds gauge\nledger_batch_lag_milliseconds {}\n\
@@ -327,6 +332,9 @@ async fn metrics_handler(
         search_count, search_memory_mb, search_max_mb, search_cache_utilization,
         total_cache_mb,
         obs.requests_total,
+        obs.internal_requests_total, obs.internal_writes_total,
+        obs.conflict_responses_total, obs.quota_rejections_total,
+        obs.error_responses_total,
         obs.ledger_cache_hit_total, obs.ledger_cache_miss_total,
         obs.ledger_batch_lag_milliseconds, obs.ledger_batch_size
     );
