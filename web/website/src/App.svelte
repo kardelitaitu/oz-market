@@ -542,12 +542,12 @@
       <span class="logo-text">oz-market</span>
       <span class="wip-badge">WIP</span>
     </div>
-    <nav>
-      <button class={currentTab === 'home' ? 'active' : ''} onclick={() => navigate('home')}>Home</button>
-      <button class={currentTab === 'guide' ? 'active' : ''} onclick={() => navigate('guide', platformTab)}>Getting Started</button>
-      <button class={currentTab === 'faqs' ? 'active' : ''} onclick={() => navigate('faqs')}>FAQs</button>
-      <button class={currentTab === 'status' ? 'active' : ''} onclick={() => navigate('status')}>Status</button>
-      <button class={currentTab === 'docs' ? 'active' : ''} onclick={() => navigate('docs')}>Docs</button>
+    <nav aria-label="Main">
+      <button class={currentTab === 'home' ? 'active' : ''} aria-current={currentTab === 'home' ? 'page' : undefined} onclick={() => navigate('home')}>Home</button>
+      <button class={currentTab === 'guide' ? 'active' : ''} aria-current={currentTab === 'guide' ? 'page' : undefined} onclick={() => navigate('guide', platformTab)}>Getting Started</button>
+      <button class={currentTab === 'faqs' ? 'active' : ''} aria-current={currentTab === 'faqs' ? 'page' : undefined} onclick={() => navigate('faqs')}>FAQs</button>
+      <button class={currentTab === 'status' ? 'active' : ''} aria-current={currentTab === 'status' ? 'page' : undefined} onclick={() => navigate('status')}>Status</button>
+      <button class={currentTab === 'docs' ? 'active' : ''} aria-current={currentTab === 'docs' ? 'page' : undefined} onclick={() => navigate('docs')}>Docs</button>
     </nav>
     <div class="header-right">
       <div class="header-right-row">
