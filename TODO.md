@@ -48,7 +48,7 @@ Ordered by feasibility + codebase readiness.
 - [x] Define cache invalidation policy (TTL + admin-triggered invalidation)
 - [x] Start with synchronous commit (credits written to DB immediately via the cache as write-through); add async batch only after proving the bottleneck
 - [x] Add WAL or write-ahead log for crash recovery if moving to async batch
-- [ ] Add `cache_hit` / `cache_miss` / `batch_lag` metrics *(deferred)*
+- [x] Add `cache_hit` / `cache_miss` / `batch_lag` metrics
 - [ ] Benchmark contention improvement vs direct Postgres writes *(deferred)*
 - [ ] Note: existing single-process HashMap cache does not scale horizontally — cross-instance coordination needs Redis
 

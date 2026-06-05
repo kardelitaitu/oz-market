@@ -376,7 +376,7 @@ fn matches_filters(listing: &ListingSummary, request: &SearchRequest) -> bool {
         }
     }
 
-    if request.verified_sellers_only.unwrap_or(false) && listing.seller_verified != Some(true) {
+    if request.is_verified_seller_only.unwrap_or(false) && listing.seller_verified != Some(true) {
         return false;
     }
 
@@ -821,7 +821,7 @@ impl PostgresListingRepository {
             }
             builder.push("s.seller_rating >= ").push_bind(min_rating);
         }
-        if let Some(true) = request.verified_sellers_only {
+        if let Some(true) = request.is_verified_seller_only {
             if where_added {
                 builder.push(" AND ");
             } else {
@@ -842,7 +842,7 @@ impl PostgresListingRepository {
         }
 
         // Phase D: Geolocation search ("near me")
-        if let Some(true) = request.near_me {
+        if let Some(true) = request.is_near_me {
             if let (Some(user_lat), Some(user_lon)) =
                 (request.user_latitude, request.user_longitude)
             {

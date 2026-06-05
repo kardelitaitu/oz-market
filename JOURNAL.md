@@ -1373,3 +1373,15 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
   - ENV e1-e8: separate batch.
 - **Net diff**: 1 file, +46 / -0. Pure spec.
 - **Next**: address the search cache-key bug (one-line code + regression test, the only remaining correctness issue I found during audit-driven work). Then the remaining MINOR m5 and ENV e1-e8 batches.
+
+## 2026-06-05 14:30 - Fix 2 Redocly no-invalid-schema-examples warnings in ListingPayload example
+- **Problem**: The ListingPayload example used invalid fields in shipping_info (local_pickup, shipping_available) that are not properties of the ShippingInfo schema (which has additionalProperties: false).
+- **Fix**: Replaced with valid ShippingInfo properties (weight_kg, dimensions_cm, shipping_class, origin_zip).
+- **Validation**: Redocly warning count 20 to 18. YAML parses cleanly.
+- **Net diff**: 1 file, +4 / -2 lines. Pure spec.
+
+## 2026-06-05 14:45 - Rename boolean query parameters to use is_ prefix (Redocly warnings)
+- **Problem**: Redocly boolean-parameter-prefixes rule flagged verified_sellers_only and near_me as lacking a boolean prefix.
+- **Fix**: Renamed verified_sellers_only -> is_verified_seller_only and near_me -> is_near_me in SearchRequest struct, Default impl, OpenAPI spec, and all tests.
+- **Files changed (5)**: api-contract/src/listing.rs, server/src/repositories/listings.rs, docs/specs/openapi.yaml, api-contract/tests/api_contract.rs, api-contract/tests/search_integration.rs
+- **Validation**: cargo check --workspace: 0 errors. cargo test -p marketplace-api-contract: 48/48 pass. cargo test --lib -p marketplace-server: 399/399 pass. Redocly lint: 18 -> 16 warnings (-2 boolean-parameter-prefixes).

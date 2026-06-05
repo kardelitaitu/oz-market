@@ -227,7 +227,7 @@ paths:
             minimum: 1.0
             maximum: 5.0
           description: Filter by minimum seller rating (1.0-5.0)
-        - name: verified_sellers_only
+        - name: is_verified_seller_only
           in: query
           schema:
             type: boolean
@@ -248,7 +248,7 @@ paths:
           schema:
             type: string
             minLength: 1
-        - name: near_me
+        - name: is_near_me
           in: query
           schema:
             type: boolean
@@ -860,6 +860,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/AgentHealthSummary'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /health/agents/{agent_id}:
     get:
       tags: [agents]
@@ -883,6 +885,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AgentHealthDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /health/agents/{agent_id}/reset:
     post:
       tags: [agents]
@@ -911,6 +917,10 @@ paths:
                   status:
                     type: string
                     enum: [reset]
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /events/negotiations/{negotiation_id}:
     get:
       tags: [negotiations]
@@ -933,16 +943,18 @@ paths:
           content:
             text/event-stream:
               schema:
-                type: string
-                description: >
-                  Server-Sent Events text stream. Each frame is delivered
-                  as `event: negotiation_updated` with a `data:` line
-                  whose payload is a NegotiationEvent JSON object (see
-                  components.schemas.NegotiationEvent). Heartbeats are
-                  sent as comment lines (`:hb`) every 30 seconds.
-              example: |
-                event: negotiation_updated
-                data: {"negotiation_id":"neg_123","event_type":"negotiation_updated","response":{ ... NegotiationResponse ... }}
+                oneOf:
+                  - type: string
+                    description: >
+                      Server-Sent Events text stream. Each frame is
+                      delivered as `event: negotiation_updated` with a
+                      `data:` line whose payload is a NegotiationEvent
+                      JSON object. Heartbeats are sent as comment lines
+                      (`:hb`) every 30 seconds.
+                    example: |
+                      event: negotiation_updated
+                      data: {"negotiation_id":"neg_123","event_type":"negotiation_updated","response":{ ... NegotiationResponse ... }}
+                  - $ref: '#/components/schemas/NegotiationEvent'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1500,8 +1512,13 @@ components:
         sku: "LAPTOP-001"
         quantity: 3
         shipping_info:
-          local_pickup: true
-          shipping_available: false
+          weight_kg: 1.2
+          dimensions_cm:
+            length: 35
+            width: 25
+            height: 6
+          shipping_class: standard
+          origin_zip: "123-4567"
         condition_details: "Like new, only used for 2 months"
         seller_notes: "Includes original box and charger"
     ListingSummary:

@@ -262,7 +262,7 @@ pub struct SearchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_seller_rating: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verified_sellers_only: Option<bool>,
+    pub is_verified_seller_only: Option<bool>,
     // NEW: Listing type filter
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub listing_type: Option<ListingType>, // "product", "service", "property"
@@ -290,7 +290,7 @@ pub struct SearchRequest {
     pub cursor: Option<String>,
     // Phase D: Geolocation search
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub near_me: Option<bool>,
+    pub is_near_me: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_latitude: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -312,7 +312,7 @@ impl Default for SearchRequest {
             location: None,
             status: None,
             min_seller_rating: None,
-            verified_sellers_only: None,
+            is_verified_seller_only: None,
             // NEW: Listing type filter
             listing_type: None,
             // NEW: Service filters
@@ -328,7 +328,7 @@ impl Default for SearchRequest {
             limit: None,
             cursor: None,
             // Phase D: Geolocation
-            near_me: None,
+            is_near_me: None,
             user_latitude: None,
             user_longitude: None,
             radius_km: None,

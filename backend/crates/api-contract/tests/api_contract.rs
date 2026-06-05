@@ -71,7 +71,7 @@ fn search_request_default_values() {
     assert!(req.listing_type.is_none());
     assert!(req.service_type.is_none());
     assert!(req.property_transaction_type.is_none());
-    assert!(req.near_me.is_none());
+    assert!(req.is_near_me.is_none());
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn full_search_request_serde_roundtrip() {
         }),
         status: Some(ListingStatus::Active),
         min_seller_rating: Some(4.5),
-        verified_sellers_only: Some(true),
+        is_verified_seller_only: Some(true),
         listing_type: Some(ListingType::Product),
         service_type: Some(ServiceType::Online),
         property_transaction_type: Some(PropertyTransactionType::Rent),
@@ -103,7 +103,7 @@ fn full_search_request_serde_roundtrip() {
         sort_by: SearchSort::PriceAsc,
         limit: Some(10),
         cursor: Some("abc123".into()),
-        near_me: Some(true),
+        is_near_me: Some(true),
         user_latitude: Some(37.7749),
         user_longitude: Some(-122.4194),
         radius_km: Some(10.0),
@@ -123,7 +123,7 @@ fn search_request_optional_fields_omitted_when_none() {
     let json = serde_json::to_value(&req).expect("serialization failed");
     assert!(json.get("category").is_none());
     assert!(json.get("price").is_none());
-    assert!(json.get("near_me").is_none());
+    assert!(json.get("is_near_me").is_none());
     assert!(json.get("service_type").is_none());
     assert!(json.get("property_transaction_type").is_none());
 }

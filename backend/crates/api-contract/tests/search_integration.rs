@@ -31,7 +31,7 @@ fn integration_search_request_serialisation() {
     assert_eq!(json.get("service_type").unwrap().as_str(), Some("local"));
     // Ensure optional fields not set are omitted
     assert!(json.get("property_transaction_type").is_none());
-    assert!(json.get("near_me").is_none());
+    assert!(json.get("is_near_me").is_none());
 }
 
 #[test]
