@@ -66,8 +66,7 @@
     });
   });
 
-  // Auto-start: runs simulation + metrics polling on mount.
-  // The $effect re-runs when sim.isPaused changes.
+  // Simulation runner — re-runs when sim.isPaused changes.
   // CRITICAL: wrap runSimulation in untrack() so its internal $state reads/writes
   // do NOT register as dependencies — otherwise every state change triggers
   // a re-run, creating an infinite effect_update_depth_exceeded loop.
@@ -79,14 +78,20 @@
         runSimulation();
       }
 
-      fetchLiveMetrics();
-      let interval = setInterval(fetchLiveMetrics, 3000);
-
       return () => {
         clearAllTimeouts();
-        clearInterval(interval);
       };
     });
+  });
+
+  // Metrics polling — runs once on mount, independent of pause state.
+  $effect(() => {
+    fetchLiveMetrics();
+    const interval = setInterval(fetchLiveMetrics, 3000);
+
+    return () => {
+      clearInterval(interval);
+    };
   });
 </script>
 
@@ -94,7 +99,7 @@
   /* ── Header & Nav ── */
   header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    background: HSL(224, 25%, 5%);
+    background: var(--bg-dark);
     width: 100%;
   }
 
@@ -300,6 +305,7 @@
     border-color: var(--border-glow-hover);
     transform: translateY(-4px);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 15px var(--border-glow);
+    will-change: transform;
   }
 
   .card h3 {
@@ -375,7 +381,7 @@
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     color: var(--text-muted);
     font-size: 0.85rem;
-    background: HSL(224, 25%, 5%);
+    background: var(--bg-dark);
   }
 
   .footer-inner {

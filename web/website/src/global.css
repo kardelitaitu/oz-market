@@ -1,9 +1,6 @@
 /* src/global.css — Base/foundational styles only */
 /* Component-specific styles live in each .svelte component's <style> block */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
-/* font-display: swap is specified in the URL above */
-
 @property --bg-glow-1 {
   syntax: '<color>';
   inherits: true;
