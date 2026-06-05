@@ -1638,3 +1638,22 @@ pm run build compiles clean.
 pm run build compiles clean with zero warnings.
   - check.ps1 runs clean on all 6 validation stages (Journal, ActiveSpecs, Build, Format, Clippy, Tests).
 - **Files changed (2)**: web/website/src/global.css and web/website/src/App.svelte (modified).
+
+## 2026-06-05 18:40 - E2E Testing, CSS Transition delays, and Responsive Selector
+
+- **Goal**: Integrate Playwright E2E testing, polish theme shifts with CSS custom property transitions and delays, make header responsive on ultra-small mobile screen sizes, and configure Vite preview as a local staging server.
+- **Changed**:
+  - Configured Vite preview server on  .0.0.0:4173 to run as a local staging server in web/website/package.json.
+  - Added @playwright/test to devDependencies in web/website/package.json.
+  - Configured Playwright E2E runner in web/website/playwright.config.js to run against aseURL: http://localhost:4173 with auto-starting Vite webServer.
+  - Implemented E2E test suite in web/website/tests/theme.spec.js asserting default theme, selection persistence, autoplay simulator pause toggle, and tab navigation.
+  - Added Houdini @property rules in web/website/src/global.css to enable smooth CSS transition fading on spot glows (--bg-glow-1, --bg-glow-2).
+  - Added subtle transition fade delay values ( .1s offset) to .card, .doc-item, .device-tab, and .theme-selector-container classes inside web/website/src/global.css.
+  - Added mobile media queries (< 600px grid and < 400px column flex layout) in web/website/src/global.css to properly align the logo, navigation, and theme selector dropdown on mobile and ultra-small screen sizes.
+- **Validation**:
+  - 
+px playwright install chromium downloaded browser binaries successfully.
+  - 
+pm run test:e2e ran 4 E2E tests using Playwright and all passed (12.1s duration).
+  - check.ps1 runs clean on all 6 stages.
+- **Files changed (4 new/modified)**: web/website/package.json, web/website/playwright.config.js, web/website/tests/theme.spec.js, and web/website/src/global.css.

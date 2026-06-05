@@ -1,6 +1,18 @@
 /* src/global.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
 
+@property --bg-glow-1 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: HSL(263, 90%, 65%, 0.08);
+}
+
+@property --bg-glow-2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: HSL(190, 90%, 50%, 0.05);
+}
+
 :root {
   /* Color Palette - Default Midnight Theme */
   --bg-dark: HSL(224, 25%, 8%);
@@ -279,6 +291,7 @@ nav button.active {
   display: flex;
   flex-direction: column;
   height: 100%;
+  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, transform 0.2s ease, box-shadow 0.4s ease 0.1s;
 }
 
 .card:hover {
@@ -336,6 +349,7 @@ nav button.active {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s;
 }
 
 .doc-item:hover {
@@ -444,6 +458,7 @@ code {
   align-items: center;
   gap: 0.75rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, box-shadow 0.4s ease 0.1s;
 }
 
 .device-tab.active {
@@ -513,7 +528,7 @@ footer {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
   padding: 0.4rem 0.8rem;
-  transition: all 0.3s ease;
+  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, box-shadow 0.4s ease 0.1s;
 }
 
 .theme-selector-container:hover {
@@ -540,4 +555,51 @@ footer {
 .theme-select option {
   background: var(--bg-dark);
   color: var(--text-primary);
+}
+
+/* Responsive Design & Mobile Media Queries */
+@media (max-width: 600px) {
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1.25rem;
+    padding: 1.25rem 1.5rem;
+    align-items: center;
+  }
+  
+  nav {
+    grid-column: span 2;
+    justify-content: space-around;
+    width: 100%;
+  }
+  
+  .theme-selector-container {
+    justify-self: end;
+  }
+}
+
+@media (max-width: 400px) {
+  header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  
+  .theme-selector-container {
+    width: 100%;
+    justify-content: center;
+    align-self: center;
+  }
+  
+  nav {
+    width: 100%;
+    justify-content: space-around;
+  }
+  
+  nav button {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.8rem;
+  }
 }
