@@ -10,9 +10,7 @@ This `docs` folder is organized by delivery surface and planning stage.
 | `specs/` | implementation-ready specs such as `openapi.yaml` and schema artifacts | active |
 | `server/` | server-specific implementation notes, module structure, and backend runbooks | active |
 | `mcp/` | MCP server contract, tool definitions, and integration notes | active |
-| `mobile/` | Unified mobile roadmap + Tauri+Svelte build plan (supersedes app-android/ and app-ios/) | active |
-| `app-android/` | Legacy Android native plan (deprecated — see `mobile/` instead) | deprecated |
-| `app-ios/` | Legacy iOS native plan (deprecated — see `mobile/` instead) | deprecated |
+| `mobile/` | Unified mobile roadmap + Tauri+Svelte build plan | active |
 
 ## Reading Order
 
@@ -80,28 +78,6 @@ Use this folder for:
 - tool input/output schemas
 - auth flow for MCP clients
 - MCP examples and edge cases
-
-### `app-android/`
-
-Android app planning.
-
-Use this folder for:
-
-- app architecture
-- screen flow
-- mobile auth flow
-- app-agent integration behavior
-
-### `app-ios/`
-
-iOS app planning.
-
-Use this folder for:
-
-- app architecture
-- screen flow
-- mobile auth flow
-- app-agent integration behavior
 
 ## Best Next Moves
 

@@ -38,6 +38,14 @@ jobs:
         working-directory: backend
         run: cargo test --lib
 
+      - name: Wrap_fn microbench (release)
+        working-directory: backend
+        # The wrap_fn middleware added in fc157c4 runs on every HTTP request
+        # to count requests_total for /metrics. This test runs the microbench
+        # in release mode to surface the eprintln! timing output and catch
+        # any future regression above 1us/req.
+        run: cargo test --release -p marketplace-server --lib -- wrap_fn_overhead --nocapture
+
   server-postgres:
     name: Server Postgres Integration
     runs-on: ubuntu-latest

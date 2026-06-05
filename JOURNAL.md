@@ -1545,3 +1545,14 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Validation**:
   - check.ps1 executed locally; all 6 verification stages passed successfully (Journal, ActiveSpecs, Build, Format, Clippy, Tests).
 - **Files changed (1)**: README.md (overwritten).
+
+## 2026-06-05 17:50 - Cleanup Deprecated Mobile Planning Docs & CI Action
+
+- **Goal**: Clean up legacy, deprecated native Android and iOS planning documentation to match the unified Tauri/Svelte 5 roadmap.
+- **Changed**:
+  - Deleted legacy native mobile planning directories docs/app-android/ and docs/app-ios/.
+  - Removed deprecated planning sections and updated the layout table in docs/DOCS-README.md.
+  - Added the Wrap_fn microbench (release) step to .github/workflows/ci.yml to run the middleware microbenchmark in release mode in the GitHub actions pipeline.
+- **Validation**:
+  - check.ps1 runs clean on all stages.
+- **Files changed (9)**: docs/DOCS-README.md, .github/workflows/ci.yml, and 6 deleted markdown documents under docs/app-android/ and docs/app-ios/.
