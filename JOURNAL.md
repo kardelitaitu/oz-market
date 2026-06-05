@@ -1576,3 +1576,22 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Validation**: 403 lib tests pass. Both paths confirmed working (300 ops each):
   - In-memory: 10714/1471/2479 ops/sec (listing-read/search-heavy/negotiation-burst)
   - Postgres: 430/243/115 ops/sec
+
+
+## 2026-06-05 18:00 - Bootstrap Svelte 5 Website Workspace
+
+- **Goal**: Create a high-fidelity, premium website workspace to serve as the public landing page, interactive simulator, and resource portal for the project.
+- **Changed**:
+  - Bootstrapped Svelte 5 + Vite project under new top-level directory web/website/.
+  - Configured styling system in src/global.css with custom HSL dark-mode theme, glassmorphic grids, responsive tables, and typography (Outfit/Inter/Fira Code).
+  - Built interactive Svelte 5 UI in src/App.svelte with reactive tabs (Home, Device Guide, Docs).
+  - Implemented Svelte-driven AI-to-AI agent negotiation simulator showing price updates, consensus reaching, and contact reveal approvals in real time.
+  - Formulated setup manuals in the Device Guide tab for Marketplace Server (Rust), MCP Sidecar (desktop tool configuration JSON), and Mobile Client (Tauri/Svelte).
+  - Added direct links to local whitepapers, OpenAPI spec, and active specs in the Docs tab.
+  - Setup high-quality SEO meta configurations in index.html.
+  - Cleaned up boilerplate files (pp.css, Counter.svelte) and wired main.js.
+- **Validation**:
+  - 
+pm run build compiles clean with zero compiler or accessibility (a11y) warnings.
+  - check.ps1 executed locally; all 6 verification stages passed successfully.
+- **Files changed (8 new, 2 modified)**: Scaffolds web/website/ and registers workspace changes.

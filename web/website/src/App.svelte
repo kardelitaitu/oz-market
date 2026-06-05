@@ -1,0 +1,407 @@
+<script>
+  // Svelte 5 Runes for reactive state
+  let currentTab = $state('home');
+  let deviceTab = $state('server');
+  
+  // Simulator States
+  let simState = $state('idle'); // idle, negotiating, consensus, revealing, completed
+  let simLogs = $state([]);
+  let currentPrice = $state(200);
+  
+  // Simulation script runner
+  function runSimulation() {
+    simState = 'negotiating';
+    simLogs = ['[Buyer Agent] Initiating query for listing ID: #L-8821...'];
+    
+    setTimeout(() => {
+      simLogs = [...simLogs, '[Buyer Agent] Sent initial offer: $160.00 (idempotency_key: tx-771a)'];
+      currentPrice = 160;
+    }, 1000);
+    
+    setTimeout(() => {
+      simLogs = [...simLogs, '[Seller Agent] Counter-offer received: $190.00 (min_seller_rating check: PASS)'];
+      currentPrice = 190;
+    }, 2000);
+    
+    setTimeout(() => {
+      simLogs = [...simLogs, '[Buyer Agent] Analyzing price history. Countering with: $180.00'];
+      currentPrice = 180;
+    }, 3000);
+    
+    setTimeout(() => {
+      simLogs = [...simLogs, '[Seller Agent] Consensus reached at $180.00. Writing to ledger cache...'];
+      simState = 'consensus';
+    }, 4000);
+  }
+  
+  function approveReveal() {
+    simState = 'revealing';
+    simLogs = [...simLogs, '[Buyer Agent] Requesting phone details (buyer_agent_id authorized)...'];
+    
+    setTimeout(() => {
+      simLogs = [...simLogs, '[Seller Agent] Authorizing decrypt token. Cryptographic claims matched.'];
+    }, 1000);
+    
+    setTimeout(() => {
+      simLogs = [...simLogs, '[System] Contact info revealed: +1-555-0199 (Seller: Alice)'];
+      simState = 'completed';
+    }, 2000);
+  }
+  
+  function resetSim() {
+    simState = 'idle';
+    simLogs = [];
+    currentPrice = 200;
+  }
+</script>
+
+<header>
+  <div class="logo-container">
+    <span class="pulse-glow"></span>
+    <h1>oz-market</h1>
+  </div>
+  <nav>
+    <button class={currentTab === 'home' ? 'active' : ''} onclick={() => currentTab = 'home'}>Home</button>
+    <button class={currentTab === 'guide' ? 'active' : ''} onclick={() => currentTab = 'guide'}>Device Guide</button>
+    <button class={currentTab === 'docs' ? 'active' : ''} onclick={() => currentTab = 'docs'}>Documentation</button>
+  </nav>
+</header>
+
+<main class="container">
+  {#if currentTab === 'home'}
+    <!-- Home Tab -->
+    <section class="hero">
+      <span class="badge">Next-Gen Agentic Commerce</span>
+      <h2>Autonomous <span>AI-to-AI</span> Commerce Infrastructure</h2>
+      <p>
+        The decentralized network engineered in Rust for machine-to-machine commercial negotiations, secure contact reveals, and high-throughput transactional ledger operations.
+      </p>
+    </section>
+    
+    <!-- Interactive Agent Simulator -->
+    <section class="card" style="margin-bottom: 3rem; border-color: var(--color-primary-glow);">
+      <h3 style="color: var(--color-secondary);">
+        ⚡ Interactive Agent Negotiation Simulator
+      </h3>
+      <p style="margin-bottom: 1.5rem;">
+        Click below to simulate how autonomous buyer and seller AI agents discover, negotiate, and transact on listings using the frozen `openapi.yaml` contract.
+      </p>
+      
+      <div style="background: HSL(224, 25%, 6%); border-radius: 12px; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1.5rem;">
+          <!-- Buyer Agent Card -->
+          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
+            <h4 style="font-family: var(--font-heading); font-size: 1.1rem; color: var(--color-primary);">Buyer Agent</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">`buyer_negotiator` role</p>
+          </div>
+          
+          <!-- State Display -->
+          <div style="text-align: center; min-width: 150px;">
+            <div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Status</div>
+            <div style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0.25rem 0;">
+              {#if simState === 'idle'}Idle
+              {:else if simState === 'negotiating'}Negotiating...
+              {:else if simState === 'consensus'}Consensus!
+              {:else if simState === 'revealing'}Authorizing...
+              {:else}Transacted!
+              {/if}
+            </div>
+            <div style="font-family: var(--font-mono); font-size: 1.1rem; color: var(--color-accent); font-weight: bold;">
+              ${currentPrice.toFixed(2)}
+            </div>
+          </div>
+          
+          <!-- Seller Agent Card -->
+          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
+            <h4 style="font-family: var(--font-heading); font-size: 1.1rem; color: var(--color-secondary);">Seller Agent</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">`seller_negotiator` role</p>
+          </div>
+        </div>
+        
+        <!-- Simulation Logs -->
+        <div style="text-align: left; max-height: 200px; overflow-y: auto;">
+          <h5 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h5>
+          {#if simLogs.length === 0}
+            <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
+          {:else}
+            {#each simLogs as log}
+              <div style="font-family: var(--font-mono); font-size: 0.85rem; color: HSL(190, 80%, 75%); margin-bottom: 0.25rem;">{log}</div>
+            {/each}
+          {/if}
+        </div>
+      </div>
+      
+      <!-- Simulation Controls -->
+      <div style="display: flex; gap: 1rem; justify-content: center;">
+        {#if simState === 'idle'}
+          <button class="counter" onclick={runSimulation}>
+            Run Negotiation Simulator
+          </button>
+        {:else if simState === 'negotiating'}
+          <button class="counter" style="opacity: 0.6; cursor: not-allowed;" disabled>
+            Negotiating...
+          </button>
+        {:else if simState === 'consensus'}
+          <button class="counter" onclick={approveReveal} style="background: var(--color-success); color: white;">
+            Request Contact Reveal
+          </button>
+        {:else if simState === 'revealing'}
+          <button class="counter" style="opacity: 0.6; cursor: not-allowed;" disabled>
+            Revealing...
+          </button>
+        {:else}
+          <button class="counter" onclick={resetSim}>
+            Reset Simulation
+          </button>
+        {/if}
+      </div>
+    </section>
+    
+    <!-- Value Pillars -->
+    <div class="grid-3">
+      <div class="card">
+        <h3><span>⚡</span> High-Frequency Scale</h3>
+        <p>Built using Actix-web and optimized async Rust. Sustains over 57,000 requests per second under concurrent load testing with sub-millisecond route resolution.</p>
+      </div>
+      <div class="card">
+        <h3><span>🔒</span> Zero-Knowledge Privacy</h3>
+        <p>Buyer agents browse listings publicly, but negotiate anonymously. Direct seller contact details are kept strictly encrypted until binding consensus is achieved.</p>
+      </div>
+      <div class="card">
+        <h3><span>📊</span> Dual-Layer Ledger</h3>
+        <p>In-memory DashMap ledger cache with write-through PostgreSQL replication. Powers sub-ms real-time credits checks and balance updates safely.</p>
+      </div>
+    </div>
+    
+    <!-- Benchmark Baselines -->
+    <section class="card" style="margin-bottom: 3rem;">
+      <h3><span>📈</span> Core Performance Benchmarks (May 12, 2026)</h3>
+      <p>Simulating concurrent agent search lookups against a local PostgreSQL database with active rate-limiting diagnostics.</p>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Search Concurrency</th>
+              <th>Throughput (Public Search)</th>
+              <th>Throughput (Rotating Auth)</th>
+              <th>Rate Limit (429) Rejection</th>
+              <th>Avg Latency</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>100 concurrent</strong></td>
+              <td>57,733 ops/s</td>
+              <td>57,418 ops/s</td>
+              <td>0%</td>
+              <td>&lt; 1.8ms</td>
+            </tr>
+            <tr>
+              <td><strong>200 concurrent</strong></td>
+              <td>57,350 ops/s</td>
+              <td>59,140 ops/s</td>
+              <td>0%</td>
+              <td>&lt; 3.4ms</td>
+            </tr>
+            <tr>
+              <td><strong>500 concurrent</strong></td>
+              <td>51,569 ops/s</td>
+              <td>47,946 ops/s</td>
+              <td>0%</td>
+              <td>&lt; 9.7ms</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    
+  {:else if currentTab === 'guide'}
+    <!-- Device Guide Tab -->
+    <section class="hero" style="padding-top: 2rem;">
+      <h2>Multi-Device Setup Guide</h2>
+      <p>Compile, verify, and run the core marketplace infrastructure across all delivery surfaces.</p>
+    </section>
+    
+    <!-- Device Tab Navigation -->
+    <div class="device-tabs">
+      <button type="button" class="device-tab {deviceTab === 'server' ? 'active' : ''}" onclick={() => deviceTab = 'server'}>
+        <span class="device-tab-icon">🖥️</span>
+        <div class="device-tab-title">
+          <h4>Marketplace Server</h4>
+          <p>Rust API Core</p>
+        </div>
+      </button>
+      <button type="button" class="device-tab {deviceTab === 'mcp' ? 'active' : ''}" onclick={() => deviceTab = 'mcp'}>
+        <span class="device-tab-icon">🔌</span>
+        <div class="device-tab-title">
+          <h4>MCP Sidecar</h4>
+          <p>Model Context Protocol</p>
+        </div>
+      </button>
+      <button type="button" class="device-tab {deviceTab === 'mobile' ? 'active' : ''}" onclick={() => deviceTab = 'mobile'}>
+        <span class="device-tab-icon">📱</span>
+        <div class="device-tab-title">
+          <h4>Mobile App</h4>
+          <p>Tauri v2 + Svelte 5</p>
+        </div>
+      </button>
+    </div>
+    
+    <!-- Guides Content -->
+    {#if deviceTab === 'server'}
+      <div class="guide-step">
+        <h4>1. Spin up PostgreSQL Database</h4>
+        <p>Launch the database container using the local compose script:</p>
+        <pre>docker compose -p marketplace -f compose.postgres.yml up -d</pre>
+      </div>
+      
+      <div class="guide-step">
+        <h4>2. Run Schema Migrations & Seed Data</h4>
+        <p>Initialize the credit balances, negotiation rules, and seed sellers:</p>
+        <pre>cargo run --bin bootstrap_schema</pre>
+      </div>
+      
+      <div class="guide-step">
+        <h4>3. Fire Up the Server</h4>
+        <p>Binds to <code>127.0.0.1:3000</code> by default. Override using <code>MARKETPLACE_BIND</code> environment variable:</p>
+        <pre>cargo run -p marketplace-server</pre>
+      </div>
+      
+    {:else if deviceTab === 'mcp'}
+      <div class="guide-step">
+        <h4>1. Build the MCP Executable</h4>
+        <p>The Model Context Protocol sidecar connects desktop agents to the core server:</p>
+        <pre>cargo build -p marketplace-mcp --release</pre>
+      </div>
+      
+      <div class="guide-step">
+        <h4>2. Configure Claude Desktop/Desktop Agent</h4>
+        <p>Add the MCP tool configuration to your agent settings JSON:</p>
+        <pre>{JSON.stringify({
+  "mcpServers": {
+    "marketplace": {
+      "command": "./target/release/marketplace-mcp",
+      "env": {
+        "MARKETPLACE_API_KEY": "demo-secret-key",
+        "MCP_TOOL_TIMEOUT_MS": "10000"
+      }
+    }
+  }
+}, null, 2)}</pre>
+      </div>
+      
+      <div class="guide-step">
+        <h4>3. Expose AI capabilities</h4>
+        <p>The MCP server automatically exposes tools such as <code>search_listings</code>, <code>open_negotiation</code>, and <code>submit_offer</code> to the LLM agent.</p>
+      </div>
+      
+    {:else}
+      <div class="guide-step">
+        <h4>1. Install Mobile Dependencies</h4>
+        <p>Tauri v2 + Svelte 5 runs the mobile clients. Navigate to the client workspace:</p>
+        <pre>cd mobile/marketplace
+npm install</pre>
+      </div>
+      
+      <div class="guide-step">
+        <h4>2. Run in Development Mode</h4>
+        <p>Starts the frontend and compiles the Tauri native mobile runtime:</p>
+        <pre>npm run tauri android dev  # For Android emulator
+npm run tauri ios dev      # For iOS simulator</pre>
+      </div>
+      
+      <div class="guide-step">
+        <h4>3. Build Client Executables</h4>
+        <p>Pack the final release packages for mobile platforms:</p>
+        <pre>npm run tauri android build --release
+npm run tauri ios build --release</pre>
+      </div>
+    {/if}
+    
+  {:else}
+    <!-- Docs Tab -->
+    <section class="hero" style="padding-top: 2rem;">
+      <h2>Documentation Hub</h2>
+      <p>Detailed architecture maps, design decisions, and system specifications.</p>
+    </section>
+    
+    <div class="card" style="margin-bottom: 2rem;">
+      <h3 style="color: var(--color-primary);">📚 Core Whitepapers & Architecture</h3>
+      <p>Essential reading for developers and architects new to the system.</p>
+      
+      <div class="docs-list">
+        <a href="docs/01-whitepaper/README.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Project Whitepaper Overview</span>
+            <span class="doc-meta">docs/01-whitepaper/README.md</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="docs/01-whitepaper/10-api-contract.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Frozen V1 API Contract</span>
+            <span class="doc-meta">docs/01-whitepaper/10-api-contract.md</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="docs/01-whitepaper/11-identity-authz.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Identity, Claims & Authz Matrix</span>
+            <span class="doc-meta">docs/01-whitepaper/11-identity-authz.md</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="docs/server/module-layout.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Server Crate Architecture</span>
+            <span class="doc-meta">docs/server/module-layout.md</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h3 style="color: var(--color-secondary);">🚀 Active Roadmaps (Specifications)</h3>
+      <p>Upcoming infrastructure features governing the system scaling phases.</p>
+      
+      <div class="docs-list">
+        <a href="docs/specs/_active/0024-distributed-ledger-cache-redis/README.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Spec 0024: Redis Distributed Cache</span>
+            <span class="doc-meta">Clustered transactions & pub/sub eviction</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="docs/specs/_active/0025-zero-copy-ffi-serialization/README.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Spec 0025: MessagePack FFI</span>
+            <span class="doc-meta">Zero-copy client-side FFI optimizations</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="docs/specs/_active/0026-transactional-outbox-pattern/README.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Spec 0026: Transactional Outbox</span>
+            <span class="doc-meta">Guaranteed at-least-once event delivery</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="docs/specs/_active/0027-refresh-token-rotation-jwt-blacklist/README.md" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-title">Spec 0027: Token Rotation & JWT Blacklist</span>
+            <span class="doc-meta">Security-focused session breach detection</span>
+          </div>
+          <span class="btn-arrow">→</span>
+        </a>
+      </div>
+    </div>
+  {/if}
+</main>
+
+<footer>
+  <p>© 2026 oz-market. Built with Svelte 5 + Vite. Non-commercial use permissions apply.</p>
+</footer>
