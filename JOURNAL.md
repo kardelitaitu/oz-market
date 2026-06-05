@@ -1985,6 +1985,7 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - Server cleanup is also in the `catch` block for error-path safety, respecting the `serverAlreadyRunning` flag.
 - **Also**: Fixed duplicate leftover lines in `check.ps1` from a partial edit (removed orphaned `Pop-Location`/catch block).
 - **Validation**: Full `check.ps1` run passes — 7/7 steps, all 409 + 99 Playwright E2E tests green.
+- **Follow-up**: Silenced step 6 (`cargo test --lib`) output (only shown on failure). Parallelized Playwright E2E (`workers: 4, fullyParallel: true`) and reduced server poll interval to 500ms. Step 7 dropped from 61s → 23s, total CI from 66s → 28s.
 
 ## 2026-06-06 05:46 — Sticky footer and scrollbar layout optimizations for E2E tests
 

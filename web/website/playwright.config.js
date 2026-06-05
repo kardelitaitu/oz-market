@@ -2,10 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 const config = {
   testDir: './tests',
-  fullyParallel: false, // Run sequentially to prevent timing conflicts
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  workers: 1,
+  workers: 8,
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',

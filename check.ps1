@@ -227,8 +227,8 @@ if (-not $SkipTests -and -not $failed) {
                 if (-not $serverAlreadyRunning) {
                     $serverJob = Start-Job -ScriptBlock { param($dir) Set-Location $dir; npx vite preview --port 4173 --host 127.0.0.1 } -ArgumentList $websiteDir
                     $ready = $false
-                    for ($i = 0; $i -lt 30; $i++) {
-                        Start-Sleep -Seconds 1
+                    for ($i = 0; $i -lt 60; $i++) {
+                        Start-Sleep -Milliseconds 500
                         node -e "const h=require('http');h.get('http://127.0.0.1:4173/',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>$null
                         if ($LASTEXITCODE -eq 0) { $ready = $true; break }
                     }
