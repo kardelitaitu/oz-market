@@ -87,6 +87,30 @@ impl ServerObservability {
     }
 }
 
+/// Render the 6 HTTP request counters as a Prometheus text body fragment.
+///
+/// Extracted from the production `metrics_handler` in `actix_runtime.rs`
+/// so the integration test in `actix_handlers.rs` can call the exact same
+/// function — no risk of the test and production drifting out of sync.
+/// `actix_runtime.rs` is `#[cfg(not(test))]` which would otherwise force
+/// the test to inline-duplicate the format! string.
+pub fn render_http_counter_metrics(snap: &ServerObservabilitySnapshot) -> String {
+    format!(
+        "# HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total {}\n\
+         # HELP internal_requests_total Total requests to /internal/v1/ routes\n# TYPE internal_requests_total counter\ninternal_requests_total {}\n\
+         # HELP internal_writes_total Total 200/201/204 responses on /internal/v1/ routes\n# TYPE internal_writes_total counter\ninternal_writes_total {}\n\
+         # HELP conflict_responses_total Total 409 Conflict responses\n# TYPE conflict_responses_total counter\nconflict_responses_total {}\n\
+         # HELP quota_rejections_total Total 429 Too Many Requests responses\n# TYPE quota_rejections_total counter\nquota_rejections_total {}\n\
+         # HELP error_responses_total Total responses with status >= 400\n# TYPE error_responses_total counter\nerror_responses_total {}\n",
+        snap.requests_total,
+        snap.internal_requests_total,
+        snap.internal_writes_total,
+        snap.conflict_responses_total,
+        snap.quota_rejections_total,
+        snap.error_responses_total,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

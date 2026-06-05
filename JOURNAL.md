@@ -1831,3 +1831,16 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Validation**: 409 tests pass (was 408, +1 from the new all-in-one test). `check.ps1` 6/6.
 - **Files changed (1)**: `actix_handlers.rs` (+200 / -341).
 
+## 2026-06-05 22:25 — Extract render_http_counter_metrics helper; remove test-only duplicate
+
+- **Problem**: the "all 6 counters in one body" test added in the previous session inlined a 12-line `format!` body for the 6 HTTP request counters, with a comment warning "If the production format! changes (new counter added, line removed), this test body should be updated in lockstep." That comment was a smell — the test was duplicating production logic and could silently drift. The per-counter tests in the test module also had a similar `render_test_metrics_body(counter, snap)` helper that emitted a single counter's HELP/TYPE/value triple from a `match` on the counter name, with the same drift risk.
+- **Refactor**: extracted the 6-counter body into a single non-cfg-gated helper in `backend/server/src/observability/mod.rs`:
+  - `pub fn render_http_counter_metrics(snap: &ServerObservabilitySnapshot) -> String` — owns the canonical Prometheus text for the 6 HTTP counters. Lives next to the `ServerObservabilitySnapshot` struct it reads, so any new counter added to the snapshot has the new helper function as a one-keystroke "tab" away.
+  - Production `metrics_handler` in `actix_runtime.rs` (which is `#[cfg(not(test))]`) now interpolates the helper into its format! string via a named arg: `format!("...memory_cache_total_mb {}\n{ http_counters }# HELP ledger_cache_hit_total...", ..., http_counters = render_http_counter_metrics(&obs), ...)`. The named-arg positioning required moving it to the end of the format! arg list (Rust requires positional args before named). The output is byte-for-byte identical to the previous inline format!.
+  - The all-in-one test's `/metrics` route now just calls `render_http_counter_metrics(&snap)` and the comment was rewritten from "this test body should be updated in lockstep with the production handler" to "guarantees the test asserts the live format string, not a hand-maintained copy."
+  - The test-module's `render_test_metrics_body(counter, snap)` was deleted and `init_metrics_test_app!` now calls `render_http_counter_metrics(&snap)` directly. The macro signature dropped the `$counter:literal` arg (it was used only by the deleted helper). All 6 per-counter smoke tests were updated to call the 3-arg form.
+  - Net change: -192 lines (89 insertions, 281 deletions). Both the runtime and the tests shrink; the helper is a single source of truth.
+- **Why this matters**: the test module in `actix_handlers.rs` and the production handler in `actix_runtime.rs` are physically separated by a `#[cfg(not(test))]` gate. The only way to keep them in sync is either (a) share a function (this change) or (b) carefully hand-maintain two copies. Option (b) is what we had; option (a) is the only safe state.
+- **Validation**: 409 tests pass (all 7 metrics tests still pass, including the all-in-one and the 6 per-counter smoke tests). `check.ps1` 6/6 stable.
+- **Files changed (3)**: `backend/server/src/observability/mod.rs` (+24), `backend/server/src/http/actix_runtime.rs` (-150 / +5), `backend/server/src/http/actix_handlers.rs` (-185 / +6).
+

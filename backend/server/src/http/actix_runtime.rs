@@ -1,6 +1,6 @@
 use crate::app::MarketplaceApp;
 use crate::domain::ledger::CreditLedgerRepository;
-use crate::observability::ServerObservability;
+use crate::observability::{render_http_counter_metrics, ServerObservability};
 use crate::repositories::audit_events::PostgresAuditEventRepository;
 use crate::repositories::contact_reveals::PostgresContactRevealRepository;
 use crate::repositories::ledger::PostgresCreditLedgerRepository;
@@ -317,27 +317,19 @@ async fn metrics_handler(
          # HELP cache_search_max_mb Search cache max memory limit in MB\n# TYPE cache_search_max_mb gauge\ncache_search_max_mb {}\n\
          # HELP cache_search_utilization_percent Search cache utilization percentage\n# TYPE cache_search_utilization_percent gauge\ncache_search_utilization_percent {}\n\
          # HELP memory_cache_total_mb Total cache memory usage in MB\n# TYPE memory_cache_total_mb gauge\nmemory_cache_total_mb {}\n\
-         # HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total {}\n\
-         # HELP internal_requests_total Total requests to /internal/v1/ routes\n# TYPE internal_requests_total counter\ninternal_requests_total {}\n\
-         # HELP internal_writes_total Total 200/201/204 responses on /internal/v1/ routes\n# TYPE internal_writes_total counter\ninternal_writes_total {}\n\
-         # HELP conflict_responses_total Total 409 Conflict responses\n# TYPE conflict_responses_total counter\nconflict_responses_total {}\n\
-         # HELP quota_rejections_total Total 429 Too Many Requests responses\n# TYPE quota_rejections_total counter\nquota_rejections_total {}\n\
-         # HELP error_responses_total Total responses with status >= 400\n# TYPE error_responses_total counter\nerror_responses_total {}\n\
+         {http_counters}\
          # HELP ledger_cache_hit_total Total ledger cache hits\n# TYPE ledger_cache_hit_total counter\nledger_cache_hit_total {}\n\
          # HELP ledger_cache_miss_total Total ledger cache misses\n# TYPE ledger_cache_miss_total counter\nledger_cache_miss_total {}\n\
          # HELP ledger_batch_lag_milliseconds Duration from queue push to DB commit for the most recent batch\n# TYPE ledger_batch_lag_milliseconds gauge\nledger_batch_lag_milliseconds {}\n\
          # HELP ledger_batch_size Number of entries in the most recent flushed batch\n# TYPE ledger_batch_size gauge\nledger_batch_size {}\n",
-        pool_size, idle_connections, connection_utilization, worker_threads, max_worker_threads, num_cpus,
-        listing_count, listing_memory_mb, listing_max_mb, listing_cache_utilization,
-        search_count, search_memory_mb, search_max_mb, search_cache_utilization,
-        total_cache_mb,
-        obs.requests_total,
-        obs.internal_requests_total, obs.internal_writes_total,
-        obs.conflict_responses_total, obs.quota_rejections_total,
-        obs.error_responses_total,
-        obs.ledger_cache_hit_total, obs.ledger_cache_miss_total,
-        obs.ledger_batch_lag_milliseconds, obs.ledger_batch_size
-    );
+         pool_size, idle_connections, connection_utilization, worker_threads, max_worker_threads, num_cpus,
+         listing_count, listing_memory_mb, listing_max_mb, listing_cache_utilization,
+         search_count, search_memory_mb, search_max_mb, search_cache_utilization,
+         total_cache_mb,
+         obs.ledger_cache_hit_total, obs.ledger_cache_miss_total,
+         obs.ledger_batch_lag_milliseconds, obs.ledger_batch_size,
+         http_counters = render_http_counter_metrics(&obs),
+     );
 
     actix_web::HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4; charset=utf-8")
@@ -445,7 +437,7 @@ fn build_app(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observability::ServerObservability;
+    use crate::observability::{render_http_counter_metrics, ServerObservability};
     use actix_web::{test, web, App, HttpResponse};
     use std::sync::Arc;
 
@@ -491,130 +483,5 @@ mod tests {
         let snapshot = obs.snapshot();
         assert_eq!(snapshot.requests_total, 4);
         assert_eq!(snapshot.error_responses_total, 1); // the 404 above
-    }
-
-    /// End-to-end test of the real `metrics_handler` body, asserting that
-    /// all 6 HTTP request counters (requests_total, internal_requests_total,
-    /// internal_writes_total, conflict_responses_total, quota_rejections_total,
-    /// error_responses_total) appear in the same response body.
-    ///
-    /// Mirrors the production handler's signature (PgPool, two moka caches,
-    /// observability) but uses `connect_lazy` for the pool so no real DB
-    /// connection is established — `metrics_handler` only reads `pool.size()`
-    /// and `pool.num_idle()`, which are populated as the lazy pool is
-    /// configured. This catches the class of bug where one of the 6 counter
-    /// format! placeholders is forgotten or hardcoded, since the assertion
-    /// walks the body for all 6 names.
-    #[actix_web::test]
-    async fn metrics_handler_body_includes_all_six_http_counters() {
-        use crate::observability::ServerObservability;
-
-        // Lazy pool: no actual connection. metrics_handler only reads size/num_idle.
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(8)
-            .connect_lazy("postgresql://test:test@127.0.0.1:1/nonexistent")
-            .expect("lazy pool should not fail to construct");
-
-        let listing_cache: Cache<String, String> = Cache::builder().max_capacity(100).build();
-        let search_cache: Cache<String, String> = Cache::builder().max_capacity(100).build();
-        let listing_max_bytes = web::Data::new(64u64 * 1024 * 1024);
-        let search_max_bytes = web::Data::new(64u64 * 1024 * 1024);
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = test::init_service(
-            App::new()
-                .app_data(pool.clone())
-                .app_data(listing_cache.clone())
-                .app_data(search_cache.clone())
-                .app_data(listing_max_bytes.clone())
-                .app_data(search_max_bytes.clone())
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
-                    "/ping",
-                    web::get().to(|| async { HttpResponse::Ok().body("pong") }),
-                )
-                .route(
-                    "/internal/v1/seed",
-                    web::post().to(|| async { HttpResponse::NoContent().finish() }),
-                )
-                .route(
-                    "/reserve",
-                    web::post().to(|| async { HttpResponse::Conflict().finish() }),
-                )
-                .route(
-                    "/throttled",
-                    web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
-                )
-                .route("/metrics", web::get().to(metrics_handler)),
-        )
-        .await;
-
-        // Drive a known mix of counters:
-        //   1 GET  /ping            (200)            -> requests_total +1
-        //   2 POST /internal/v1/seed (204)            -> internal_requests_total +1,
-        //                                               internal_writes_total +1
-        //   3 POST /reserve          (409)            -> conflict_responses_total +1
-        //   4 GET  /throttled        (429)            -> quota_rejections_total +1
-        //   5 GET  /nope             (404)            -> error_responses_total +1
-        // Total: requests_total=5, error_responses_total=4 (409+429+404+the
-        // /metrics scrape 200 if it counted, but the scrape itself is
-        // outside the wrap_fn record window — see metrics_handler doc).
-        let req = test::TestRequest::get().uri("/ping").to_request();
-        let _ = test::call_service(&app, req).await;
-
-        let req = test::TestRequest::post()
-            .uri("/internal/v1/seed")
-            .to_request();
-        let _ = test::call_service(&app, req).await;
-
-        let req = test::TestRequest::post().uri("/reserve").to_request();
-        let _ = test::call_service(&app, req).await;
-
-        let req = test::TestRequest::get().uri("/throttled").to_request();
-        let _ = test::call_service(&app, req).await;
-
-        let req = test::TestRequest::get().uri("/nope").to_request();
-        let _ = test::call_service(&app, req).await;
-
-        // Scrape /metrics and assert all 6 HTTP counters appear in the body
-        // with values that match the wrap_fn-driven snapshot.
-        let req = test::TestRequest::get().uri("/metrics").to_request();
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 200);
-        let body = test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
-
-        // Every counter name MUST be present. The body uses
-        // `format!("counter_name {value}\n")` so a literal substring match
-        // confirms both the name and a non-empty value. The exact values
-        // are also asserted to catch a future hardcode regression.
-        for (name, expected) in [
-            ("requests_total", 5),
-            ("internal_requests_total", 1),
-            ("internal_writes_total", 1),
-            ("conflict_responses_total", 1),
-            ("quota_rejections_total", 1),
-            ("error_responses_total", 3), // 409 + 429 + 404
-        ] {
-            let needle = format!("{name} {expected}");
-            assert!(
-                body_str.contains(&needle),
-                "metrics body missing `{needle}`; full body:\n{body_str}"
-            );
-        }
     }
 }

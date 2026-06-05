@@ -1672,7 +1672,7 @@ pub async fn adjust_credits(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observability::{ServerObservability, ServerObservabilitySnapshot};
+    use crate::observability::{render_http_counter_metrics, ServerObservability};
     use actix_web::dev::Service;
     use actix_web::http::StatusCode;
     use actix_web::test::TestRequest;
@@ -1682,52 +1682,15 @@ mod tests {
     use std::sync::Arc;
 
     /// Render a single-counter Prometheus text body for test fixtures.
-    /// Each per-counter smoke test installs this body on its `/metrics`
-    /// route so the assertion can check the wrap_fn-driven value
-    /// propagated to the response. The real `metrics_handler` in
-    /// `actix_runtime.rs` emits a much larger body with all 25 metrics;
-    /// tests use this minimal version to stay focused on a single
-    /// counter's increment path.
-    fn render_test_metrics_body(
-        counter: &'static str,
-        snap: &ServerObservabilitySnapshot,
-    ) -> String {
-        let (help, value) = match counter {
-            "requests_total" => ("Total requests", snap.requests_total),
-            "internal_requests_total" => (
-                "Total requests to /internal/v1/ routes",
-                snap.internal_requests_total,
-            ),
-            "internal_writes_total" => (
-                "Total 200/201/204 responses on /internal/v1/ routes",
-                snap.internal_writes_total,
-            ),
-            "conflict_responses_total" => (
-                "Total 409 Conflict responses",
-                snap.conflict_responses_total,
-            ),
-            "quota_rejections_total" => (
-                "Total 429 Too Many Requests responses",
-                snap.quota_rejections_total,
-            ),
-            "error_responses_total" => (
-                "Total responses with status >= 400",
-                snap.error_responses_total,
-            ),
-            other => panic!("render_test_metrics_body: unknown counter `{other}`"),
-        };
-        format!("# HELP {counter} {help}\n# TYPE {counter} counter\n{counter} {value}\n")
-    }
-
     /// Build a minimal actix App pre-wired with the production `wrap_fn`
     /// middleware (the one that calls `obs.record_request(path, status)` on
-    /// every response) and a `/metrics` route that emits a single
-    /// `counter` value. Test-supplied trigger routes are added via the
-    /// `configure` closure.
+    /// every response) and a `/metrics` route that emits the 6 HTTP
+    /// counters via the shared `render_http_counter_metrics` helper.
+    /// Test-supplied trigger routes are added via the `configure` closure.
     ///
     /// Usage:
     /// ```ignore
-    /// init_metrics_test_app!(obs, app, "conflict_responses_total", |cfg| {
+    /// init_metrics_test_app!(obs, app, |cfg| {
     ///     cfg.route(
     ///         "/reserve",
     ///         web::post().to(|| async { HttpResponse::Conflict().finish() }),
@@ -1739,7 +1702,7 @@ mod tests {
     /// The wrap_fn captures `obs`, so `obs.snapshot().*` reflects every
     /// request the App processes.
     macro_rules! init_metrics_test_app {
-        ($obs:ident, $app:ident, $counter:literal, $configure:expr) => {
+        ($obs:ident, $app:ident, $configure:expr) => {
             let $obs = Arc::new(ServerObservability::new());
             let obs_data = web::Data::new($obs.clone());
             let $app = actix_web::test::init_service(
@@ -1767,7 +1730,7 @@ mod tests {
                                 async move {
                                     HttpResponse::Ok()
                                         .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                        .body(render_test_metrics_body($counter, &snap))
+                                        .body(render_http_counter_metrics(&snap))
                                 }
                             }
                         }),
@@ -1851,17 +1814,12 @@ mod tests {
     /// observability snapshot.
     #[actix_web::test]
     async fn metrics_scrape_reflects_wrap_fn_counter() {
-        init_metrics_test_app!(
-            obs,
-            app,
-            "requests_total",
-            |cfg: &mut web::ServiceConfig| {
-                cfg.route(
-                    "/ping",
-                    web::get().to(|| async { HttpResponse::Ok().body("pong") }),
-                );
-            }
-        );
+        init_metrics_test_app!(obs, app, |cfg: &mut web::ServiceConfig| {
+            cfg.route(
+                "/ping",
+                web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+            );
+        });
 
         // Hit a route 5 times.
         for _ in 0..5 {
@@ -1888,17 +1846,12 @@ mod tests {
     /// handler hardcodes a constant instead of reading the snapshot.
     #[actix_web::test]
     async fn metrics_scrape_reflects_internal_requests_counter() {
-        init_metrics_test_app!(
-            obs,
-            app,
-            "internal_requests_total",
-            |cfg: &mut web::ServiceConfig| {
-                cfg.route(
-                    "/internal/v1/listings/seed",
-                    web::post().to(|| async { HttpResponse::NoContent().finish() }),
-                );
-            }
-        );
+        init_metrics_test_app!(obs, app, |cfg: &mut web::ServiceConfig| {
+            cfg.route(
+                "/internal/v1/listings/seed",
+                web::post().to(|| async { HttpResponse::NoContent().finish() }),
+            );
+        });
 
         for _ in 0..3 {
             let req = TestRequest::post()
@@ -1920,17 +1873,12 @@ mod tests {
     /// a write (it counts as a conflict instead).
     #[actix_web::test]
     async fn metrics_scrape_reflects_internal_writes_counter() {
-        init_metrics_test_app!(
-            obs,
-            app,
-            "internal_writes_total",
-            |cfg: &mut web::ServiceConfig| {
-                cfg.route(
-                    "/internal/v1/sellers/quota",
-                    web::post().to(|| async { HttpResponse::Created().finish() }),
-                );
-            }
-        );
+        init_metrics_test_app!(obs, app, |cfg: &mut web::ServiceConfig| {
+            cfg.route(
+                "/internal/v1/sellers/quota",
+                web::post().to(|| async { HttpResponse::Created().finish() }),
+            );
+        });
 
         for _ in 0..2 {
             let req = TestRequest::post()
@@ -1950,17 +1898,12 @@ mod tests {
     /// Mirrors the real handler for that single counter.
     #[actix_web::test]
     async fn metrics_scrape_reflects_conflict_responses_counter() {
-        init_metrics_test_app!(
-            obs,
-            app,
-            "conflict_responses_total",
-            |cfg: &mut web::ServiceConfig| {
-                cfg.route(
-                    "/reserve",
-                    web::post().to(|| async { HttpResponse::Conflict().finish() }),
-                );
-            }
-        );
+        init_metrics_test_app!(obs, app, |cfg: &mut web::ServiceConfig| {
+            cfg.route(
+                "/reserve",
+                web::post().to(|| async { HttpResponse::Conflict().finish() }),
+            );
+        });
 
         for _ in 0..4 {
             let req = TestRequest::post().uri("/reserve").to_request();
@@ -1978,17 +1921,12 @@ mod tests {
     /// Mirrors the real handler for that single counter.
     #[actix_web::test]
     async fn metrics_scrape_reflects_quota_rejections_counter() {
-        init_metrics_test_app!(
-            obs,
-            app,
-            "quota_rejections_total",
-            |cfg: &mut web::ServiceConfig| {
-                cfg.route(
-                    "/throttled",
-                    web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
-                );
-            }
-        );
+        init_metrics_test_app!(obs, app, |cfg: &mut web::ServiceConfig| {
+            cfg.route(
+                "/throttled",
+                web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
+            );
+        });
 
         for _ in 0..5 {
             let req = TestRequest::get().uri("/throttled").to_request();
@@ -2008,21 +1946,16 @@ mod tests {
     /// Mirrors the real handler for that single counter.
     #[actix_web::test]
     async fn metrics_scrape_reflects_error_responses_counter() {
-        init_metrics_test_app!(
-            obs,
-            app,
-            "error_responses_total",
-            |cfg: &mut web::ServiceConfig| {
-                cfg.route(
-                    "/conflict",
-                    web::post().to(|| async { HttpResponse::Conflict().finish() }),
-                );
-                cfg.route(
-                    "/throttled",
-                    web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
-                );
-            }
-        );
+        init_metrics_test_app!(obs, app, |cfg: &mut web::ServiceConfig| {
+            cfg.route(
+                "/conflict",
+                web::post().to(|| async { HttpResponse::Conflict().finish() }),
+            );
+            cfg.route(
+                "/throttled",
+                web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
+            );
+        });
 
         // 1 conflict + 1 throttled + 1 not-found = 3 error responses.
         let req = TestRequest::post().uri("/conflict").to_request();
@@ -2056,7 +1989,7 @@ mod tests {
     /// full wrap_fn -> record_request -> snapshot -> format! path.
     #[actix_web::test]
     async fn metrics_handler_body_includes_all_six_http_counters() {
-        use crate::observability::ServerObservability;
+        use crate::observability::{render_http_counter_metrics, ServerObservability};
         use moka::future::Cache;
 
         // Lazy pool: no actual connection. metrics_handler only reads
@@ -2076,14 +2009,11 @@ mod tests {
         let obs = Arc::new(ServerObservability::new());
         let obs_data = web::Data::new(obs.clone());
 
-        // We can't import the real `metrics_handler` because it lives in
-        // `actix_runtime.rs` which is `#[cfg(not(test))]`. So we build a
-        // minimal local copy that emits ONLY the 6 HTTP request counters
-        // in the same shape (HELP/TYPE/value triples). This is the same
-        // shape `metrics_handler` uses for those 6 lines — see
-        // `actix_runtime.rs::metrics_handler` for the production body.
-        // If the production format! changes (new counter added, line
-        // removed), this test body should be updated in lockstep.
+        // The test /metrics route reuses the exact same
+        // `render_http_counter_metrics` helper that the production
+        // `metrics_handler` in `actix_runtime.rs` interpolates into its
+        // body. That guarantees the test asserts the live format string,
+        // not a hand-maintained copy.
         let app = actix_web::test::init_service(
             App::new()
                 .app_data(pool)
@@ -2129,20 +2059,7 @@ mod tests {
                             async move {
                                 HttpResponse::Ok()
                                     .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP requests_total Total requests\n# TYPE requests_total counter\nrequests_total {}\n\
-                                         # HELP internal_requests_total Total requests to /internal/v1/ routes\n# TYPE internal_requests_total counter\ninternal_requests_total {}\n\
-                                         # HELP internal_writes_total Total 200/201/204 responses on /internal/v1/ routes\n# TYPE internal_writes_total counter\ninternal_writes_total {}\n\
-                                         # HELP conflict_responses_total Total 409 Conflict responses\n# TYPE conflict_responses_total counter\nconflict_responses_total {}\n\
-                                         # HELP quota_rejections_total Total 429 Too Many Requests responses\n# TYPE quota_rejections_total counter\nquota_rejections_total {}\n\
-                                         # HELP error_responses_total Total responses with status >= 400\n# TYPE error_responses_total counter\nerror_responses_total {}\n",
-                                        snap.requests_total,
-                                        snap.internal_requests_total,
-                                        snap.internal_writes_total,
-                                        snap.conflict_responses_total,
-                                        snap.quota_rejections_total,
-                                        snap.error_responses_total,
-                                    ))
+                                    .body(render_http_counter_metrics(&snap))
                             }
                         }
                     }),
