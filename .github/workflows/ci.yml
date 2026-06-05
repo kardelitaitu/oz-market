@@ -21,6 +21,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
+          cache: true
 
       - name: Format check
         working-directory: backend
@@ -98,6 +99,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
+          cache: true
 
       - name: Bootstrap schema
         working-directory: backend
@@ -121,6 +123,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
+          cache: true
 
       - name: MCP tool smoke test
         working-directory: backend
