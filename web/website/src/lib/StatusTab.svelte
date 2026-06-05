@@ -5,36 +5,36 @@
 <style>
   .status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 3rem;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
   }
 
   .status-card {
     background: var(--bg-card);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    padding: 1.5rem;
+    padding: 0.65rem 0.85rem;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.25rem;
   }
 
   .status-card h3 {
     font-family: var(--font-heading);
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
   }
 
   .status-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     color: var(--text-secondary);
   }
 
@@ -62,10 +62,10 @@
   <p>Live health check for the oz-market infrastructure.</p>
 </section>
 
-<div class="container" style="padding: 0 1.5rem 4rem;">
+<div class="container" style="padding: 0 1.5rem 0;">
   <MetricsBar />
 
-  <div class="status-grid" style="margin-top: 2rem;">
+  <div class="status-grid" style="margin-top: 1rem;">
     <div class="status-card">
       <h3><span class="status-dot dot-on"></span> API Server</h3>
       <div class="status-row"><span>Status</span><span>Online</span></div>

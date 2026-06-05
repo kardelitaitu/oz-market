@@ -197,6 +197,8 @@ if (-not $SkipTests -and -not $failed) {
         $elapsed = $sw.Elapsed.TotalSeconds
         $results.Tests = @{ Passed = $false; Duration = $elapsed }
         Write-StepResult $false
+        Write-Status "Tests error: $_" "Yellow"
+        if ($_.Exception) { Write-Status "Exception: $($_.Exception.Message)" "Yellow" }
         $failed = $true
     }
     $stepNum++

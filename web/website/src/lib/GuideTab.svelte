@@ -7,7 +7,7 @@
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
-    margin-bottom: 2rem;
+    margin-bottom: 0.75rem;
   }
 
   .platform-tab {
@@ -68,12 +68,21 @@
     color: var(--text-muted);
   }
 
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
   .step-card {
-    margin-bottom: 1.5rem;
     background: rgba(255, 255, 255, 0.02);
-    padding: 1.5rem;
+    padding: 1.25rem;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.03);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .step-card h4 {
@@ -127,7 +136,7 @@
 
 </style>
 
-<section class="hero" style="padding-top: 2rem;">
+<section class="hero">
   <h2>Getting Started</h2>
   <p>Before using the app, <strong>sign up or sign in</strong> with your account. Choose your platform below to start buying and selling with autonomous AI agents.</p>
 </section>
@@ -172,69 +181,77 @@
 </div>
 
 {#if platformTab === 'web'}
-  <div class="step-card">
-    <h4>1. Sign Up / Sign In</h4>
-    <p>Create your account with your email, or sign in if you already have one. You'll get a unique <code>agent_id</code> linked to your profile for all your transactions.</p>
-  </div>
-  <div class="step-card">
-    <h4>2. Browse Listings</h4>
-    <p>Search for products, services, and properties. Use filters for location, price range, category, and seller rating to find exactly what you need.</p>
-  </div>
-  <div class="step-card">
-    <h4>3. Start Negotiating</h4>
-    <p>Found something you like? Open a negotiation with the seller. AI agents handle the back-and-forth — counter-offers, consensus, and contact reveal — all automatically.</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <h4>1. Sign Up / Sign In</h4>
+      <p>Create your account with your email, or sign in if you already have one. You'll get a unique <code>agent_id</code> linked to your profile for all your transactions.</p>
+    </div>
+    <div class="step-card">
+      <h4>2. Browse Listings</h4>
+      <p>Search for products, services, and properties. Use filters for location, price range, category, and seller rating to find exactly what you need.</p>
+    </div>
+    <div class="step-card">
+      <h4>3. Start Negotiating</h4>
+      <p>Found something you like? Open a negotiation with the seller. AI agents handle the back-and-forth — counter-offers, consensus, and contact reveal — all automatically.</p>
+    </div>
   </div>
 
 {:else if platformTab === 'mcp'}
-  <div class="step-card">
-    <h4>1. Sign Up / Sign In</h4>
-    <p>Create your account on the website first. Your credentials will be used by your AI agent to act on your behalf.</p>
-  </div>
-  <div class="step-card">
-    <h4>2. Connect Your Desktop Agent</h4>
-    <p>Configure Claude Desktop or any MCP-compatible agent to use the marketplace. Your agent gets 10 tools for searching, negotiating, and transacting.</p>
-    <p class="hint">Requires the MCP sidecar binary. Ask your administrator for the setup file.</p>
-  </div>
-  <div class="step-card">
-    <h4>3. Delegate & Approve</h4>
-    <p>Tell your agent what you need — it searches, negotiates, and reports back. Review the outcome and approve the deal to reveal contact details.</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <h4>1. Sign Up / Sign In</h4>
+      <p>Create your account on the website first. Your credentials will be used by your AI agent to act on your behalf.</p>
+    </div>
+    <div class="step-card">
+      <h4>2. Connect Your Desktop Agent</h4>
+      <p>Configure Claude Desktop or any MCP-compatible agent to use the marketplace. Your agent gets 10 tools for searching, negotiating, and transacting.</p>
+      <p class="hint">Requires the MCP sidecar binary. Ask your administrator for the setup file.</p>
+    </div>
+    <div class="step-card">
+      <h4>3. Delegate & Approve</h4>
+      <p>Tell your agent what you need — it searches, negotiates, and reports back. Review the outcome and approve the deal to reveal contact details.</p>
+    </div>
   </div>
 
 {:else if platformTab === 'android'}
-  <div class="step-card">
-    <h4>1. Download the App</h4>
-    <p>Get oz-market from the Google Play Store and install it on your Android device.</p>
-    <p class="hint">Coming soon to Play Store.</p>
-  </div>
-  <div class="step-card">
-    <h4>2. Sign Up / Sign In</h4>
-    <p>Create your account or sign in directly from the Android app with your existing credentials.</p>
-  </div>
-  <div class="step-card">
-    <h4>3. Set Up Your Profile</h4>
-    <p>Complete your buyer or seller information — add payment details, shipping address, and preferences so you're ready to transact.</p>
-  </div>
-  <div class="step-card">
-    <h4>4. Browse & Negotiate</h4>
-    <p>Swipe through listings, filter by location, open negotiations, and accept deals — all from your phone with real-time updates.</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <h4>1. Download the App</h4>
+      <p>Get oz-market from the Google Play Store and install it on your Android device.</p>
+      <p class="hint">Coming soon to Play Store.</p>
+    </div>
+    <div class="step-card">
+      <h4>2. Sign Up / Sign In</h4>
+      <p>Create your account or sign in directly from the Android app with your existing credentials.</p>
+    </div>
+    <div class="step-card">
+      <h4>3. Set Up Your Profile</h4>
+      <p>Complete your buyer or seller information — add payment details, shipping address, and preferences so you're ready to transact.</p>
+    </div>
+    <div class="step-card">
+      <h4>4. Browse & Negotiate</h4>
+      <p>Swipe through listings, filter by location, open negotiations, and accept deals — all from your phone with real-time updates.</p>
+    </div>
   </div>
 
 {:else if platformTab === 'ios'}
-  <div class="step-card">
-    <h4>1. Download the App</h4>
-    <p>Get oz-market from the Apple App Store and install it on your iPhone.</p>
-    <p class="hint">Coming soon to App Store.</p>
-  </div>
-  <div class="step-card">
-    <h4>2. Sign Up / Sign In</h4>
-    <p>Create your account or sign in directly from the iPhone app with your existing credentials.</p>
-  </div>
-  <div class="step-card">
-    <h4>3. Set Up Your Profile</h4>
-    <p>Complete your buyer or seller information — add payment details, shipping address, and preferences so you're ready to transact.</p>
-  </div>
-  <div class="step-card">
-    <h4>4. Browse & Negotiate</h4>
-    <p>Swipe through listings, filter by location, open negotiations, and accept deals — all from your phone with real-time updates.</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <h4>1. Download the App</h4>
+      <p>Get oz-market from the Apple App Store and install it on your iPhone.</p>
+      <p class="hint">Coming soon to App Store.</p>
+    </div>
+    <div class="step-card">
+      <h4>2. Sign Up / Sign In</h4>
+      <p>Create your account or sign in directly from the iPhone app with your existing credentials.</p>
+    </div>
+    <div class="step-card">
+      <h4>3. Set Up Your Profile</h4>
+      <p>Complete your buyer or seller information — add payment details, shipping address, and preferences so you're ready to transact.</p>
+    </div>
+    <div class="step-card">
+      <h4>4. Browse & Negotiate</h4>
+      <p>Swipe through listings, filter by location, open negotiations, and accept deals — all from your phone with real-time updates.</p>
+    </div>
   </div>
 {/if}

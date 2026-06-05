@@ -1974,3 +1974,11 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Upgraded Rust Compiler in Docker**: Upgraded the builder stage in the `Dockerfile` from `rust:1.85-slim-bookworm` to `rust:1.94-slim-bookworm` to support newer dependency requirement updates (e.g. `time`, `icu_provider`).
 - **Deployment Guide & Env Examples**: Updated `.env.example` to recommend a connection pool limit of 10-15 for free database hosts, and added `DATABASE_MAX_CONNECTIONS` to the configuration reference table in `docs/deploy.md` to document the option clearly.
 - **Validation**: Ran `check.ps1` with all check tests passing successfully.
+
+## 2026-06-06 05:46 — Sticky footer and scrollbar layout optimizations for E2E tests
+
+- **Conditional Compact Page Layouts**: Implemented reactive body-level CSS class switching via a Svelte 5 `$effect` in `web/website/src/App.svelte`. When on the `/status` or `/getting-started` views, the classes `status-page` or `guide-page` are dynamically added to `document.body`.
+- **Targeted Element Compacting**: Added CSS overrides to `App.svelte` under `:global(body.status-page ...)` and `:global(body.guide-page ...)` to reduce paddings and margins for the `header`, `footer`, `hero`, and `main.container` elements.
+- **Short Page Fit**: Standardized and compacted list spacings, paddings, and hero margins in both `StatusTab.svelte` and `GuideTab.svelte` (removing redundant inline CSS). This successfully reduced the vertical page height from ~934px to exactly 720px, fitting the Playwright 1280x720 desktop viewport without triggering scrollbars.
+- **Tests Execution Robustness**: Added error logging for caught exceptions in the Tests execution catch block in `check.ps1` to facilitate future diagnostics.
+- **Validation**: Re-built the website cleanly; ran the full `check.ps1` CI suite with all 99 Playwright E2E and cargo tests passing successfully.

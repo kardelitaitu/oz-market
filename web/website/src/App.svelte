@@ -93,6 +93,16 @@
       clearInterval(interval);
     };
   });
+
+  // Dynamically manage body classes for layout overrides
+  $effect(() => {
+    document.body.classList.remove('status-page', 'guide-page');
+    if (currentTab === 'status') {
+      document.body.classList.add('status-page');
+    } else if (currentTab === 'guide') {
+      document.body.classList.add('guide-page');
+    }
+  });
 </script>
 
 <style>
@@ -282,6 +292,8 @@
     margin-inline: auto;
     padding: 2rem 1.5rem 4rem;
   }
+
+
 
   .grid-3 {
     display: grid;
@@ -533,7 +545,50 @@
       width: 100%;
     }
   }
+
+  /* Compact layout rules for status and guide tabs to ensure sticky footer fits without scrollbar */
+  :global(body.status-page header .header-inner),
+  :global(body.guide-page header .header-inner) {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+  :global(body.status-page .header-right),
+  :global(body.guide-page .header-right) {
+    gap: 0.25rem;
+  }
+  :global(body.status-page footer .footer-inner),
+  :global(body.guide-page footer .footer-inner) {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    gap: 1rem;
+  }
+  :global(body.status-page footer .footer-copy-bar),
+  :global(body.guide-page footer .footer-copy-bar) {
+    padding-bottom: 0.5rem;
+  }
+  :global(body.status-page .hero),
+  :global(body.guide-page .hero) {
+    padding-top: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+  :global(body.status-page .hero h2),
+  :global(body.guide-page .hero h2) {
+    font-size: 2rem !important;
+    margin-bottom: 0.25rem;
+  }
+  :global(body.status-page .hero p),
+  :global(body.guide-page .hero p) {
+    font-size: 0.95rem !important;
+    margin-bottom: 0.5rem;
+  }
+  :global(body.status-page main.container),
+  :global(body.guide-page main.container) {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
 </style>
+
+
 
 <header>
   <div class="header-inner">
@@ -560,7 +615,7 @@
   </div>
 </header>
 
-<main class="container">
+<main class="container {currentTab === 'status' ? 'status-page' : ''} {currentTab === 'guide' ? 'guide-page' : ''}">
   {#if currentTab === 'home'}
     <!-- Home Tab -->
     <section class="hero">
