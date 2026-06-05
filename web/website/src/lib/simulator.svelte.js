@@ -56,6 +56,14 @@ const initialBlocks = (typeof window !== 'undefined' && window.localStorage)
     })()
   : [...seedBlocks];
 
+const initialSuccess = (typeof window !== 'undefined' && window.localStorage)
+  ? (parseInt(localStorage.getItem('oz_market_sim_success_count'), 10) || 15)
+  : 15; // default to match 15 seed blocks
+
+const initialFailed = (typeof window !== 'undefined' && window.localStorage)
+  ? (parseInt(localStorage.getItem('oz_market_sim_failed_count'), 10) || 1)
+  : 1;
+
 // ─── Shared reactive state (wrapped in object to satisfy Svelte 5 export restriction) ───
 export const sim = $state({
   /** @type {'idle'|'listing'|'negotiating'|'consensus'|'revealing'|'completed'} */
@@ -67,6 +75,8 @@ export const sim = $state({
   serverStatus: 'disconnected',
   liveAgents: [],
   totalServerRequests: null,
+  successCount: initialSuccess,
+  failedCount: initialFailed,
 });
 
 // ─── Derived value helpers (used internally; components use $derived locally) ───
@@ -84,6 +94,11 @@ let currentItem = $state(catalog[0]);
 // Timeout ID tracking
 let timeouts = [];
 
+// Reconnection backoff parameters
+let reconnectDelay = 1000;
+const maxReconnectDelay = 16000;
+let reconnectTimeoutId = null;
+
 export function clearAllTimeouts() {
   timeouts.forEach(t => clearTimeout(t));
   timeouts = [];
@@ -96,8 +111,12 @@ function clearNewFlag() {
 // ─── Ledger Reset Action ───
 export function resetSeedLedger() {
   sim.committedBlocks = [...seedBlocks];
+  sim.successCount = 15;
+  sim.failedCount = 1;
   if (typeof window !== 'undefined' && window.localStorage) {
     localStorage.setItem('oz_market_committed_blocks', JSON.stringify(seedBlocks));
+    localStorage.setItem('oz_market_sim_success_count', '15');
+    localStorage.setItem('oz_market_sim_failed_count', '1');
   }
 }
 
@@ -109,6 +128,10 @@ function connectSSE() {
   if (typeof window === 'undefined' || !window.EventSource) return;
 
   eventSource = new EventSource('http://localhost:3000/v1/events/commits');
+
+  eventSource.onopen = () => {
+    reconnectDelay = 1000; // Reset backoff delay on successful connection
+  };
 
   eventSource.addEventListener('commit_block', (event) => {
     try {
@@ -123,8 +146,10 @@ function connectSSE() {
       
       if (!sim.committedBlocks.some(b => b.hash === newBlock.hash)) {
         sim.committedBlocks = [newBlock, ...sim.committedBlocks];
+        sim.successCount++;
         if (window.localStorage) {
           localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
+          localStorage.setItem('oz_market_sim_success_count', sim.successCount.toString());
         }
 
         setTimeout(() => {
@@ -138,6 +163,11 @@ function connectSSE() {
 
   eventSource.onerror = () => {
     disconnectSSE();
+    // Reconnect with exponential backoff
+    reconnectTimeoutId = setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+      connectSSE();
+    }, reconnectDelay);
   };
 }
 
@@ -145,6 +175,10 @@ function disconnectSSE() {
   if (eventSource) {
     eventSource.close();
     eventSource = null;
+  }
+  if (reconnectTimeoutId) {
+    clearTimeout(reconnectTimeoutId);
+    reconnectTimeoutId = null;
   }
 }
 
@@ -197,6 +231,8 @@ export function runSimulation() {
   const listingId  = '#L-' + Math.floor(1000 + Math.random() * 9000);
   const txKey      = 'tx-' + Math.floor(1000 + Math.random() * 9000).toString(16);
 
+  const willFail = Math.random() < 0.10; // 10% probability of negotiation failure
+
   sim.state = 'listing';
   const bName = getBuyerName();
   const sName = getSellerName();
@@ -239,42 +275,79 @@ export function runSimulation() {
     sim.currentPrice = c4;
   }, 10800);
 
-  let t7 = setTimeout(() => {
-    if (sim.isPaused) return;
-    sim.logs = [...sim.logs, `[${sName}] Final counter split difference: $${deal}.00`];
-    sim.currentPrice = deal;
-  }, 12600);
+  let t7;
+  let t8;
 
-  let t8 = setTimeout(() => {
-    if (sim.isPaused) return;
-    sim.state = 'consensus';
-    sim.logs = [...sim.logs, `[${bName}] Accept offer $${deal}.00. Consensus reached! Writing to ledger cache...`];
+  if (willFail) {
+    t7 = setTimeout(() => {
+      if (sim.isPaused) return;
+      sim.logs = [...sim.logs, `[${sName}] Final offer limit reached. Counter-offer $${c3}.00 is absolute minimum. Negotiation terminated.`];
+      sim.currentPrice = c3;
+    }, 12600);
 
-    const newBlock = {
-      hash: randHash(),
-      price: deal,
-      item,
-      ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
-      isNew: true,
-    };
-    sim.committedBlocks = [newBlock, ...sim.committedBlocks];
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
-    }
+    t8 = setTimeout(() => {
+      if (sim.isPaused) return;
+      sim.state = 'idle';
+      sim.logs = [...sim.logs, '[System] Consensus failed: negotiation aborted without contract commit.'];
+      
+      sim.failedCount++;
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('oz_market_sim_failed_count', sim.failedCount.toString());
+      }
 
-    setTimeout(() => {
-      clearNewFlag();
-    }, 600);
+      let t3 = setTimeout(() => {
+        resetSim();
+        let t4 = setTimeout(() => {
+          runSimulation();
+        }, 2000);
+        timeouts.push(t4);
+      }, 5000);
+      timeouts.push(t3);
+    }, 14400);
+  } else {
+    t7 = setTimeout(() => {
+      if (sim.isPaused) return;
+      sim.logs = [...sim.logs, `[${sName}] Final counter split difference: $${deal}.00`];
+      sim.currentPrice = deal;
+    }, 12600);
 
-    let t9 = setTimeout(() => {
-      approveReveal();
-    }, 2000);
-    timeouts.push(t9);
-  }, 14400);
+    t8 = setTimeout(() => {
+      if (sim.isPaused) return;
+      sim.state = 'consensus';
+      sim.logs = [...sim.logs, `[${bName}] Accept offer $${deal}.00. Consensus reached! Writing to ledger cache...`];
+
+      const newBlock = {
+        hash: randHash(),
+        price: deal,
+        item,
+        ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        isNew: true,
+      };
+      sim.committedBlocks = [newBlock, ...sim.committedBlocks];
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
+      }
+
+      sim.successCount++;
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('oz_market_sim_success_count', sim.successCount.toString());
+      }
+
+      setTimeout(() => {
+        clearNewFlag();
+      }, 600);
+
+      let t9 = setTimeout(() => {
+        approveReveal();
+      }, 2000);
+      timeouts.push(t9);
+    }, 14400);
+  }
 
   timeouts.push(t1, t2, t3, t4, t5, t6, t7, t8);
 }
 
+// ─── Approve reveal ───
 export function approveReveal() {
   if (sim.isPaused) return;
   sim.state = 'revealing';
@@ -322,5 +395,3 @@ export function togglePause() {
 if (typeof window !== 'undefined') {
   window.__sim = sim;
 }
-
-

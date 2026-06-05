@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // Tab forward through focusable elements until the given locator is focused.
 // Returns true if the element was focused within maxTabs iterations.
-async function tabUntilFocused(page, locator, maxTabs = 25) {
+async function tabUntilFocused(page, locator, maxTabs = 50) {
   for (let i = 0; i < maxTabs; i++) {
     await page.keyboard.press('Tab');
     const isTarget = await locator.evaluate(el => document.activeElement === el);

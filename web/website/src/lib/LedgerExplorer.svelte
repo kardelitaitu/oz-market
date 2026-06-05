@@ -1,7 +1,9 @@
 <script>
   import { sim, resetSeedLedger } from './simulator.svelte.js';
+  import BlockInspectionModal from './BlockInspectionModal.svelte';
 
   let searchQuery = $state('');
+  let selectedBlock = $state(null);
 
   let filteredBlocks = $derived(
     sim.committedBlocks.filter(b =>
@@ -116,6 +118,14 @@
     font-family: var(--font-mono);
     font-size: 0.72rem;
     animation: blockSlideIn 0.4s ease;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+  }
+
+  .ledger-block:hover {
+    border-color: var(--color-primary);
+    background: rgba(0, 242, 254, 0.03);
+    transform: translateY(-1px);
   }
 
   .ledger-block.new {
@@ -226,7 +236,13 @@
   </div>
   <div class="ledger-blocks" bind:this={ledgerContainer}>
     {#each filteredBlocks as block}
-      <div class="ledger-block {block.isNew ? 'new' : ''}">
+      <div 
+        class="ledger-block {block.isNew ? 'new' : ''}" 
+        role="button"
+        tabindex="0"
+        onclick={() => selectedBlock = block}
+        onkeydown={e => { if (e.key === 'Enter' || e.key === ' ') { selectedBlock = block; e.preventDefault(); } }}
+      >
         <div class="ledger-block-hash">{block.hash}</div>
         <div class="ledger-block-meta">
           <span>{block.item}</span>
@@ -246,3 +262,7 @@
     <button class="ledger-reset-btn" onclick={() => { resetSeedLedger(); searchQuery = ''; }} title="Reset Ledger to Default">Reset</button>
   </div>
 </div>
+
+{#if selectedBlock}
+  <BlockInspectionModal block={selectedBlock} onclose={() => selectedBlock = null} />
+{/if}

@@ -764,3 +764,87 @@ test.describe('ThemeSwitcher - Additional Coverage', () => {
     }
   });
 });
+
+test.describe('MetricsPanel Component', () => {
+  test('displays default metrics (blocks, success rate, discount)', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.metrics-grid')).toBeVisible();
+    await expect(page.locator('.metric-card:has-text("Ledger Blocks")')).toBeVisible();
+    await expect(page.locator('.metric-card:has-text("Success Rate")')).toBeVisible();
+    await expect(page.locator('.metric-card:has-text("Avg Discount")')).toBeVisible();
+    await expect(page.locator('.status-indicator:has-text("Offline")')).toBeVisible();
+  });
+
+  test('reflects SSE connection status when server goes online', async ({ page }) => {
+    // Mock health check and metrics
+    await page.route('http://localhost:3000/v1/health/agents', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ agent_id: 'buyer_1' }, { agent_id: 'seller_1' }]),
+      });
+    });
+    await page.route('http://localhost:3000/metrics', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/plain',
+        body: 'requests_total 12345\n',
+      });
+    });
+
+    await page.goto('/');
+    await page.waitForTimeout(500);
+
+    // Verify SSE Connected status is shown
+    await expect(page.locator('.status-indicator:has-text("SSE Connected")')).toBeVisible();
+    await expect(page.locator('.metric-card:has-text("12,345 reqs logged")')).toBeVisible();
+  });
+});
+
+test.describe('BlockInspectionModal Component', () => {
+  test('opens inspector modal when a ledger block is clicked and shows cryptographic proofs', async ({ page }) => {
+    await page.goto('/');
+    
+    // Click the first ledger block
+    const firstBlock = page.locator('.ledger-block').first();
+    await firstBlock.click();
+    await page.waitForTimeout(200);
+
+    // Verify modal is open
+    await expect(page.locator('.modal-card')).toBeVisible();
+    await expect(page.locator('h4:has-text("Transaction Block Inspector")')).toBeVisible();
+    await expect(page.locator('.section-title:has-text("Cryptographic Proofs")')).toBeVisible();
+    await expect(page.locator('.crypto-label:has-text("Transaction Signature")')).toBeVisible();
+    
+    // Copy buttons present
+    const copyBtns = page.locator('.copy-btn');
+    await expect(copyBtns).toHaveCount(4);
+
+    // Reconstructed dialogue present
+    await expect(page.locator('.section-title:has-text("Reconstructed Negotiation Dialogue")')).toBeVisible();
+    await expect(page.locator('.dialogue-bubble').first()).toBeVisible();
+
+    // Click Close Button
+    await page.click('.modal-close-btn');
+    await page.waitForTimeout(200);
+    await expect(page.locator('.modal-card')).not.toBeVisible();
+  });
+
+  test('closes modal when overlay backdrop is clicked', async ({ page }) => {
+    await page.goto('/');
+    
+    // Open modal
+    await page.locator('.ledger-block').first().click();
+    await page.waitForTimeout(200);
+    await expect(page.locator('.modal-card')).toBeVisible();
+
+    // Click on overlay backdrop (outside modal-card)
+    // We can click the overlay directly by targeting its selector
+    await page.click('.modal-overlay', { position: { x: 5, y: 5 } });
+    await page.waitForTimeout(200);
+    
+    // Verify modal is closed
+    await expect(page.locator('.modal-card')).not.toBeVisible();
+  });
+});
+

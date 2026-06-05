@@ -2,6 +2,7 @@
   import FlowDiagram from './FlowDiagram.svelte';
   import AgentCard from './AgentCard.svelte';
   import LedgerExplorer from './LedgerExplorer.svelte';
+  import MetricsPanel from './MetricsPanel.svelte';
   import {
     sim,
     runSimulation, approveReveal, resetSim, togglePause,
@@ -195,4 +196,6 @@
       {sim.isPaused ? '▶ Resume Autoplay' : '⏸ Pause Autoplay'}
     </button>
   </div>
+
+  <MetricsPanel />
 </section>

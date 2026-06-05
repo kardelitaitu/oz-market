@@ -1833,6 +1833,28 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 ## 2026-06-05 22:25 — Extract render_http_counter_metrics helper; remove test-only duplicate
 
+- **Validation**: Playwright E2E tests run successfully (92/92 pass). Workspace validation `./check.ps1` runs clean.
+- **Files changed (5)**: `backend/server/src/http/actix_handlers.rs`, `backend/server/src/http/actix_runtime.rs`, `web/website/src/lib/LedgerExplorer.svelte`, `web/website/src/lib/simulator.svelte.js`, `web/website/tests/components.spec.js`.
+
+## 2026-06-05 22:00 — Refactor 6 metrics tests + wire CI microbench env + summary scraper
+
+- **Problem**: the 5 per-counter smoke tests added in the previous session duplicated ~70 lines each of the same App + wrap_fn + /metrics scaffolding, with only the counter name, trigger route, and expected value varying. The microbench step in CI also needed the trending log to record real commit SHAs (it was recording "local") and a way to surface the latest measurement in the run summary so reviewers could spot a regression without downloading artifacts.
+- **Refactor**: extracted the duplication into two pieces in the test module:
+  - `render_test_metrics_body(counter, snap) -> String` — pure helper that renders a single-counter Prometheus body for any of the 6 counter names (HELP/TYPE/value triple). Uses a `match` on the static counter name to pick the right field from `ServerObservabilitySnapshot`, panicking on unknown names so a typo fails loud.
+  - `init_metrics_test_app!(obs, app, counter, |cfg| {...})` — macro that wires a minimal actix App with the production wrap_fn, the user-supplied trigger routes via `configure`, and a /metrics route that calls `render_test_metrics_body` with the named counter. Binds `obs: Arc<ServerObservability>` and `app: impl Service` in the caller's scope.
+  - `scrape_metrics_body!(&app)` — small macro that does the GET /metrics + read_body + UTF-8 dance, avoiding a generic-bounded `async fn` (the actix Service types are hard to name).
+  - Rewrote all 6 metrics tests (1 existing + 5 new) to use the macro. Each test went from ~70 lines to ~25. Test count 408 -> 409 (the macro is also a savings in cognitive load: a future "7th counter" is `match` arm + 1 test, not a copy of 70 lines).
+  - Net change in the file: -169 lines (513 insertions, 341 deletions for the test module).
+- **CI work (`.github/workflows/ci.yml`)**:
+  - Added `MARKETPLACE_MICROBENCH_COMMIT: ${{ github.sha }}` env to the existing "Wrap_fn microbench (release)" step. The test reads this via `std::env::var` and uses it in the trending log line, so CI runs now record `commit: <sha>` instead of `commit: "local"`. Local dev runs (no env var set) still get `"local"` for the existing UX.
+  - Added a "Publish microbench trend to job summary" step that runs after the microbench (guarded by `if: always()` so a test failure still surfaces the last sample). It `tail -1`s the log, writes the JSON line to `$GITHUB_STEP_SUMMARY` for human review, and emits a `::notice` annotation with the parsed ns/req value (or "sub-noise" if the JSON is `null`). The `python3` one-liner uses the same JSON parse as the test, so the value rendering stays in lockstep with the log format.
+  - Updated the inline comment in the microbench step from "1us/req" to "800ns/req" to match the a283786 tightening.
+- **Note on test placement**: the "all 6 counters in one body" test was first added to `actix_runtime.rs` (next to the real `metrics_handler`) but that file is `#[cfg(not(test))]` so the test would be dead code. The cfg-gate exists because the production runtime needs `tokio::spawn` and other server-only deps that conflict with `#[actix_web::test]`. Moved the test to `actix_handlers.rs` where it can actually run, with a comment explaining the inlined /metrics body mirrors the production format for the 6 HTTP counters and should be updated in lockstep.
+- **Validation**: 409 tests pass (was 408, +1 from the new all-in-one test). `check.ps1` 6/6.
+- **Files changed (1)**: `actix_handlers.rs` (+200 / -341).
+
+## 2026-06-05 22:25 — Extract render_http_counter_metrics helper; remove test-only duplicate
+
 - **Problem**: the "all 6 counters in one body" test added in the previous session inlined a 12-line `format!` body for the 6 HTTP request counters, with a comment warning "If the production format! changes (new counter added, line removed), this test body should be updated in lockstep." That comment was a smell — the test was duplicating production logic and could silently drift. The per-counter tests in the test module also had a similar `render_test_metrics_body(counter, snap)` helper that emitted a single counter's HELP/TYPE/value triple from a `match` on the counter name, with the same drift risk.
 - **Refactor**: extracted the 6-counter body into a single non-cfg-gated helper in `backend/server/src/observability/mod.rs`:
   - `pub fn render_http_counter_metrics(snap: &ServerObservabilitySnapshot) -> String` — owns the canonical Prometheus text for the 6 HTTP counters. Lives next to the `ServerObservabilitySnapshot` struct it reads, so any new counter added to the snapshot has the new helper function as a one-keystroke "tab" away.
@@ -1844,3 +1866,20 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Validation**: 409 tests pass (all 7 metrics tests still pass, including the all-in-one and the 6 per-counter smoke tests). `check.ps1` 6/6 stable.
 - **Files changed (3)**: `backend/server/src/observability/mod.rs` (+24), `backend/server/src/http/actix_runtime.rs` (-150 / +5), `backend/server/src/http/actix_handlers.rs` (-185 / +6).
 
+## 2026-06-05 23:55 — SSE backoff reconnection, metrics panel, transaction inspection modal, and SSE load benchmark
+
+- **Goal**: Implement unauthenticated mock commit endpoint, robust EventSource reconnection backoff, interactive metrics dashboard, block inspection modal (with dialogue reconstruction), and a concurrent SSE streaming load tester.
+- **Changed**:
+  - `backend/server/Cargo.toml`: Enabled the `"stream"` feature on the `reqwest` dependency. Registered `sse_bench` as a binary target.
+  - `backend/server/src/bin/sse_bench.rs` (NEW): Implemented an asynchronous concurrent client benchmark that subscribes 50 concurrent SSE streams to `/v1/events/commits`, broadcasts mock commits via `/internal/v1/commits/mock`, verifies event propagation with 100% success rate, and measures timing statistics.
+  - `backend/server/src/http/actix_handlers.rs`: Added the `MockCommitPayload` schema and the `mock_commit_broadcast` route handler. Registered `POST /internal/v1/commits/mock` in `register_api_routes()`. Updated `global_commits_stream` to parse custom `item` titles from mock broadcast events if present.
+  - `backend/server/src/http/actix_runtime.rs`: Properly formatted the file to pass formatting checks.
+  - `web/website/playwright.config.js`: Increased Playwright webServer starting timeout to 60000ms to avoid intermittent timeouts on resource-constrained platforms.
+  - `web/website/src/lib/simulator.svelte.js`: Integrated `successCount` and `failedCount` states, persisted in `localStorage`. Implemented exponential backoff reconnection logic inside the SSE `connectSSE()` routine. Modeled a 10% negotiation failure probability within `runSimulation()` that aborts the transaction flow and updates metrics.
+  - `web/website/src/lib/MetricsPanel.svelte` (NEW): Designed a premium statistics dashboard showing total blocks, success rate, average discount percentage, and connection status.
+  - `web/website/src/lib/BlockInspectionModal.svelte` (NEW): Developed a pop-up transaction details inspector displaying block details, copy-to-clipboard actions for cryptographic claims, and a reconstructed step-by-step negotiation transcript.
+  - `web/website/src/lib/LedgerExplorer.svelte` & `Simulator.svelte`: Rendered the `MetricsPanel` and interactive block elements. Hooked up click/focus handlers (including full keyboard a11y support) to open the transaction block inspector.
+  - `web/website/tests/a11y.spec.js`: Increased tab focus test search threshold from 25 to 50 iterations to account for the focusable ledger blocks.
+  - `web/website/tests/components.spec.js`: Wrote four comprehensive E2E tests covering default metrics card states, online SSE status reflections, modal inspection elements, and overlay close clicks.
+- **Validation**: Playwright E2E tests run successfully (96/96 pass). Workspace compliance verification `./check.ps1` runs clean.
+- **Files changed**: `backend/server/Cargo.toml`, `backend/server/src/http/actix_handlers.rs`, `backend/server/src/http/actix_runtime.rs`, `web/website/playwright.config.js`, `web/website/src/lib/LedgerExplorer.svelte`, `web/website/src/lib/Simulator.svelte`, `web/website/src/lib/simulator.svelte.js`, `web/website/tests/a11y.spec.js`, `web/website/tests/components.spec.js`, `JOURNAL.md` (modified); `backend/server/src/bin/sse_bench.rs`, `web/website/src/lib/MetricsPanel.svelte`, `web/website/src/lib/BlockInspectionModal.svelte` (new).

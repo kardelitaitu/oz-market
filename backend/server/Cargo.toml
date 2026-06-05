@@ -18,7 +18,7 @@ actix-web = "4"
 actix-rt = "2"
 dashmap = "6"
 moka = { version = "0.12", features = ["future", "sync"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 # Production hardening: tracing + metrics
 tracing = "0.1"
 tracing-actix-web = "0.7"
@@ -56,6 +56,10 @@ path = "src/bin/populate_db.rs"
 [[bin]]
 name = "pg_search_bench"
 path = "src/bin/pg_search_bench.rs"
+
+[[bin]]
+name = "sse_bench"
+path = "src/bin/sse_bench.rs"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
