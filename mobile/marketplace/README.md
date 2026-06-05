@@ -1,6 +1,6 @@
-# marketplace-mobile — Tauri v2 + Svelte 5
+# oz-market-mobile — Tauri v2 + Svelte 5
 
-A cross-platform mobile client (Android + iOS) for the marketplace backend. Built with Tauri v2, Svelte 5, and Rust — sharing types directly via the `marketplace-api-contract` crate.
+A cross-platform mobile client (Android + iOS) for the marketplace backend. Built with Tauri v2, Svelte 5, and Rust — sharing types directly via the `oz-market-api-contract` crate.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ A cross-platform mobile client (Android + iOS) for the marketplace backend. Buil
 Or run the server directly:
 
 ```shell
-cargo run --bin marketplace-server
+cargo run --bin oz-market-server
 ```
 
 ### 2. Start the Frontend Dev Server
@@ -49,7 +49,7 @@ cargo tauri dev
 npm run build && cargo tauri build --no-bundle
 ```
 
-The binary is written to `src-tauri/target/release/marketplace-mobile.exe`.
+The binary is written to `src-tauri/target/release/oz-market-mobile.exe`.
 
 ## Live Testing
 

@@ -8,12 +8,12 @@
 //!   DATABASE_URL="postgres://..." cargo run --bin pg_search_bench --release
 //!   DATABASE_URL="postgres://..." cargo run --bin pg_search_bench --release -- --sizes 100,500,1000 --warmup 20 --samples 100
 
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     Category, Condition, CreateListingRequest, ListingLocation, ListingPayload, ListingType, Price,
     SearchRequest, SearchSort,
 };
-use marketplace_server::repositories::listings::PostgresListingRepository;
-use marketplace_server::repositories::ListingRepository;
+use oz_market_server::repositories::listings::PostgresListingRepository;
+use oz_market_server::repositories::ListingRepository;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Instant;
 

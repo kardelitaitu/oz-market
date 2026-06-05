@@ -13,7 +13,7 @@ cargo install flamegraph
 # On Windows: use WSL2 or cargo-profiler
 # Run benchmark with profiling
 cd backend
-cargo flamegraph --package marketplace-server --bin phase5_bench \
+cargo flamegraph --package oz-market-server --bin phase5_bench \
     --bench-profile listing-read \
     --output flamegraph.svg
 

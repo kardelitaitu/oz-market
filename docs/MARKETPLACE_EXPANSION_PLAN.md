@@ -272,7 +272,7 @@ CREATE TABLE property_listings (
 
 ## Frontend/MCP Considerations
 
-### MCP Server (marketplace-mcp)
+### MCP Server (oz-market-mcp)
 - Update `create_listing` tool to accept new fields
 - Add `listing_type` to MCP tool schemas
 - AI agents can now create service/property listings.
@@ -340,7 +340,7 @@ LIMIT 20;
 - [ ] Update cache invalidation logic
 
 ### Phase 5: MCP Server
-- [ ] Update `marketplace-mcp` tool schemas
+- [ ] Update `oz-market-mcp` tool schemas
 - [ ] Test creating service/property listings via MCP
 
 ### Phase 6: Documentation

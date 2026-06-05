@@ -1,4 +1,4 @@
-use marketplace_api_contract::*;
+use oz_market_api_contract::*;
 use serde_json::Value;
 
 #[test]

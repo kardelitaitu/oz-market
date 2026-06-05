@@ -1,4 +1,4 @@
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     Category, Condition, ContactRevealStatus, CurrencyCode, ListingPayload, ListingStatus,
     NegotiationStatus, ResourceId,
 };
@@ -43,7 +43,7 @@ pub struct ListingRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use marketplace_api_contract::{ListingType, Price};
+    use oz_market_api_contract::{ListingType, Price};
 
     #[test]
     fn test_listing_row_into_payload_product() {
@@ -189,31 +189,31 @@ impl ListingRow {
     pub fn into_payload(self) -> ListingPayload {
         // Convert listing_type string to enum
         let listing_type_enum = match self.listing_type.as_str() {
-            "service" => marketplace_api_contract::ListingType::Service,
-            "property" => marketplace_api_contract::ListingType::Property,
-            _ => marketplace_api_contract::ListingType::Product,
+            "service" => oz_market_api_contract::ListingType::Service,
+            "property" => oz_market_api_contract::ListingType::Property,
+            _ => oz_market_api_contract::ListingType::Product,
         };
 
         ListingPayload {
             schema_version: self.schema_version,
             owner_id: self.owner_id,
             listing_type: listing_type_enum,
-            category: if listing_type_enum == marketplace_api_contract::ListingType::Product {
+            category: if listing_type_enum == oz_market_api_contract::ListingType::Product {
                 Some(self.category)
             } else {
                 None
             },
             title: self.product_name, // Maps to title in api-contract
-            condition: if listing_type_enum == marketplace_api_contract::ListingType::Product {
+            condition: if listing_type_enum == oz_market_api_contract::ListingType::Product {
                 Some(self.item_condition)
             } else {
                 None
             },
-            price: marketplace_api_contract::Price {
+            price: oz_market_api_contract::Price {
                 currency: self.price_currency,
                 amount: self.price_amount,
             },
-            location: marketplace_api_contract::ListingLocation {
+            location: oz_market_api_contract::ListingLocation {
                 country_code: self.country_code,
                 country_name: self.country_name,
                 city: self.city,

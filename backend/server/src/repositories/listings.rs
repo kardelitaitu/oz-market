@@ -1,6 +1,6 @@
 use crate::models::db::ListingRow;
 use crate::repositories::{RepositoryError, RepositoryErrorKind};
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     CreateListingRequest, CreateListingResponse, ListingStatus, ListingSummary, SearchRequest,
     SearchResponse,
 };
@@ -76,12 +76,12 @@ impl InMemoryListingRepository {
             category: summary
                 .listing
                 .category
-                .unwrap_or(marketplace_api_contract::Category::Laptop),
+                .unwrap_or(oz_market_api_contract::Category::Laptop),
             product_name: summary.listing.title.clone(), // Maps title -> product_name for DB
             item_condition: summary
                 .listing
                 .condition
-                .unwrap_or(marketplace_api_contract::Condition::Used),
+                .unwrap_or(oz_market_api_contract::Condition::Used),
             price_currency: summary.listing.price.currency.clone(),
             price_amount: summary.listing.price.amount,
             country_code: summary.listing.location.country_code.clone(),
@@ -112,8 +112,8 @@ impl InMemoryListingRepository {
             geolocation_opt_out: summary.listing.location.geolocation_opt_out,
             // NEW: Phase 2
             listing_type: match summary.listing.listing_type {
-                marketplace_api_contract::ListingType::Service => "service",
-                marketplace_api_contract::ListingType::Property => "property",
+                oz_market_api_contract::ListingType::Service => "service",
+                oz_market_api_contract::ListingType::Property => "property",
                 _ => "product",
             }
             .to_string(),
@@ -460,12 +460,12 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
         .try_get("listing_type")
         .ok()
         .unwrap_or_else(|| "product".to_string());
-    let listing_type: marketplace_api_contract::ListingType = if listing_type_str == "service" {
-        marketplace_api_contract::ListingType::Service
+    let listing_type: oz_market_api_contract::ListingType = if listing_type_str == "service" {
+        oz_market_api_contract::ListingType::Service
     } else if listing_type_str == "property" {
-        marketplace_api_contract::ListingType::Property
+        oz_market_api_contract::ListingType::Property
     } else {
-        marketplace_api_contract::ListingType::Product
+        oz_market_api_contract::ListingType::Product
     };
 
     // Seller fields (optional, from JOIN with seller_accounts)
@@ -505,28 +505,28 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
         listing_id,
         status,
         version,
-        listing: marketplace_api_contract::ListingPayload {
+        listing: oz_market_api_contract::ListingPayload {
             schema_version,
             owner_id: row
                 .try_get::<String, _>("owner_id")
                 .map_err(|error| storage(error.to_string()))?,
             listing_type,
-            category: if listing_type == marketplace_api_contract::ListingType::Product {
+            category: if listing_type == oz_market_api_contract::ListingType::Product {
                 Some(category)
             } else {
                 None
             },
             title: product_name,
-            condition: if listing_type == marketplace_api_contract::ListingType::Product {
+            condition: if listing_type == oz_market_api_contract::ListingType::Product {
                 Some(condition)
             } else {
                 None
             },
-            price: marketplace_api_contract::Price {
+            price: oz_market_api_contract::Price {
                 currency: price_currency,
                 amount: price_amount,
             },
-            location: marketplace_api_contract::ListingLocation {
+            location: oz_market_api_contract::ListingLocation {
                 country_code,
                 country_name,
                 city,
@@ -551,9 +551,9 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             // NEW: Phase 4 - Service fields (populated from LEFT JOIN)
             service_type: sl_service_type.and_then(|s| {
                 if s == "local" {
-                    Some(marketplace_api_contract::ServiceType::Local)
+                    Some(oz_market_api_contract::ServiceType::Local)
                 } else if s == "online" {
-                    Some(marketplace_api_contract::ServiceType::Online)
+                    Some(oz_market_api_contract::ServiceType::Online)
                 } else {
                     None
                 }
@@ -565,22 +565,22 @@ fn row_to_summary(row: PgRow) -> Result<ListingSummary, RepositoryError> {
             // NEW: Phase 4 - Property fields (populated from LEFT JOIN)
             property_transaction_type: pl_property_transaction_type.and_then(|s| {
                 if s == "rent" {
-                    Some(marketplace_api_contract::PropertyTransactionType::Rent)
+                    Some(oz_market_api_contract::PropertyTransactionType::Rent)
                 } else if s == "sale" {
-                    Some(marketplace_api_contract::PropertyTransactionType::Sale)
+                    Some(oz_market_api_contract::PropertyTransactionType::Sale)
                 } else {
                     None
                 }
             }),
             property_sub_type: pl_property_sub_type.and_then(|s| {
                 if s == "building" {
-                    Some(marketplace_api_contract::PropertySubType::Building)
+                    Some(oz_market_api_contract::PropertySubType::Building)
                 } else if s == "house" {
-                    Some(marketplace_api_contract::PropertySubType::House)
+                    Some(oz_market_api_contract::PropertySubType::House)
                 } else if s == "apartment" {
-                    Some(marketplace_api_contract::PropertySubType::Apartment)
+                    Some(oz_market_api_contract::PropertySubType::Apartment)
                 } else if s == "land" {
-                    Some(marketplace_api_contract::PropertySubType::Land)
+                    Some(oz_market_api_contract::PropertySubType::Land)
                 } else {
                     None
                 }
@@ -1080,7 +1080,7 @@ impl ListingRepository for PostgresListingRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use marketplace_api_contract::*;
+    use oz_market_api_contract::*;
 
     fn make_test_request(title: &str, owner_id: &str) -> CreateListingRequest {
         CreateListingRequest {

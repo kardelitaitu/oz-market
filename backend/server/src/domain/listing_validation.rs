@@ -1,4 +1,4 @@
-use marketplace_api_contract::{ListingPayload, ListingType};
+use oz_market_api_contract::{ListingPayload, ListingType};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidationError {
@@ -146,7 +146,7 @@ fn is_valid_http_url(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use marketplace_api_contract::{
+    use oz_market_api_contract::{
         Category, Condition, ListingLocation, ListingType, Price, PropertyTransactionType,
         ServiceType,
     };

@@ -4,7 +4,7 @@ pub mod rate_limit;
 pub mod sse;
 pub use error::ApiError;
 
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AgentQueryRequest, AgentQueryResponse, CreateListingRequest, CreateListingResponse,
     NegotiationResponse, SearchRequest, SearchResponse,
 };
@@ -212,7 +212,7 @@ impl ApiClient {
     pub async fn open_negotiation(
         &self,
         claims: &Claims,
-        request: &marketplace_api_contract::OpenNegotiationRequest,
+        request: &oz_market_api_contract::OpenNegotiationRequest,
     ) -> Result<NegotiationResponse, ApiError> {
         self.check_rate_limit("negotiate").await;
         with_retry(|| async {
@@ -259,7 +259,7 @@ impl ApiClient {
         &self,
         claims: &Claims,
         negotiation_id: &str,
-        request: &marketplace_api_contract::SubmitOfferRequest,
+        request: &oz_market_api_contract::SubmitOfferRequest,
     ) -> Result<NegotiationResponse, ApiError> {
         self.check_rate_limit("offer").await;
         with_retry(|| async {
@@ -286,7 +286,7 @@ impl ApiClient {
         &self,
         claims: &Claims,
         negotiation_id: &str,
-        request: &marketplace_api_contract::AcceptNegotiationRequest,
+        request: &oz_market_api_contract::AcceptNegotiationRequest,
     ) -> Result<NegotiationResponse, ApiError> {
         self.check_rate_limit("accept").await;
         with_retry(|| async {
@@ -313,7 +313,7 @@ impl ApiClient {
         &self,
         claims: &Claims,
         negotiation_id: &str,
-        request: &marketplace_api_contract::RejectNegotiationRequest,
+        request: &oz_market_api_contract::RejectNegotiationRequest,
     ) -> Result<NegotiationResponse, ApiError> {
         self.check_rate_limit("reject").await;
         with_retry(|| async {
@@ -340,8 +340,8 @@ impl ApiClient {
         &self,
         claims: &Claims,
         negotiation_id: &str,
-        request: &marketplace_api_contract::RequestContactRevealRequest,
-    ) -> Result<marketplace_api_contract::ContactRevealResponse, ApiError> {
+        request: &oz_market_api_contract::RequestContactRevealRequest,
+    ) -> Result<oz_market_api_contract::ContactRevealResponse, ApiError> {
         self.check_rate_limit("reveal").await;
         with_retry(|| async {
             let resp = self
@@ -367,8 +367,8 @@ impl ApiClient {
         &self,
         claims: &Claims,
         reveal_id: &str,
-        request: &marketplace_api_contract::RequestContactRevealRequest,
-    ) -> Result<marketplace_api_contract::ContactRevealResponse, ApiError> {
+        request: &oz_market_api_contract::RequestContactRevealRequest,
+    ) -> Result<oz_market_api_contract::ContactRevealResponse, ApiError> {
         self.check_rate_limit("approve").await;
         with_retry(|| async {
             let resp = self

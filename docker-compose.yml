@@ -1,4 +1,4 @@
-# Production deployment for marketplace-server + PostgreSQL.
+# Production deployment for oz-market-server + PostgreSQL.
 # Start with:
 #   docker compose up -d
 # Stop with:

@@ -7,5 +7,5 @@ Execute these commands to verify implementation of this spec:
 cd backend && cargo check --bin bench-suite
 
 # Run standalone benchmark suite tests
-cargo test --package marketplace-server --bin bench-suite
+cargo test --package oz-market-server --bin bench-suite
 ```

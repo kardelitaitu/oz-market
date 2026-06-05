@@ -45,7 +45,7 @@ $env:RUST_LOG = if ([string]::IsNullOrWhiteSpace($env:RUST_LOG)) { "info" } else
 
 if ($SeedDatabase) {
     Write-Host "Seeding database with current generator..." -ForegroundColor Cyan
-    cargo run --release --manifest-path Cargo.toml -p marketplace-server --bin populate_db
+    cargo run --release --manifest-path Cargo.toml -p oz-market-server --bin populate_db
     if ($LASTEXITCODE -ne 0) {
         throw "database seeding failed"
     }
@@ -56,7 +56,7 @@ $ServerJob = Start-Job -ScriptBlock {
     Set-Location "C:/My Script/project-the-marketplace/backend"
     $env:DATABASE_URL = "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
     $env:MARKETPLACE_BIND = "127.0.0.1:3000"
-    cargo run --release --bin marketplace-server
+    cargo run --release --bin oz-market-server
 }
 
 Write-Host "Waiting for server to be ready..." -ForegroundColor Yellow
@@ -89,7 +89,7 @@ Write-Host "`nRunning real HTTP benchmark..." -ForegroundColor Cyan
 $env:HTTP_BENCH_OPS = "$Ops"
 $env:HTTP_BENCH_CONCURRENCIES = $ConcurrencyLevels
 
-cargo run --release --manifest-path Cargo.toml -p marketplace-server --bin bench_concurrent -- "$BaseUrl" "$Ops" "$ConcurrencyLevels"
+cargo run --release --manifest-path Cargo.toml -p oz-market-server --bin bench_concurrent -- "$BaseUrl" "$Ops" "$ConcurrencyLevels"
 $BenchmarkResult = $LASTEXITCODE
 
 Cleanup

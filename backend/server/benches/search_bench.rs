@@ -1,12 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::sync::Arc;
 
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     Category, Condition, CreateListingRequest, ListingLocation, ListingPayload, ListingStatus,
     ListingSummary, ListingType, Price, SearchRequest, SearchSort,
 };
-use marketplace_server::repositories::{InMemoryListingRepository, ListingRepository};
-use marketplace_server::services::search::SearchService;
+use oz_market_server::repositories::{InMemoryListingRepository, ListingRepository};
+use oz_market_server::services::search::SearchService;
 
 fn make_bench_listing(seed: u64) -> ListingSummary {
     let categories = [
@@ -88,7 +88,7 @@ fn bench_score_listing_100(c: &mut Criterion) {
     c.bench_function("score_listing_100", |b| {
         b.iter(|| {
             for listing in &listings {
-                black_box(marketplace_server::services::search::score_listing(
+                black_box(oz_market_server::services::search::score_listing(
                     listing,
                     &query_terms,
                 ));
@@ -108,7 +108,7 @@ fn bench_score_listing_500(c: &mut Criterion) {
     c.bench_function("score_listing_500", |b| {
         b.iter(|| {
             for listing in &listings {
-                black_box(marketplace_server::services::search::score_listing(
+                black_box(oz_market_server::services::search::score_listing(
                     listing,
                     &query_terms,
                 ));
@@ -128,7 +128,7 @@ fn bench_score_listing_1000(c: &mut Criterion) {
     c.bench_function("score_listing_1000", |b| {
         b.iter(|| {
             for listing in &listings {
-                black_box(marketplace_server::services::search::score_listing(
+                black_box(oz_market_server::services::search::score_listing(
                     listing,
                     &query_terms,
                 ));
@@ -145,7 +145,7 @@ fn bench_compare_search_items_100x100(c: &mut Criterion) {
         b.iter(|| {
             for a in &listings {
                 for b in &listings {
-                    black_box(marketplace_server::services::search::compare_search_items(
+                    black_box(oz_market_server::services::search::compare_search_items(
                         a,
                         b,
                         &query_terms,
@@ -165,7 +165,7 @@ fn bench_compare_search_items_500x500(c: &mut Criterion) {
         b.iter(|| {
             for a in &listings {
                 for b in &listings {
-                    black_box(marketplace_server::services::search::compare_search_items(
+                    black_box(oz_market_server::services::search::compare_search_items(
                         a,
                         b,
                         &query_terms,
@@ -188,7 +188,7 @@ fn bench_compare_search_items_1000x1000(c: &mut Criterion) {
         b.iter(|| {
             for a in &listings {
                 for b in &listings {
-                    black_box(marketplace_server::services::search::compare_search_items(
+                    black_box(oz_market_server::services::search::compare_search_items(
                         a,
                         b,
                         &query_terms,
@@ -328,7 +328,9 @@ fn bench_normalize_search_terms(c: &mut Criterion) {
     c.bench_function("normalize_search_terms", |b| {
         b.iter(|| {
             for input in &inputs {
-                black_box(marketplace_server::services::search::normalize_search_terms(input));
+                black_box(oz_market_server::services::search::normalize_search_terms(
+                    input,
+                ));
             }
         })
     });

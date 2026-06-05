@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .connect(&database_url)
         .await?;
 
-    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    oz_market_server::bootstrap::apply_schema(&pool).await?;
     println!("schema bootstrap complete");
 
     Ok(())

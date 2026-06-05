@@ -14,5 +14,5 @@ $manifestPath = Resolve-Path (Join-Path $PSScriptRoot "..\..\Cargo.toml")
 Write-Host "Running phase5_bench against Postgres-backed storage..."
 Write-Host "Manifest: $($manifestPath.Path)"
 
-& cargo run --manifest-path $manifestPath.Path -p marketplace-server --bin phase5_bench
+& cargo run --manifest-path $manifestPath.Path -p oz-market-server --bin phase5_bench
 exit $LASTEXITCODE

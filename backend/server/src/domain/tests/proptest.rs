@@ -7,7 +7,7 @@
 
 use proptest::prelude::*;
 
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     Category, Condition, ListingLocation, ListingPayload, ListingStatus, ListingSummary,
     ListingType, Price, SearchSort,
 };

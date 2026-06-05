@@ -14,7 +14,7 @@ docker compose -p marketplace -f compose.postgres.yml up -d
 cargo run --bin bootstrap_schema
 
 # 3. Start the server
-cargo run -p marketplace-server
+cargo run -p oz-market-server
 # Binds to 127.0.0.1:3000 by default, override with MARKETPLACE_BIND
 ```
 

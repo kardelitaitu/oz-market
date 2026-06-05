@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use marketplace_api_contract::{AgentQueryRequest, AgentQueryResponse};
+use oz_market_api_contract::{AgentQueryRequest, AgentQueryResponse};
 
 use super::agent_dispatcher::{AgentDispatcher, DispatchError};
 use super::agent_metrics::AgentMetricsCollector;

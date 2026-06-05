@@ -101,7 +101,7 @@ The module includes 3 unit tests:
 
 Run tests:
 ```bash
-cd backend && cargo test --package marketplace-server ai_cache
+cd backend && cargo test --package oz-market-server ai_cache
 ```
 
 ## Future Enhancements

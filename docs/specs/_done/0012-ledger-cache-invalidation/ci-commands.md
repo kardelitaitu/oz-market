@@ -7,6 +7,6 @@ Execute these commands to verify implementation of this spec:
 cd backend && cargo check
 
 # Run http handler tests
-cargo test --package marketplace-server --lib http::handlers::tests::admin_credits
+cargo test --package oz-market-server --lib http::handlers::tests::admin_credits
 ```
 # Specs Documentation

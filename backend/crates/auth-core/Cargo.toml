@@ -1,5 +1,5 @@
 [package]
-name = "marketplace-auth-core"
+name = "oz-market-auth-core"
 version = "0.1.0"
 edition = "2021"
 publish = false

@@ -3,40 +3,40 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AcceptNegotiationRequest, AgentQueryRequest, AgentQueryResponse, ContactRevealResponse,
     CreateListingRequest, NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
     RequestContactRevealRequest, SearchRequest, SearchResponse, SubmitOfferRequest,
 };
-use marketplace_auth_core::Claims;
-use marketplace_server::app::MarketplaceApp;
-use marketplace_server::http::handlers::HandlerError;
-use marketplace_server::http::util::current_time_marker;
-use marketplace_server::repositories::audit_events::{
+use oz_market_auth_core::Claims;
+use oz_market_server::app::MarketplaceApp;
+use oz_market_server::http::handlers::HandlerError;
+use oz_market_server::http::util::current_time_marker;
+use oz_market_server::repositories::audit_events::{
     InMemoryAuditEventRepository, PostgresAuditEventRepository,
 };
-use marketplace_server::repositories::contact_reveals::{
+use oz_market_server::repositories::contact_reveals::{
     InMemoryContactRevealRepository, PostgresContactRevealRepository,
 };
-use marketplace_server::repositories::listings::{
+use oz_market_server::repositories::listings::{
     InMemoryListingRepository, PostgresListingRepository,
 };
-use marketplace_server::repositories::negotiations::PostgresNegotiationRepository;
-use marketplace_server::repositories::outbox_events::{
+use oz_market_server::repositories::negotiations::PostgresNegotiationRepository;
+use oz_market_server::repositories::outbox_events::{
     InMemoryOutboxEventRepository, PostgresOutboxEventRepository,
 };
-use marketplace_server::repositories::reservations::{
+use oz_market_server::repositories::reservations::{
     InMemoryReservationLeaseRepository, PostgresReservationLeaseRepository,
 };
-use marketplace_server::repositories::seller_accounts::{
+use oz_market_server::repositories::seller_accounts::{
     InMemorySellerAccountRepository, PostgresSellerAccountRepository,
 };
-use marketplace_server::repositories::{
+use oz_market_server::repositories::{
     ContactRevealRepository, IdempotencyKeyRepository, ListingRepository, RepositoryErrorKind,
     ReservationLeaseRepository, SellerAccountRepository,
 };
-use marketplace_server::services::idempotency::IdempotencyErrorKind;
-use marketplace_server::services::idempotency::InMemoryIdempotencyRepository;
+use oz_market_server::services::idempotency::IdempotencyErrorKind;
+use oz_market_server::services::idempotency::InMemoryIdempotencyRepository;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, tool::Parameters},
     model::{Content, ServerCapabilities, ServerInfo},
@@ -407,7 +407,7 @@ struct GetNegotiationStatusInput {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct SubmitOfferInput {
     negotiation_id: String,
-    offer_currency: marketplace_api_contract::CurrencyCode,
+    offer_currency: oz_market_api_contract::CurrencyCode,
     offer_amount: f64,
     idempotency_key: String,
 }
@@ -530,10 +530,10 @@ impl From<HandlerError> for McpToolError {
                 IdempotencyErrorKind::Storage => Self::internal(error.message),
             },
             HandlerError::Search(error) => match error {
-                marketplace_server::services::search::SearchError::Authz(error) => {
+                oz_market_server::services::search::SearchError::Authz(error) => {
                     Self::forbidden(error.to_string())
                 }
-                marketplace_server::services::search::SearchError::Storage(error) => {
+                oz_market_server::services::search::SearchError::Storage(error) => {
                     Self::internal(error.to_string())
                 }
             },
@@ -602,22 +602,22 @@ fn load_claims() -> Result<Claims, Box<dyn Error + Send + Sync>> {
             return Ok(Claims {
                 sub: "mcp-agent".to_string(),
                 roles: vec![
-                    marketplace_auth_core::Role::SellerListingWriter,
-                    marketplace_auth_core::Role::SellerNegotiator,
-                    marketplace_auth_core::Role::SellerContactRevealApprover,
-                    marketplace_auth_core::Role::BuyerSearcher,
-                    marketplace_auth_core::Role::BuyerNegotiator,
-                    marketplace_auth_core::Role::Admin,
+                    oz_market_auth_core::Role::SellerListingWriter,
+                    oz_market_auth_core::Role::SellerNegotiator,
+                    oz_market_auth_core::Role::SellerContactRevealApprover,
+                    oz_market_auth_core::Role::BuyerSearcher,
+                    oz_market_auth_core::Role::BuyerNegotiator,
+                    oz_market_auth_core::Role::Admin,
                 ],
                 scopes: vec![
-                    marketplace_auth_core::Scope::ListingCreate,
-                    marketplace_auth_core::Scope::ListingRead,
-                    marketplace_auth_core::Scope::ListingSearch,
-                    marketplace_auth_core::Scope::NegotiationCreate,
-                    marketplace_auth_core::Scope::NegotiationRead,
-                    marketplace_auth_core::Scope::NegotiationOfferSubmit,
-                    marketplace_auth_core::Scope::NegotiationRevealRequest,
-                    marketplace_auth_core::Scope::RevealApprove,
+                    oz_market_auth_core::Scope::ListingCreate,
+                    oz_market_auth_core::Scope::ListingRead,
+                    oz_market_auth_core::Scope::ListingSearch,
+                    oz_market_auth_core::Scope::NegotiationCreate,
+                    oz_market_auth_core::Scope::NegotiationRead,
+                    oz_market_auth_core::Scope::NegotiationOfferSubmit,
+                    oz_market_auth_core::Scope::NegotiationRevealRequest,
+                    oz_market_auth_core::Scope::RevealApprove,
                 ],
                 seller_account_id: Some("demo-seller".to_string()),
                 buyer_agent_id: Some("demo-buyer".to_string()),
@@ -686,7 +686,7 @@ fn build_in_memory_app() -> InMemoryApp {
         InMemoryReservationLeaseRepository::new(),
         InMemoryContactRevealRepository::new(),
         Arc::new(
-            marketplace_server::repositories::negotiations::InMemoryNegotiationRepository::new(),
+            oz_market_server::repositories::negotiations::InMemoryNegotiationRepository::new(),
         ),
         Arc::new(InMemoryAuditEventRepository::new()),
         Arc::new(InMemoryOutboxEventRepository::new()),
@@ -702,14 +702,14 @@ async fn build_postgres_app(
             std::env::var("DATABASE_MAX_CONNECTIONS")
                 .ok()
                 .and_then(|value| value.parse::<u32>().ok())
-                .unwrap_or(200),
+                .unwrap_or(50),
         )
         .connect(database_url)
         .await?;
 
-    let audit_repo: Arc<dyn marketplace_server::repositories::AuditEventRepository> =
+    let audit_repo: Arc<dyn oz_market_server::repositories::AuditEventRepository> =
         Arc::new(PostgresAuditEventRepository::new(pool.clone()));
-    let outbox_repo: Arc<dyn marketplace_server::repositories::OutboxEventRepository> =
+    let outbox_repo: Arc<dyn oz_market_server::repositories::OutboxEventRepository> =
         Arc::new(PostgresOutboxEventRepository::new(pool.clone()));
     let seller_account_repo: Arc<dyn SellerAccountRepository> =
         Arc::new(PostgresSellerAccountRepository::new(pool.clone()));
@@ -729,14 +729,14 @@ async fn build_postgres_app(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use marketplace_auth_core::{Role, Scope};
-    use marketplace_server::repositories::audit_events::InMemoryAuditEventRepository;
-    use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository;
-    use marketplace_server::repositories::listings::InMemoryListingRepository;
-    use marketplace_server::repositories::negotiations::InMemoryNegotiationRepository;
-    use marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository;
-    use marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository;
-    use marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository;
+    use oz_market_auth_core::{Role, Scope};
+    use oz_market_server::repositories::audit_events::InMemoryAuditEventRepository;
+    use oz_market_server::repositories::contact_reveals::InMemoryContactRevealRepository;
+    use oz_market_server::repositories::listings::InMemoryListingRepository;
+    use oz_market_server::repositories::negotiations::InMemoryNegotiationRepository;
+    use oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository;
+    use oz_market_server::repositories::reservations::InMemoryReservationLeaseRepository;
+    use oz_market_server::repositories::seller_accounts::InMemorySellerAccountRepository;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -1134,7 +1134,7 @@ mod tests {
 
     #[test]
     fn mcp_tool_error_from_repository_error_maps_variants() {
-        use marketplace_server::repositories::{RepositoryError, RepositoryErrorKind};
+        use oz_market_server::repositories::{RepositoryError, RepositoryErrorKind};
         let cases: Vec<(RepositoryErrorKind, &str)> = vec![
             (RepositoryErrorKind::Conflict, "conflict"),
             (RepositoryErrorKind::NotFound, "not_found"),
@@ -1151,7 +1151,7 @@ mod tests {
 
     #[test]
     fn mcp_tool_error_from_repository_storage_maps_to_internal() {
-        use marketplace_server::repositories::{RepositoryError, RepositoryErrorKind};
+        use oz_market_server::repositories::{RepositoryError, RepositoryErrorKind};
         let repo_err = RepositoryError::new(RepositoryErrorKind::Storage, "db down");
         let mcp_err: McpToolError = HandlerError::Repository(repo_err).into();
         assert_eq!(mcp_err.code, "internal_error");

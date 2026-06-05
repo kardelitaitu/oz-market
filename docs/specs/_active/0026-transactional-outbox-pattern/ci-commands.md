@@ -4,8 +4,8 @@ Execute these commands to verify implementation of this spec:
 
 ```bash
 # Compile outbox publisher service
-cd backend && cargo check --bin marketplace-server
+cd backend && cargo check --bin oz-market-server
 
 # Run outbox publisher unit tests
-cargo test --package marketplace-server --lib services::outbox_publisher
+cargo test --package oz-market-server --lib services::outbox_publisher
 ```

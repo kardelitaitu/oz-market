@@ -1,13 +1,13 @@
 [package]
-name = "marketplace-mcp"
+name = "oz-market-mcp"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [dependencies]
-marketplace-api-contract = { path = "../crates/api-contract" }
-marketplace-auth-core = { path = "../crates/auth-core" }
-marketplace-server = { path = "../server" }
+oz-market-api-contract = { path = "../crates/api-contract" }
+oz-market-auth-core = { path = "../crates/auth-core" }
+oz-market-server = { path = "../server" }
 
 # MCP framework
 rmcp = { version = "0.2", features = ["client", "transport-io"] }

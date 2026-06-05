@@ -6,11 +6,11 @@ use crate::services::idempotency::{
     IdempotencyAttempt, IdempotencyDecision, IdempotencyGuard, IdempotencyOperation,
 };
 use crate::services::search::SearchService;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     ApiErrorCode, ApiErrorDetail, ApiErrorResponse, CreateListingRequest, ListingSummary,
     SearchRequest, SearchResponse,
 };
-use marketplace_auth_core::Claims;
+use oz_market_auth_core::Claims;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
@@ -217,7 +217,7 @@ where
 pub async fn begin_open_negotiation<R>(
     guard: &IdempotencyGuard<R>,
     claims: &Claims,
-    request: &marketplace_api_contract::OpenNegotiationRequest,
+    request: &oz_market_api_contract::OpenNegotiationRequest,
     request_fingerprint: &str,
     now_rfc3339: &str,
 ) -> Result<IdempotencyDecision, HandlerError>

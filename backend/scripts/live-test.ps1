@@ -77,13 +77,13 @@ Write-Host "  BIND=$Bind"
 
 Write-Step "BUILD"
 if (-not $SkipBuild) {
-    Write-Host "  Building marketplace-server (release)..."
-    cargo build --release --package marketplace-server 2>&1 | Out-Null
+    Write-Host "  Building oz-market-server (release)..."
+    cargo build --release --package oz-market-server 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Host "  Build failed"; exit 1 }
     Write-Host "  Build OK"
 } else { Write-Host "  Skipping build" }
 
-$ServerBin = Join-Path (Get-Item $PSScriptRoot).Parent.Parent.FullName "backend" "target" "release" "marketplace-server.exe"
+$ServerBin = Join-Path (Get-Item $PSScriptRoot).Parent.Parent.FullName "backend" "target" "release" "oz-market-server.exe"
 if (-not (Test-Path $ServerBin)) { Write-Host "  Binary not found at $ServerBin"; exit 1 }
 
 Write-Step "START SERVER"

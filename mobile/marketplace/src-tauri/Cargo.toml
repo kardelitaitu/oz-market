@@ -1,5 +1,5 @@
 [package]
-name = "marketplace-mobile"
+name = "oz-market-mobile"
 version = "0.1.0"
 description = "Marketplace mobile app"
 edition = "2021"
@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["full"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
-marketplace-api-contract = { path = "../../../backend/crates/api-contract" }
+oz-market-api-contract = { path = "../../../backend/crates/api-contract" }
 rmp-serde = "1"
 
 

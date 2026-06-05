@@ -1,5 +1,5 @@
-use marketplace_api_contract::listing::ListingStatus;
-use marketplace_api_contract::negotiation::NegotiationStatus;
+use oz_market_api_contract::listing::ListingStatus;
+use oz_market_api_contract::negotiation::NegotiationStatus;
 
 // ---------------------------------------------------------------------------
 // Error type

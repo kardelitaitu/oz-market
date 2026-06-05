@@ -2,7 +2,7 @@
 
 **Platform:** Tauri v2 + Svelte 5 (Android + iOS from one codebase)  
 **API:** HTTP JSON against `docs/specs/openapi.yaml` (no MCP/stdio on mobile)  
-**Rust types:** Shared via `marketplace-api-contract` crate — zero codegen, zero drift  
+**Rust types:** Shared via `oz-market-api-contract` crate — zero codegen, zero drift  
 
 ---
 
@@ -18,7 +18,7 @@
 
 | Week | Deliverable | Depends On |
 |------|-------------|------------|
-| 1 | Tauri + Svelte project boots on Android emulator and iOS simulator | `marketplace-api-contract` published as path dependency |
+| 1 | Tauri + Svelte project boots on Android emulator and iOS simulator | `oz-market-api-contract` published as path dependency |
 | 1 | Svelte shell renders, Tauri IPC invoke bridge works | — |
 | 2 | `client/` module: typed reqwest wrappers for all 11 endpoints | M1 week 1 |
 | 2 | `auth/` module: login, keychain storage, claims header injection | M1 week 2 |
@@ -132,7 +132,7 @@ The mobile app depends on these backend features, all already implemented:
 | UI approach | WebView (not native widgets) | 2026-05-18 | Single codebase for both platforms, acceptable for API-driven app |
 | Auth header | `x-marketplace-claims` | inherited | Same as MCP and HTTP transports |
 | Event model | Polling (no push) | inherited | V1 constraint; push deferred to V2 |
-| Shared types | `marketplace-api-contract` crate | inherited | No codegen, zero drift, single source of truth |
+| Shared types | `oz-market-api-contract` crate | inherited | No codegen, zero drift, single source of truth |
 | Build target | Android 7+ / iOS 14+ | 2026-05-18 | Tauri v2 defaults, covers ~98% of devices |
 
 ---

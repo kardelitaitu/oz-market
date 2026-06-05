@@ -1,18 +1,18 @@
 use actix_web::test::{self, TestRequest};
 use actix_web::web::{self, Data};
 use actix_web::App;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     Category, Condition, CreateListingRequest, ListingLocation, ListingPayload, Price,
 };
-use marketplace_server::app::MarketplaceApp;
-use marketplace_server::repositories::audit_events::PostgresAuditEventRepository;
-use marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository;
-use marketplace_server::repositories::listings::PostgresListingRepository;
-use marketplace_server::repositories::negotiations::PostgresNegotiationRepository;
-use marketplace_server::repositories::outbox_events::PostgresOutboxEventRepository;
-use marketplace_server::repositories::reservations::PostgresReservationLeaseRepository;
-use marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository;
-use marketplace_server::repositories::{
+use oz_market_server::app::MarketplaceApp;
+use oz_market_server::repositories::audit_events::PostgresAuditEventRepository;
+use oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository;
+use oz_market_server::repositories::listings::PostgresListingRepository;
+use oz_market_server::repositories::negotiations::PostgresNegotiationRepository;
+use oz_market_server::repositories::outbox_events::PostgresOutboxEventRepository;
+use oz_market_server::repositories::reservations::PostgresReservationLeaseRepository;
+use oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository;
+use oz_market_server::repositories::{
     AuditEventRepository, OutboxEventRepository, PostgresIdempotencyKeyRepository,
     SellerAccountRepository,
 };
@@ -34,7 +34,7 @@ fn create_listing_request() -> CreateListingRequest {
         listing: ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "seller-1".to_string(),
-            listing_type: marketplace_api_contract::ListingType::Product,
+            listing_type: oz_market_api_contract::ListingType::Product,
             category: Some(Category::Laptop),
             title: "E2E Product".to_string(),
             condition: Some(Condition::Used),
@@ -123,18 +123,18 @@ async fn e2e_create_listing_open_negotiation_and_request_reveal(
             .app_data(Data::new(moka::future::Cache::<String, String>::new(100)))
             .service(web::scope("/v1/listings").route(
                 "",
-                web::post().to(marketplace_server::http::actix_handlers::create_listing),
+                web::post().to(oz_market_server::http::actix_handlers::create_listing),
             ))
             .service(
                 web::scope("/v1")
                     .route(
                         "/negotiations",
-                        web::post().to(marketplace_server::http::actix_handlers::open_negotiation),
+                        web::post().to(oz_market_server::http::actix_handlers::open_negotiation),
                     )
                     .route(
                         "/negotiations/{negotiation_id}/request-contact-reveal",
                         web::post()
-                            .to(marketplace_server::http::actix_handlers::request_contact_reveal),
+                            .to(oz_market_server::http::actix_handlers::request_contact_reveal),
                     ),
             ),
     )

@@ -1,9 +1,9 @@
 use crate::auth::AuthzError;
 use crate::repositories::{ListingRepository, RepositoryError};
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     ListingPayload, ListingSummary, SearchRequest, SearchResponse, SearchSort,
 };
-use marketplace_auth_core::Claims;
+use oz_market_auth_core::Claims;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -230,7 +230,7 @@ pub fn compare_search_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use marketplace_api_contract::*;
+    use oz_market_api_contract::*;
 
     fn make_listing(title: &str, price: f64, city: &str, country: &str) -> ListingSummary {
         ListingSummary {

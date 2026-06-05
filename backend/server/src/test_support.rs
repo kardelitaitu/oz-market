@@ -3,13 +3,13 @@ use crate::repositories::{
     AuditEventRepository, ListingRepository, NegotiationRepository, RepositoryError,
     RepositoryErrorKind,
 };
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AcceptNegotiationRequest, Category, Condition, CreateListingRequest, CreateListingResponse,
     CurrencyCode, ListingLocation, ListingPayload, ListingStatus, ListingSummary, ListingType,
     NegotiationResponse, NegotiationStatus, OpenNegotiationRequest, Price,
     RejectNegotiationRequest, SearchRequest, SearchResponse, ServiceType, SubmitOfferRequest,
 };
-use marketplace_auth_core::{Claims, Role, Scope};
+use oz_market_auth_core::{Claims, Role, Scope};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ impl TestListingBuilder {
 
     /// Attach shipping info.
     pub fn with_shipping(mut self, cost: Option<(f64, impl Into<CurrencyCode>)>) -> Self {
-        self.payload.shipping_info = Some(marketplace_api_contract::ShippingInfo {
+        self.payload.shipping_info = Some(oz_market_api_contract::ShippingInfo {
             local_pickup: true,
             shipping_available: true,
             shipping_cost: cost.map(|(amt, cur)| Price {

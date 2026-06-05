@@ -1,6 +1,6 @@
 use crate::repositories::contact_reveals::InMemoryContactRevealRepository;
 use crate::repositories::{ContactRevealRepository, RepositoryError};
-use marketplace_api_contract::{ContactRevealResponse, RequestContactRevealRequest};
+use oz_market_api_contract::{ContactRevealResponse, RequestContactRevealRequest};
 use std::sync::Arc;
 
 pub struct ContactRevealService<R> {
@@ -82,7 +82,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             created.reveal_status,
-            marketplace_api_contract::ContactRevealStatus::Pending
+            oz_market_api_contract::ContactRevealStatus::Pending
         );
 
         let approved = service
@@ -91,7 +91,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             approved.reveal_status,
-            marketplace_api_contract::ContactRevealStatus::Approved
+            oz_market_api_contract::ContactRevealStatus::Approved
         );
     }
 

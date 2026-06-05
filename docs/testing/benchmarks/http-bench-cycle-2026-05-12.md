@@ -6,7 +6,7 @@
 - Target: `http://127.0.0.1:3000`
 - Requests per level: `5000` for `public` and `rotating`, `2000` for `fixed`
 - Concurrency levels: `100,200,500`
-- Server: `backend/target/release/marketplace-server.exe`
+- Server: `backend/target/release/oz-market-server.exe`
 - DB: local Postgres (`compose.postgres.yml`)
 
 ## Results

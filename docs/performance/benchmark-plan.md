@@ -9,7 +9,7 @@ export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketpla
 
 echo "=== Baseline Benchmark (321 ops/s target) ==="
 cd backend
-cargo run --package marketplace-server --bin phase5_bench
+cargo run --package oz-market-server --bin phase5_bench
 ```
 
 **Expected Output**:
@@ -31,7 +31,7 @@ export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketpla
 
 echo "=== After Milestone 1: Actix + Moka (Target: 5,000 ops/s) ==="
 cd backend
-cargo run --package marketplace-server --bin phase5_bench
+cargo run --package oz-market-server --bin phase5_bench
 ```
 
 **Expected Output**:
@@ -53,7 +53,7 @@ export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketpla
 
 echo "=== After Milestone 2: Zero-Copy + Pool (Target: 10,000 ops/s) ==="
 cd backend
-cargo run --package marketplace-server --bin phase5_bench
+cargo run --package oz-market-server --bin phase5_bench
 ```
 
 **Expected Output**:
@@ -75,7 +75,7 @@ export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketpla
 
 echo "=== Final Benchmark (Target: 20,000+ ops/s) ==="
 cd backend
-cargo run --package marketplace-server --bin phase5_bench
+cargo run --package oz-market-server --bin phase5_bench
 ```
 
 **Expected Output**:
@@ -99,7 +99,7 @@ echo "=== Quick Benchmark (Verify 321 ops/s baseline) ==="
 cd backend
 for i in {1..3}; do
     echo "--- Run $i ---"
-    cargo run --package marketplace-server --bin phase5_bench 2>&1 | tail -5
+    cargo run --package oz-market-server --bin phase5_bench 2>&1 | tail -5
     sleep 60  # Cool down
 done
 ```
@@ -115,7 +115,7 @@ cd backend
 # Run 5 times and save
 for i in {1..5}; do
     export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
-    cargo run --package marketplace-server --bin phase5_bench >> performance_log.txt
+    cargo run --package oz-market-server --bin phase5_bench >> performance_log.txt
     sleep 60  # Cool down between runs
 done
 
@@ -165,7 +165,7 @@ jobs:
         run: |
           export DATABASE_URL="postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable"
           cd backend
-          cargo run --package marketplace-server --bin phase5_bench > benchmark_output.txt
+          cargo run --package oz-market-server --bin phase5_bench > benchmark_output.txt
       - name: Check performance
         run: |
           # Parse benchmark_output.txt

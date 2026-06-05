@@ -19,13 +19,13 @@ use crate::services::rate_limiter::{
     OPEN_NEGOTIATION_RATE_WINDOW_SECS, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_SECS,
 };
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
-use marketplace_api_contract::{
+use moka::future::Cache;
+use oz_market_api_contract::{
     AcceptNegotiationRequest, AgentQueryRequest, CreateListingRequest, CreateReviewRequest,
     NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
     RequestContactRevealRequest, ReviewCreateResponse, SearchRequest, SubmitOfferRequest,
 };
-use marketplace_auth_core::{Claims, Role};
-use moka::future::Cache;
+use oz_market_auth_core::{Claims, Role};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 #[cfg_attr(not(test), allow(unused_imports))]
@@ -372,22 +372,22 @@ fn api_key_to_claims(req: &HttpRequest) -> Option<Claims> {
         Some(Claims {
             sub: "demo-agent".to_string(),
             roles: vec![
-                marketplace_auth_core::Role::SellerListingWriter,
-                marketplace_auth_core::Role::SellerNegotiator,
-                marketplace_auth_core::Role::SellerContactRevealApprover,
-                marketplace_auth_core::Role::BuyerSearcher,
-                marketplace_auth_core::Role::BuyerNegotiator,
-                marketplace_auth_core::Role::Admin,
+                oz_market_auth_core::Role::SellerListingWriter,
+                oz_market_auth_core::Role::SellerNegotiator,
+                oz_market_auth_core::Role::SellerContactRevealApprover,
+                oz_market_auth_core::Role::BuyerSearcher,
+                oz_market_auth_core::Role::BuyerNegotiator,
+                oz_market_auth_core::Role::Admin,
             ],
             scopes: vec![
-                marketplace_auth_core::Scope::ListingCreate,
-                marketplace_auth_core::Scope::ListingRead,
-                marketplace_auth_core::Scope::ListingSearch,
-                marketplace_auth_core::Scope::NegotiationCreate,
-                marketplace_auth_core::Scope::NegotiationRead,
-                marketplace_auth_core::Scope::NegotiationOfferSubmit,
-                marketplace_auth_core::Scope::NegotiationRevealRequest,
-                marketplace_auth_core::Scope::RevealApprove,
+                oz_market_auth_core::Scope::ListingCreate,
+                oz_market_auth_core::Scope::ListingRead,
+                oz_market_auth_core::Scope::ListingSearch,
+                oz_market_auth_core::Scope::NegotiationCreate,
+                oz_market_auth_core::Scope::NegotiationRead,
+                oz_market_auth_core::Scope::NegotiationOfferSubmit,
+                oz_market_auth_core::Scope::NegotiationRevealRequest,
+                oz_market_auth_core::Scope::RevealApprove,
             ],
             seller_account_id: Some("demo-seller".to_string()),
             buyer_agent_id: Some("demo-buyer".to_string()),
@@ -2301,7 +2301,7 @@ mod tests {
 
     #[test]
     fn search_cache_key_distinguishes_every_filter_field() {
-        use marketplace_api_contract::{
+        use oz_market_api_contract::{
             Category, Condition, ListingStatus, ListingType, PropertySubType,
             PropertyTransactionType, SearchLocationFilter, SearchPriceFilter, SearchSort,
             ServiceType,
@@ -2691,7 +2691,7 @@ mod tests {
         let mut claims = claims.clone();
         claims
             .scopes
-            .push(marketplace_auth_core::Scope::NegotiationOfferSubmit);
+            .push(oz_market_auth_core::Scope::NegotiationOfferSubmit);
         (
             "x-marketplace-claims",
             serde_json::to_string(&claims).unwrap(),

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 const SERVICE_NAME: &str = "com.ozmarket.mobile";
 const CLAIMS_KEY: &str = "marketplace-claims";
 
-/// Mirrors marketplace-auth-core Claims struct to avoid pulling in JWT deps.
+/// Mirrors oz-market-auth-core Claims struct to avoid pulling in JWT deps.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Claims {
     pub sub: String,

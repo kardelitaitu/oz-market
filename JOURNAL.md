@@ -1951,5 +1951,26 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 - **Hardcoded backend URL**: Replaced 3 occurrences of 'http://localhost:3000' in simulator.svelte.js with BACKEND_URL variable. Defaults to http://localhost:3000 but overridable via window.__BACKEND_URL.
 - **SSE benchmark race condition**: Moved connection_barrier.wait().await in sse_bench.rs to after bytes_stream() is called.
+
 - **Frontend CI gate**: Added website build + Playwright E2E step to check.ps1 (npm run build then npm run test:e2e).
 - **Validation**: cargo check, fmt, clippy all pass; frontend npm run build compiles clean.
+
+## 2026-06-06 05:26
+
+- **Renamed all crates/packages from `marketplace-*` to `oz-market-*`**: Updated 43 Rust files (crate imports), 8 Cargo.toml files (package names + dependency refs), 4 package.json/package-lock.json files, 6 PS1 scripts, 2 CI workflow files, Dockerfile, docker-compose.yml, and ~30 docs files.
+  - `marketplace-server` → `oz-market-server`
+  - `marketplace-api-contract` → `oz-market-api-contract`
+  - `marketplace-auth-core` → `oz-market-auth-core`
+  - `marketplace-mcp` → `oz-market-mcp`
+  - `marketplace-mobile` → `oz-market-mobile`
+  - `website` → `oz-market-website`
+- **Preserved protocol headers**: `x-marketplace-claims`, `x-marketplace-api-key`, `MARKETPLACE_API_KEY`, `MARKETPLACE_MCP_*` env vars, and `marketplace-claims` keystore key left unchanged (public API / data migration concerns).
+- **Verification**: `cargo check` (all targets), `cargo clippy -- -D warnings`, and website `npm run build` all pass cleanly.
+
+## 2026-06-06 05:30 — Deploy configuration optimization for free tiers
+
+- **Database Connection Pool Capping**: Lowered the default database connection pool size fallback from `200` to `50` in both Actix HTTP runtime (`backend/server/src/http/actix_runtime.rs`) and MCP sidecar runtime (`backend/mcp/src/runtime.rs`). This is a safer default limit for standard testing environments.
+- **Free Tier Docker Preset**: Added `ENV DATABASE_MAX_CONNECTIONS=15` to the project `Dockerfile` to automatically cap connections when deploying as a container on free cloud hosts (like Render connected to Supabase/Neon), staying well within the free tier connection limits (~60).
+- **Upgraded Rust Compiler in Docker**: Upgraded the builder stage in the `Dockerfile` from `rust:1.85-slim-bookworm` to `rust:1.94-slim-bookworm` to support newer dependency requirement updates (e.g. `time`, `icu_provider`).
+- **Deployment Guide & Env Examples**: Updated `.env.example` to recommend a connection pool limit of 10-15 for free database hosts, and added `DATABASE_MAX_CONNECTIONS` to the configuration reference table in `docs/deploy.md` to document the option clearly.
+- **Validation**: Ran `check.ps1` with all check tests passing successfully.

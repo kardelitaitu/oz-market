@@ -151,13 +151,13 @@ let pool = deadpool_postgres::Config {
    ```bash
    # In WSL2 terminal:
    cd /mnt/c/My\ Script/project-the-marketplace
-   cargo flamegraph --package marketplace-server --bin phase5_bench
+   cargo flamegraph --package oz-market-server --bin phase5_bench
    ```
 
 2. **Use `cargo-profiler`** (Windows-native):
    ```bash
    cargo install cargo-profiler
-   cargo profiler record --package marketplace-server --bin phase5_bench
+   cargo profiler record --package oz-market-server --bin phase5_bench
    ```
 
 3. **Run on Linux CI** (GitHub Actions):
@@ -166,7 +166,7 @@ let pool = deadpool_postgres::Config {
      profile:
        runs-on: ubuntu-latest
        steps:
-         - run: cargo flamegraph --package marketplace-server --bin phase5_bench
+         - run: cargo flamegraph --package oz-market-server --bin phase5_bench
    ```
 
 ---

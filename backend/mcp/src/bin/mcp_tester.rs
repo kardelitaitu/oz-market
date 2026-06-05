@@ -18,9 +18,9 @@ struct LaunchConfig {
 impl LaunchConfig {
     fn resolve() -> Result<Self, Box<dyn std::error::Error>> {
         let command =
-            std::env::var("MARKETPLACE_MCP_COMMAND").unwrap_or_else(|_| "marketplace-mcp".into());
+            std::env::var("MARKETPLACE_MCP_COMMAND").unwrap_or_else(|_| "oz-market-mcp".into());
         let claims_json = std::env::var("MARKETPLACE_MCP_CLAIMS_JSON").unwrap_or_else(|_| {
-            marketplace_mcp::dev_launcher_claims_json()
+            oz_market_mcp::dev_launcher_claims_json()
                 .expect("failed to serialize built-in dev launcher claims")
         });
         let database_url = std::env::var("MARKETPLACE_MCP_DATABASE_URL")
@@ -780,7 +780,7 @@ mod tests {
     #[test]
     fn launch_config_env_pairs_include_claims_and_optional_database_url() {
         let config = LaunchConfig {
-            command: "marketplace-mcp".to_string(),
+            command: "oz-market-mcp".to_string(),
             claims_json: "{\"sub\":\"agent\"}".to_string(),
             database_url: Some("postgres://example".to_string()),
         };
@@ -797,7 +797,7 @@ mod tests {
     #[test]
     fn launch_config_env_pairs_skip_database_url_when_not_requested() {
         let config = LaunchConfig {
-            command: "marketplace-mcp".to_string(),
+            command: "oz-market-mcp".to_string(),
             claims_json: "{\"sub\":\"agent\"}".to_string(),
             database_url: None,
         };

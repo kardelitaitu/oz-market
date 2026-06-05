@@ -1,16 +1,14 @@
-use marketplace_api_contract::{
-    ListingType, PropertySubType, PropertyTransactionType, ServiceType,
-};
-use marketplace_auth_core::{Claims, Role, Scope};
-use marketplace_server::app::MarketplaceApp;
-use marketplace_server::repositories::audit_events::InMemoryAuditEventRepository;
-use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository;
-use marketplace_server::repositories::listings::InMemoryListingRepository;
-use marketplace_server::repositories::negotiations::InMemoryNegotiationRepository;
-use marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository;
-use marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository;
-use marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository;
-use marketplace_server::services::idempotency::InMemoryIdempotencyRepository;
+use oz_market_api_contract::{ListingType, PropertySubType, PropertyTransactionType, ServiceType};
+use oz_market_auth_core::{Claims, Role, Scope};
+use oz_market_server::app::MarketplaceApp;
+use oz_market_server::repositories::audit_events::InMemoryAuditEventRepository;
+use oz_market_server::repositories::contact_reveals::InMemoryContactRevealRepository;
+use oz_market_server::repositories::listings::InMemoryListingRepository;
+use oz_market_server::repositories::negotiations::InMemoryNegotiationRepository;
+use oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository;
+use oz_market_server::repositories::reservations::InMemoryReservationLeaseRepository;
+use oz_market_server::repositories::seller_accounts::InMemorySellerAccountRepository;
+use oz_market_server::services::idempotency::InMemoryIdempotencyRepository;
 
 type TestApp = MarketplaceApp<
     InMemoryListingRepository,
@@ -45,20 +43,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Test creating different listing types
-    let product_request = marketplace_api_contract::CreateListingRequest {
+    let product_request = oz_market_api_contract::CreateListingRequest {
         idempotency_key: "test-product".to_string(),
-        listing: marketplace_api_contract::ListingPayload {
+        listing: oz_market_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "test-seller".to_string(),
             listing_type: ListingType::Product,
-            category: Some(marketplace_api_contract::Category::Laptop),
+            category: Some(oz_market_api_contract::Category::Laptop),
             title: "Test Laptop".to_string(),
-            condition: Some(marketplace_api_contract::Condition::Used),
-            price: marketplace_api_contract::Price {
+            condition: Some(oz_market_api_contract::Condition::Used),
+            price: oz_market_api_contract::Price {
                 currency: "USD".to_string(),
                 amount: 999.99,
             },
-            location: marketplace_api_contract::ListingLocation {
+            location: oz_market_api_contract::ListingLocation {
                 country_code: "US".to_string(),
                 country_name: "United States".to_string(),
                 city: "Test City".to_string(),
@@ -71,10 +69,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             attributes: Some(serde_json::json!({"brand": "Test"})),
             sku: Some("TEST-001".to_string()),
             quantity: Some(1),
-            shipping_info: Some(marketplace_api_contract::ShippingInfo {
+            shipping_info: Some(oz_market_api_contract::ShippingInfo {
                 local_pickup: true,
                 shipping_available: true,
-                shipping_cost: Some(marketplace_api_contract::Price {
+                shipping_cost: Some(oz_market_api_contract::Price {
                     currency: "USD".to_string(),
                     amount: 10.0,
                 }),
@@ -98,20 +96,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    let service_request = marketplace_api_contract::CreateListingRequest {
+    let service_request = oz_market_api_contract::CreateListingRequest {
         idempotency_key: "test-service".to_string(),
-        listing: marketplace_api_contract::ListingPayload {
+        listing: oz_market_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "test-seller".to_string(),
             listing_type: ListingType::Service,
             category: None,
             title: "Test Tutoring Service".to_string(),
             condition: None,
-            price: marketplace_api_contract::Price {
+            price: oz_market_api_contract::Price {
                 currency: "USD".to_string(),
                 amount: 25.0,
             },
-            location: marketplace_api_contract::ListingLocation {
+            location: oz_market_api_contract::ListingLocation {
                 country_code: "US".to_string(),
                 country_name: "United States".to_string(),
                 city: "Test City".to_string(),
@@ -146,20 +144,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    let property_request = marketplace_api_contract::CreateListingRequest {
+    let property_request = oz_market_api_contract::CreateListingRequest {
         idempotency_key: "test-property".to_string(),
-        listing: marketplace_api_contract::ListingPayload {
+        listing: oz_market_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: "test-seller".to_string(),
             listing_type: ListingType::Property,
             category: None,
             title: "Test Apartment".to_string(),
             condition: None,
-            price: marketplace_api_contract::Price {
+            price: oz_market_api_contract::Price {
                 currency: "USD".to_string(),
                 amount: 1200.0,
             },
-            location: marketplace_api_contract::ListingLocation {
+            location: oz_market_api_contract::ListingLocation {
                 country_code: "US".to_string(),
                 country_name: "United States".to_string(),
                 city: "Test City".to_string(),

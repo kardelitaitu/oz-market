@@ -4,7 +4,7 @@ This folder contains the marketplace MCP docs for the desktop-agent surface.
 
 ## Current Direction
 
-- Desktop agents use the separate `marketplace-mcp` stdio sidecar.
+- Desktop agents use the separate `oz-market-mcp` stdio sidecar.
 - Mobile clients use the same backend contract through the app or HTTP adapter, not stdio MCP.
 - Authz, quotas, idempotency, and reservation checks stay in the shared server layer.
 

@@ -44,7 +44,7 @@ sudo -u postgres psql -c "CREATE DATABASE marketplace OWNER marketplace;"
 ```bash
 # Build the release binary (from project root)
 cd backend
-cargo build --release --package marketplace-server
+cargo build --release --package oz-market-server
 
 # Set environment
 export DATABASE_URL=postgres://marketplace:your-password@localhost:5432/marketplace
@@ -52,7 +52,7 @@ export MARKETPLACE_API_KEY=your-demo-key
 export MARKETPLACE_BIND=0.0.0.0:3000
 
 # Run (migrations auto-apply)
-./target/release/marketplace-server
+./target/release/oz-market-server
 ```
 
 ## Configuration Reference
@@ -60,6 +60,7 @@ export MARKETPLACE_BIND=0.0.0.0:3000
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | (required) | PostgreSQL connection string |
+| `DATABASE_MAX_CONNECTIONS` | `50` | Maximum Postgres connection pool size. Lower to `10` or `15` for free DB tiers. |
 | `MARKETPLACE_BIND` | `127.0.0.1:3000` | Server listen address |
 | `MARKETPLACE_API_KEY` | (none) | If set, enables API key auth via `x-marketplace-api-key` header |
 | `MARKETPLACE_CACHE_ENABLED` | `true` | Enable in-memory caching (`1`/`true` = enabled) |
@@ -245,10 +246,10 @@ The MCP server lets desktop AI agents (Claude Desktop, Cursor, etc.) interact wi
 ```bash
 # Build the MCP binary
 cd backend
-cargo build --release --package marketplace-mcp
+cargo build --release --package oz-market-mcp
 
 # Run with dev claims (in-memory storage, ephemeral)
-MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1 ./target/release/marketplace-mcp
+MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1 ./target/release/oz-market-mcp
 ```
 
 ### Running against the deployed database
@@ -256,7 +257,7 @@ MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1 ./target/release/marketplace-mcp
 ```bash
 MARKETPLACE_MCP_DATABASE_URL=postgres://marketplace:password@your-server:5432/marketplace \
   MARKETPLACE_API_KEY=your-key \
-  ./target/release/marketplace-mcp
+  ./target/release/oz-market-mcp
 ```
 
 The MCP server supports the same `MARKETPLACE_API_KEY` env var as the HTTP server. Falls back to `MARKETPLACE_MCP_CLAIMS_JSON` or `MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1` for local dev.
@@ -269,7 +270,7 @@ Add to your Claude Desktop configuration (`settings.json`):
 {
   "mcpServers": {
     "marketplace": {
-      "command": "/path/to/marketplace-mcp",
+      "command": "/path/to/oz-market-mcp",
       "env": {
         "MARKETPLACE_MCP_DATABASE_URL": "postgres://marketplace:password@your-server:5432/marketplace",
         "MARKETPLACE_API_KEY": "your-key"
@@ -299,7 +300,7 @@ Add to your Claude Desktop configuration (`settings.json`):
 ```bash
 # Run the MCP smoke test suite
 cd backend
-MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1 cargo run --release --package marketplace-mcp --bin mcp_tester
+MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1 cargo run --release --package oz-market-mcp --bin mcp_tester
 ```
 
 Expected output: all 15 tests pass covering the full agent transaction lifecycle (initialize, list tools, create listing, search, get listing, open negotiation, submit offer, accept/reject negotiation, request/approve contact reveal, etc.).

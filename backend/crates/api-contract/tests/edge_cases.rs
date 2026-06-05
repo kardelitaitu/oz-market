@@ -2,7 +2,7 @@
 //! Pinned here so future spec changes that touch the wire format show up as
 //! failing tests rather than silent regressions.
 
-use marketplace_api_contract::*;
+use oz_market_api_contract::*;
 
 // ---------------------------------------------------------------------
 // Enum variant coverage

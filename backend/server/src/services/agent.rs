@@ -1,9 +1,9 @@
 use crate::repositories::ListingRepository;
 use crate::services::search::SearchService;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AgentAction, AgentQueryRequest, AgentQueryResponse, SearchRequest, SearchResponse,
 };
-use marketplace_auth_core::Claims;
+use oz_market_auth_core::Claims;
 
 #[derive(Debug)]
 pub enum AgentError {
@@ -45,7 +45,7 @@ where
         let search_request = parse_query(&request.query)?;
         let mut search_response = SearchResponse {
             items: Vec::new(),
-            applied_sort_by: marketplace_api_contract::SearchSort::Relevance,
+            applied_sort_by: oz_market_api_contract::SearchSort::Relevance,
             next_cursor: None,
         };
 
@@ -102,7 +102,7 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
         || lower.contains("real estate")
         || lower.contains("rent")
     {
-        Some(marketplace_api_contract::ListingType::Property)
+        Some(oz_market_api_contract::ListingType::Property)
     } else if lower.contains("service")
         || lower.contains("consulting")
         || lower.contains("repair")
@@ -111,7 +111,7 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
         || lower.contains("cleaning")
         || lower.contains("tutoring")
     {
-        Some(marketplace_api_contract::ListingType::Service)
+        Some(oz_market_api_contract::ListingType::Service)
     } else if lower.contains("product")
         || lower.contains("laptop")
         || lower.contains("phone")
@@ -126,7 +126,7 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
         || lower.contains("monitor")
         || lower.contains("desktop")
     {
-        Some(marketplace_api_contract::ListingType::Product)
+        Some(oz_market_api_contract::ListingType::Product)
     } else {
         None
     };
@@ -153,7 +153,7 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
     }
 
     let price_filter = max_price.or(min_price).or(exact_price).map(|_| {
-        marketplace_api_contract::SearchPriceFilter {
+        oz_market_api_contract::SearchPriceFilter {
             currency: Some("USD".to_string()),
             min_amount: min_price,
             max_amount: max_price.or(exact_price),
@@ -177,9 +177,9 @@ fn parse_query(query: &str) -> Result<Option<SearchRequest>, AgentError> {
         price: price_filter,
         location,
         listing_type,
-        status: Some(marketplace_api_contract::ListingStatus::Active),
+        status: Some(oz_market_api_contract::ListingStatus::Active),
         // Defaults for rest
-        sort_by: marketplace_api_contract::SearchSort::Relevance,
+        sort_by: oz_market_api_contract::SearchSort::Relevance,
         limit: Some(10),
         ..SearchRequest::default()
     }))
@@ -205,14 +205,14 @@ fn extract_amount(text: &str, prefixes: &[&str]) -> Option<f64> {
     None
 }
 
-fn detect_location(text: &str) -> Option<marketplace_api_contract::SearchLocationFilter> {
+fn detect_location(text: &str) -> Option<oz_market_api_contract::SearchLocationFilter> {
     let keywords = ["in ", "near ", "around "];
     for kw in &keywords {
         if let Some(idx) = text.find(kw) {
             let after = text[idx + kw.len()..].trim().to_string();
             if !after.is_empty() && after.len() < 50 {
                 // Simple: treat everything after "in" as a city name
-                return Some(marketplace_api_contract::SearchLocationFilter {
+                return Some(oz_market_api_contract::SearchLocationFilter {
                     country_code: None,
                     city: Some(after.split_whitespace().next().unwrap_or("").to_string()),
                 });
@@ -222,8 +222,8 @@ fn detect_location(text: &str) -> Option<marketplace_api_contract::SearchLocatio
     None
 }
 
-fn detect_category(text: &str) -> Option<marketplace_api_contract::Category> {
-    use marketplace_api_contract::Category;
+fn detect_category(text: &str) -> Option<oz_market_api_contract::Category> {
+    use oz_market_api_contract::Category;
     let lower = &text.to_lowercase();
     if lower.contains("laptop")
         || lower.contains("notebook")
@@ -302,8 +302,8 @@ fn detect_category(text: &str) -> Option<marketplace_api_contract::Category> {
     }
 }
 
-fn detect_condition(text: &str) -> Option<marketplace_api_contract::Condition> {
-    use marketplace_api_contract::Condition;
+fn detect_condition(text: &str) -> Option<oz_market_api_contract::Condition> {
+    use oz_market_api_contract::Condition;
     let lower = text.to_lowercase();
     if lower.contains("new") && !lower.contains("new york") && !lower.contains("new jersey") {
         Some(Condition::New)

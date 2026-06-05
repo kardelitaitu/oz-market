@@ -7,5 +7,5 @@ Execute these commands to verify implementation of this spec:
 cd backend && cargo check --all-targets
 
 # Execute server tests
-cargo test --package marketplace-server
+cargo test --package oz-market-server
 ```

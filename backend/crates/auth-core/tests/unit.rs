@@ -1,4 +1,4 @@
-use marketplace_auth_core::{Action, Claims, OwnershipContext, Role, Scope};
+use oz_market_auth_core::{Action, Claims, OwnershipContext, Role, Scope};
 
 #[test]
 fn claims_has_scope() {
@@ -86,7 +86,7 @@ fn claims_no_expiry() {
 #[test]
 fn action_to_scopes_mapping() {
     // Test that each action maps to expected scope(s)
-    use marketplace_auth_core::action_to_scopes;
+    use oz_market_auth_core::action_to_scopes;
 
     let create_scopes = action_to_scopes(Action::CreateListing);
     assert_eq!(create_scopes, vec![Scope::ListingCreate]);
@@ -131,7 +131,7 @@ fn ownership_context_comparison() {
 #[test]
 fn extract_token_valid_bearer() {
     let header = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiJ9";
-    let result = marketplace_auth_core::extract_token(header);
+    let result = oz_market_auth_core::extract_token(header);
     assert!(result.is_ok());
     assert_eq!(
         result.unwrap(),
@@ -142,22 +142,22 @@ fn extract_token_valid_bearer() {
 #[test]
 fn extract_token_invalid_format() {
     let header = "Token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiJ9";
-    let result = marketplace_auth_core::extract_token(header);
+    let result = oz_market_auth_core::extract_token(header);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        marketplace_auth_core::AuthError::MissingAuthHeader
+        oz_market_auth_core::AuthError::MissingAuthHeader
     ));
 }
 
 #[test]
 fn extract_token_empty() {
     let header = "Bearer";
-    let result = marketplace_auth_core::extract_token(header);
+    let result = oz_market_auth_core::extract_token(header);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
-        marketplace_auth_core::AuthError::MissingAuthHeader
+        oz_market_auth_core::AuthError::MissingAuthHeader
     ));
 }
 
@@ -176,12 +176,10 @@ fn authorize_allows_when_ownership_is_none_and_scope_present() {
         hardware_id: None,
         exp: None,
     };
-    assert!(marketplace_auth_core::authorize(
-        &claims,
-        Action::CreateListing,
-        OwnershipContext::None
-    )
-    .is_ok());
+    assert!(
+        oz_market_auth_core::authorize(&claims, Action::CreateListing, OwnershipContext::None)
+            .is_ok()
+    );
 }
 
 #[test]
@@ -195,7 +193,7 @@ fn authorize_allows_matching_seller_owner() {
         hardware_id: None,
         exp: None,
     };
-    assert!(marketplace_auth_core::authorize(
+    assert!(oz_market_auth_core::authorize(
         &claims,
         Action::CreateListing,
         OwnershipContext::SellerOwned {
@@ -217,14 +215,14 @@ fn authorize_rejects_seller_owned_when_claims_have_no_seller_id() {
         exp: None,
     };
     assert!(matches!(
-        marketplace_auth_core::authorize(
+        oz_market_auth_core::authorize(
             &claims,
             Action::CreateListing,
             OwnershipContext::SellerOwned {
                 seller_account_id: "seller_42".to_string(),
             }
         ),
-        Err(marketplace_auth_core::AuthError::OwnershipFailed)
+        Err(oz_market_auth_core::AuthError::OwnershipFailed)
     ));
 }
 
@@ -240,7 +238,7 @@ fn authorize_rejects_negotiation_participant_when_neither_matches() {
         exp: None,
     };
     assert!(matches!(
-        marketplace_auth_core::authorize(
+        oz_market_auth_core::authorize(
             &claims,
             Action::OpenNegotiation,
             OwnershipContext::NegotiationParticipant {
@@ -248,7 +246,7 @@ fn authorize_rejects_negotiation_participant_when_neither_matches() {
                 buyer_agent_id: "buyer_B".to_string(),
             }
         ),
-        Err(marketplace_auth_core::AuthError::OwnershipFailed)
+        Err(oz_market_auth_core::AuthError::OwnershipFailed)
     ));
 }
 
@@ -264,14 +262,14 @@ fn authorize_rejects_buyer_owned_when_claims_have_no_buyer_id() {
         exp: None,
     };
     assert!(matches!(
-        marketplace_auth_core::authorize(
+        oz_market_auth_core::authorize(
             &claims,
             Action::OpenNegotiation,
             OwnershipContext::BuyerOwned {
                 buyer_agent_id: "buyer_42".to_string(),
             }
         ),
-        Err(marketplace_auth_core::AuthError::OwnershipFailed)
+        Err(oz_market_auth_core::AuthError::OwnershipFailed)
     ));
 }
 
@@ -287,8 +285,8 @@ fn authorize_with_empty_scopes_rejects_any_action() {
         exp: None,
     };
     assert!(matches!(
-        marketplace_auth_core::authorize(&claims, Action::SearchListings, OwnershipContext::None),
-        Err(marketplace_auth_core::AuthError::InsufficientScope(_))
+        oz_market_auth_core::authorize(&claims, Action::SearchListings, OwnershipContext::None),
+        Err(oz_market_auth_core::AuthError::InsufficientScope(_))
     ));
 }
 
@@ -313,19 +311,19 @@ fn role_serde_roundtrip_snake_case() {
 
 #[test]
 fn validate_token_rejects_garbage_string() {
-    let result = marketplace_auth_core::validate_token("not.a.valid.jwt", b"secret");
+    let result = oz_market_auth_core::validate_token("not.a.valid.jwt", b"secret");
     assert!(matches!(
         result,
-        Err(marketplace_auth_core::AuthError::InvalidToken(_))
+        Err(oz_market_auth_core::AuthError::InvalidToken(_))
     ));
 }
 
 #[test]
 fn validate_token_rejects_empty_string() {
-    let result = marketplace_auth_core::validate_token("", b"secret");
+    let result = oz_market_auth_core::validate_token("", b"secret");
     assert!(matches!(
         result,
-        Err(marketplace_auth_core::AuthError::InvalidToken(_))
+        Err(oz_market_auth_core::AuthError::InvalidToken(_))
     ));
 }
 
@@ -344,10 +342,10 @@ fn validate_token_rejects_wrong_signature() {
         &EncodingKey::from_secret(b"secret-A"),
     )
     .unwrap();
-    let result = marketplace_auth_core::validate_token(&token, b"secret-B");
+    let result = oz_market_auth_core::validate_token(&token, b"secret-B");
     assert!(matches!(
         result,
-        Err(marketplace_auth_core::AuthError::InvalidToken(_))
+        Err(oz_market_auth_core::AuthError::InvalidToken(_))
     ));
 }
 
@@ -355,20 +353,20 @@ fn validate_token_rejects_wrong_signature() {
 fn extract_token_is_case_sensitive_on_scheme() {
     // "bearer xxx" must be rejected (HTTP specifies Bearer as case-insensitive,
     // but this implementation is strict — pin the contract).
-    let result = marketplace_auth_core::extract_token("bearer abc.def.ghi");
+    let result = oz_market_auth_core::extract_token("bearer abc.def.ghi");
     assert!(matches!(
         result,
-        Err(marketplace_auth_core::AuthError::MissingAuthHeader)
+        Err(oz_market_auth_core::AuthError::MissingAuthHeader)
     ));
 }
 
 #[test]
 fn extract_token_with_token_containing_spaces_rejected() {
     // "Bearer abc def" splits into 4 parts, doesn't match ["Bearer", token].
-    let result = marketplace_auth_core::extract_token("Bearer abc def ghi");
+    let result = oz_market_auth_core::extract_token("Bearer abc def ghi");
     assert!(matches!(
         result,
-        Err(marketplace_auth_core::AuthError::MissingAuthHeader)
+        Err(oz_market_auth_core::AuthError::MissingAuthHeader)
     ));
 }
 

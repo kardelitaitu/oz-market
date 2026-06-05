@@ -50,7 +50,7 @@ jobs:
         # log records per-commit measurements instead of "local".
         env:
           MARKETPLACE_MICROBENCH_COMMIT: ${{ github.sha }}
-        run: cargo test --release -p marketplace-server --lib -- wrap_fn_overhead --nocapture
+        run: cargo test --release -p oz-market-server --lib -- wrap_fn_overhead --nocapture
 
       - name: Publish microbench trend to job summary
         if: always()
@@ -105,13 +105,13 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: "postgresql://marketplace:marketplace@127.0.0.1:${{ job.services.postgres.ports[5432] }}/marketplace?sslmode=disable"
-        run: cargo run -p marketplace-server --bin bootstrap_schema
+        run: cargo run -p oz-market-server --bin bootstrap_schema
 
       - name: Postgres integration tests
         working-directory: backend
         env:
           DATABASE_URL: "postgresql://marketplace:marketplace@127.0.0.1:${{ job.services.postgres.ports[5432] }}/marketplace?sslmode=disable"
-        run: cargo test -p marketplace-server --test postgres_flows -- --nocapture
+        run: cargo test -p oz-market-server --test postgres_flows -- --nocapture
 
   mcp-smoke:
     name: MCP Smoke Tests
@@ -130,5 +130,5 @@ jobs:
         env:
           MARKETPLACE_MCP_ALLOW_DEV_CLAIMS: "1"
         run: |
-          cargo run --release -p marketplace-mcp --bin mcp_tester 2>&1 | tee mcp-test.log
+          cargo run --release -p oz-market-mcp --bin mcp_tester 2>&1 | tee mcp-test.log
           grep -q "\[FAIL\]" mcp-test.log && echo "FAILURES DETECTED" && exit 1 || echo "ALL PASS"

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Unified Android + iOS app using **Tauri v2** (Rust shell) + **Svelte 5** (frontend). Shares `marketplace-api-contract` crate types directly with the backend — no codegen, no drift.
+Unified Android + iOS app using **Tauri v2** (Rust shell) + **Svelte 5** (frontend). Shares `oz-market-api-contract` crate types directly with the backend — no codegen, no drift.
 
 **Why Tauri + Svelte over native:**
 - Shared Rust types across backend and mobile (single source of truth)
@@ -101,7 +101,7 @@ mobile/marketplace/
 
 ```toml
 [dependencies]
-marketplace-api-contract = { path = "../../backend/crates/api-contract" }
+oz-market-api-contract = { path = "../../backend/crates/api-contract" }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -114,7 +114,7 @@ No codegen needed — types are shared directly via the crate.
 
 ### API Client
 
-The `client/` module wraps `reqwest::Client` and uses `marketplace-api-contract` types directly:
+The `client/` module wraps `reqwest::Client` and uses `oz-market-api-contract` types directly:
 
 ```rust
 // client/requests.rs
@@ -258,7 +258,7 @@ Claims are stored in the platform keystore (Keychain on iOS, KeyStore on Android
 
 - `npm create tauri-app@latest` with Svelte template
 - Configure `tauri.conf.json` for Android + iOS targets
-- Set up workspace dependency on `marketplace-api-contract`
+- Set up workspace dependency on `oz-market-api-contract`
 - Create `src-tauri/src/state.rs`, `commands/mod.rs`, `client/mod.rs` skeletons
 - Create SvelteKit app with `@sveltejs/adapter-static`
 - Wire Tauri IPC invoke from Svelte

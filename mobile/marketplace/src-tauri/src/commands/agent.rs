@@ -1,4 +1,4 @@
-use marketplace_api_contract::{AgentQueryRequest, AgentQueryResponse};
+use oz_market_api_contract::{AgentQueryRequest, AgentQueryResponse};
 use serde::Deserialize;
 use tauri::State;
 

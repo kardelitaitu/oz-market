@@ -18,18 +18,18 @@ use crate::services::rate_limiter::{
 };
 use crate::services::reservations::ReservationLeaseService;
 use crate::services::search::SearchService;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AcceptNegotiationRequest, AgentQueryRequest, AgentQueryResponse, ContactRevealResponse,
     CreateListingRequest, CreateListingResponse, ListingStatus, ListingSummary,
     NegotiationHistoryEntry, NegotiationHistoryEntryType, NegotiationResponse, NegotiationStatus,
     OpenNegotiationRequest, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
     SearchResponse, SubmitOfferRequest,
 };
-use marketplace_auth_core::{Claims, Role};
+use oz_market_auth_core::{Claims, Role};
 use serde_json::json;
 use std::sync::Arc;
 
-pub const APP_NAME: &str = "marketplace-server";
+pub const APP_NAME: &str = "oz-market-server";
 const NEGOTIATION_RESERVATION_TTL_SECONDS: i64 = 3600;
 
 // Default quota per trust level (max active listings)
@@ -222,7 +222,7 @@ where
                     }
                 };
 
-                if listing.status != marketplace_api_contract::ListingStatus::Active {
+                if listing.status != oz_market_api_contract::ListingStatus::Active {
                     let _ = self
                         .idempotency
                         .commit_failure(&attempt, Some(json!({"error": "listing is not active"})))
@@ -391,8 +391,8 @@ where
 
         crate::services::authz::authorize(
             claims,
-            marketplace_auth_core::Action::GetNegotiationStatus,
-            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+            oz_market_auth_core::Action::GetNegotiationStatus,
+            oz_market_auth_core::OwnershipContext::NegotiationParticipant {
                 seller_account_id: listing.listing.owner_id.clone(),
                 buyer_agent_id: response.buyer_agent_id.clone(),
             },
@@ -460,8 +460,8 @@ where
 
         crate::services::authz::authorize(
             claims,
-            marketplace_auth_core::Action::SubmitOffer,
-            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+            oz_market_auth_core::Action::SubmitOffer,
+            oz_market_auth_core::OwnershipContext::NegotiationParticipant {
                 seller_account_id: listing.listing.owner_id.clone(),
                 buyer_agent_id: current.buyer_agent_id.clone(),
             },
@@ -570,8 +570,8 @@ where
 
         crate::services::authz::authorize(
             claims,
-            marketplace_auth_core::Action::SubmitOffer,
-            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+            oz_market_auth_core::Action::SubmitOffer,
+            oz_market_auth_core::OwnershipContext::NegotiationParticipant {
                 seller_account_id: listing.listing.owner_id.clone(),
                 buyer_agent_id: current.buyer_agent_id.clone(),
             },
@@ -712,8 +712,8 @@ where
 
         crate::services::authz::authorize(
             claims,
-            marketplace_auth_core::Action::SubmitOffer,
-            marketplace_auth_core::OwnershipContext::NegotiationParticipant {
+            oz_market_auth_core::Action::SubmitOffer,
+            oz_market_auth_core::OwnershipContext::NegotiationParticipant {
                 seller_account_id: listing.listing.owner_id.clone(),
                 buyer_agent_id: current.buyer_agent_id.clone(),
             },
@@ -1056,7 +1056,7 @@ where
                 self.negotiations
                     .update_status(
                         negotiation_id,
-                        marketplace_api_contract::NegotiationStatus::ContactRequested,
+                        oz_market_api_contract::NegotiationStatus::ContactRequested,
                         now_rfc3339,
                     )
                     .await?;
@@ -1153,7 +1153,7 @@ where
         self.negotiations
             .update_status(
                 &negotiation.negotiation_id,
-                marketplace_api_contract::NegotiationStatus::ContactRevealed,
+                oz_market_api_contract::NegotiationStatus::ContactRevealed,
                 &now,
             )
             .await?;
@@ -1425,13 +1425,13 @@ mod tests {
     use crate::repositories::seller_accounts::InMemorySellerAccountRepository;
     use crate::repositories::{ListingRepository, RepositoryError, RepositoryErrorKind};
     use crate::services::idempotency::InMemoryIdempotencyRepository;
-    use marketplace_api_contract::{
+    use oz_market_api_contract::{
         AcceptNegotiationRequest, Category, Condition, ContactRevealStatus, CreateListingRequest,
         ListingLocation, ListingPayload, ListingStatus, ListingSummary, OpenNegotiationRequest,
         Price, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
         SearchResponse, SearchSort, SubmitOfferRequest,
     };
-    use marketplace_auth_core::{Claims, Role, Scope};
+    use oz_market_auth_core::{Claims, Role, Scope};
     use serde_json::json;
 
     struct SoldListingRepository;
@@ -1493,11 +1493,11 @@ mod tests {
         let mut claims = claims();
         if !claims
             .scopes
-            .contains(&marketplace_auth_core::Scope::NegotiationOfferSubmit)
+            .contains(&oz_market_auth_core::Scope::NegotiationOfferSubmit)
         {
             claims
                 .scopes
-                .push(marketplace_auth_core::Scope::NegotiationOfferSubmit);
+                .push(oz_market_auth_core::Scope::NegotiationOfferSubmit);
         }
         claims
     }
@@ -1512,7 +1512,7 @@ mod tests {
             listing: ListingPayload {
                 schema_version: "1.0".to_string(),
                 owner_id: "seller-1".to_string(),
-                listing_type: marketplace_api_contract::ListingType::Product,
+                listing_type: oz_market_api_contract::ListingType::Product,
                 category: Some(Category::Laptop),
                 title: "ThinkPad T480".to_string(),
                 condition: Some(Condition::Used),
@@ -1927,7 +1927,7 @@ mod tests {
                     category: Some(Category::Laptop),
                     condition: Some(Condition::Used),
                     // NEW: Phase 2 fields
-                    listing_type: Some(marketplace_api_contract::ListingType::Product),
+                    listing_type: Some(oz_market_api_contract::ListingType::Product),
                     service_type: None,
                     property_transaction_type: None,
                     property_sub_type: None,

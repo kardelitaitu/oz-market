@@ -22,7 +22,7 @@ $databaseUrl = "postgres://marketplace:marketplace@127.0.0.1:5432/marketplace?ss
 $env:DATABASE_URL = $databaseUrl
 
 Write-Host "Bootstrapping shared schema once for the combined local workflow..."
-& cargo run --manifest-path $manifestPath.Path -p marketplace-server --bin bootstrap_schema
+& cargo run --manifest-path $manifestPath.Path -p oz-market-server --bin bootstrap_schema
 if ($LASTEXITCODE -ne 0) {
     throw "schema bootstrap failed"
 }

@@ -10,8 +10,8 @@ struct BasicMcpClient {
 
 impl BasicMcpClient {
     fn spawn() -> Result<Self, Box<dyn std::error::Error>> {
-        let sidecar = env!("CARGO_BIN_EXE_marketplace-mcp");
-        let claims_json = marketplace_mcp::dev_launcher_claims_json()
+        let sidecar = env!("CARGO_BIN_EXE_oz-market-mcp");
+        let claims_json = oz_market_mcp::dev_launcher_claims_json()
             .expect("failed to serialize built-in dev launcher claims");
 
         let mut command = Command::new(sidecar);
@@ -77,8 +77,8 @@ impl Drop for BasicMcpClient {
 }
 
 #[test]
-fn marketplace_mcp_boots_and_lists_the_public_tool_catalog() {
-    let mut client = BasicMcpClient::spawn().expect("failed to spawn marketplace-mcp");
+fn oz_market_mcp_boots_and_lists_the_public_tool_catalog() {
+    let mut client = BasicMcpClient::spawn().expect("failed to spawn oz-market-mcp");
 
     let initialize = client
         .send_request(

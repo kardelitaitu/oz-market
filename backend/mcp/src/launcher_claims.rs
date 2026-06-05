@@ -1,4 +1,4 @@
-use marketplace_auth_core::{Claims, Role, Scope};
+use oz_market_auth_core::{Claims, Role, Scope};
 
 pub fn dev_launcher_claims() -> Claims {
     Claims {

@@ -173,13 +173,13 @@ cargo test --workspace
 
 | Package | Tests |
 |---------|-------|
-| `marketplace-server` (lib tests) | 191 |
-| `marketplace-server` (actix integration) | 22 |
-| `marketplace-server` (postgres integration) | 15 |
-| `marketplace-server` (e2e) | 1 |
-| `marketplace-api-contract` | 31 |
-| `marketplace-auth-core` | 17 |
-| `marketplace-mcp` | 10 |
+| `oz-market-server` (lib tests) | 191 |
+| `oz-market-server` (actix integration) | 22 |
+| `oz-market-server` (postgres integration) | 15 |
+| `oz-market-server` (e2e) | 1 |
+| `oz-market-api-contract` | 31 |
+| `oz-market-auth-core` | 17 |
+| `oz-market-mcp` | 10 |
 | **Total** | **269/269 ✅** |
 
 ---
@@ -199,8 +199,8 @@ cargo test --workspace
 
 | Artifact | Size | Notes |
 |----------|------|-------|
-| `marketplace-server.exe` (release) | ~12 MB | Stripped, statically linked |
-| `marketplace-mcp.exe` (release) | ~5 MB | Stdio MCP sidecar |
+| `oz-market-server.exe` (release) | ~12 MB | Stripped, statically linked |
+| `oz-market-mcp.exe` (release) | ~5 MB | Stdio MCP sidecar |
 | Docker image (server) | Multi-stage | `rust:1.85` → `debian:bookworm-slim` |
 
 ---
@@ -272,22 +272,22 @@ cd backend && cargo clippy -- -D warnings
 cd backend && cargo test --lib
 
 # Actix integration
-cd backend && cargo test --package marketplace-server -- http::actix_handlers::tests
+cd backend && cargo test --package oz-market-server -- http::actix_handlers::tests
 
 # API contract
-cd backend && cargo test --package marketplace-api-contract
+cd backend && cargo test --package oz-market-api-contract
 
 # Postgres integration
 docker run -d --name pg-test -e POSTGRES_DB=marketplace \
   -e POSTGRES_USER=marketplace -e POSTGRES_PASSWORD=marketplace \
   -p 5432:5432 postgres:16-alpine
 cd backend && DATABASE_URL=postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable \
-  cargo run --package marketplace-server --bin bootstrap_schema
-cd backend && DATABASE_URL=postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable cargo test --package marketplace-server --test postgres_flows
-cd backend && DATABASE_URL=postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable cargo test --package marketplace-server --test e2e -- --include-ignored
+  cargo run --package oz-market-server --bin bootstrap_schema
+cd backend && DATABASE_URL=postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable cargo test --package oz-market-server --test postgres_flows
+cd backend && DATABASE_URL=postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable cargo test --package oz-market-server --test e2e -- --include-ignored
 
 # MCP smoke
-cd backend && cargo test --package marketplace-mcp
+cd backend && cargo test --package oz-market-mcp
 
 # Full workspace
 cd backend && cargo test --workspace

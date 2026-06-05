@@ -1,6 +1,6 @@
 use crate::repositories::{RepositoryError, RepositoryErrorKind};
 use async_trait::async_trait;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AcceptNegotiationRequest, NegotiationHistoryEntry, NegotiationHistoryEntryType,
     NegotiationResponse, NegotiationStatus, RejectNegotiationRequest, SubmitOfferRequest,
 };
@@ -761,7 +761,7 @@ impl NegotiationRepository for PostgresNegotiationRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use marketplace_api_contract::{NegotiationResponse, NegotiationStatus};
+    use oz_market_api_contract::{NegotiationResponse, NegotiationStatus};
 
     fn sample_negotiation() -> NegotiationResponse {
         NegotiationResponse {

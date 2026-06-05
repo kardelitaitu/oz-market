@@ -4,8 +4,8 @@ Execute these commands to verify implementation of this spec:
 
 ```bash
 # Compile metrics service
-cd backend && cargo check --bin marketplace-server
+cd backend && cargo check --bin oz-market-server
 
 # Run metrics unit tests
-cargo test --package marketplace-server --lib services::agent_metrics
+cargo test --package oz-market-server --lib services::agent_metrics
 ```

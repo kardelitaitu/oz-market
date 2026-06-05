@@ -77,7 +77,7 @@ This folder is for implementation-ready specifications.
 ### 1. View Interactive Documentation
 ```bash
 # Start server
-cd backend && cargo run --release --package marketplace-server
+cd backend && cargo run --release --package oz-market-server
 
 # Open in browser
 http://localhost:3000/docs

@@ -1,11 +1,11 @@
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     AcceptNegotiationRequest, NegotiationHistoryEntryType, NegotiationStatus,
     RejectNegotiationRequest, RequestContactRevealRequest, SubmitOfferRequest,
 };
-use marketplace_server::domain::ledger::{
+use oz_market_server::domain::ledger::{
     CreditLedgerError, CreditLedgerRepository, NewTransaction, TransactionType,
 };
-use marketplace_server::repositories::{
+use oz_market_server::repositories::{
     ledger::PostgresCreditLedgerRepository,
     negotiations::{NegotiationRepository, PostgresNegotiationRepository},
     ContactRevealRepository, PostgresContactRevealRepository, PostgresReservationLeaseRepository,
@@ -36,7 +36,7 @@ async fn live_bootstrapped_pool() -> Result<Option<PgPool>, Box<dyn Error + Send
     let Some(pool) = live_pool().await? else {
         return Ok(None);
     };
-    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    oz_market_server::bootstrap::apply_schema(&pool).await?;
     Ok(Some(pool))
 }
 
@@ -96,7 +96,7 @@ async fn postgres_reservation_flow_persists_and_blocks_double_sell(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    oz_market_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -137,7 +137,7 @@ async fn postgres_reservation_flow_persists_and_blocks_double_sell(
         )
         .await;
     assert!(
-        matches!(second, Err(err) if err.kind == marketplace_server::repositories::RepositoryErrorKind::Conflict)
+        matches!(second, Err(err) if err.kind == oz_market_server::repositories::RepositoryErrorKind::Conflict)
     );
 
     Ok(())
@@ -149,7 +149,7 @@ async fn postgres_contact_approval_flow_persists_and_updates_status(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    oz_market_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -182,7 +182,7 @@ async fn postgres_contact_approval_flow_persists_and_updates_status(
         .await?;
     assert_eq!(
         created.reveal_status,
-        marketplace_api_contract::ContactRevealStatus::Pending
+        oz_market_api_contract::ContactRevealStatus::Pending
     );
 
     let approved = repo
@@ -190,14 +190,14 @@ async fn postgres_contact_approval_flow_persists_and_updates_status(
         .await?;
     assert_eq!(
         approved.reveal_status,
-        marketplace_api_contract::ContactRevealStatus::Approved
+        oz_market_api_contract::ContactRevealStatus::Approved
     );
 
     let second = repo
         .approve_request(&created.reveal_id, "2026-05-04T00:02:00Z")
         .await;
     assert!(
-        matches!(second, Err(err) if err.kind == marketplace_server::repositories::RepositoryErrorKind::Conflict)
+        matches!(second, Err(err) if err.kind == oz_market_server::repositories::RepositoryErrorKind::Conflict)
     );
 
     let stored_status: String =
@@ -216,7 +216,7 @@ async fn postgres_negotiation_submit_and_accept_persist_offer_history(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    oz_market_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -289,7 +289,7 @@ async fn postgres_negotiation_reject_persists_cancelled_state_and_history(
     let Some(pool) = live_pool().await? else {
         return Ok(());
     };
-    marketplace_server::bootstrap::apply_schema(&pool).await?;
+    oz_market_server::bootstrap::apply_schema(&pool).await?;
 
     let suffix = unique_suffix();
     let listing_id = format!("lst_{suffix}");
@@ -438,7 +438,7 @@ async fn postgres_contact_reveal_request_and_approve_flow(
     assert_eq!(result.reveal_id, reveal_id);
     assert_eq!(
         result.reveal_status,
-        marketplace_api_contract::ContactRevealStatus::Approved
+        oz_market_api_contract::ContactRevealStatus::Approved
     );
 
     // Verify in DB
@@ -478,7 +478,7 @@ async fn postgres_negotiation_submit_offer_invalid_negotiation_returns_error(
     let err = result.unwrap_err();
     assert_eq!(
         err.kind,
-        marketplace_server::repositories::RepositoryErrorKind::NotFound
+        oz_market_server::repositories::RepositoryErrorKind::NotFound
     );
 
     Ok(())
@@ -514,7 +514,7 @@ async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn 
     let actual_lease_id = result.lease_id.clone();
 
     // Check lease exists
-    let lease: Option<marketplace_server::models::db::ReservationLeaseRow> =
+    let lease: Option<oz_market_server::models::db::ReservationLeaseRow> =
         repo.get_active_by_listing(&listing_id).await?;
     assert!(lease.is_some());
 
@@ -523,7 +523,7 @@ async fn postgres_reservation_lease_creation_and_expiry() -> Result<(), Box<dyn 
         .await?;
 
     // Check lease gone
-    let lease_after: Option<marketplace_server::models::db::ReservationLeaseRow> =
+    let lease_after: Option<oz_market_server::models::db::ReservationLeaseRow> =
         repo.get_active_by_listing(&listing_id).await?;
     assert!(lease_after.is_none());
 
@@ -550,61 +550,61 @@ async fn postgres_auth_flow_create_listing_with_valid_seller_role(
     .execute(&pool)
     .await?;
 
-    let app = marketplace_server::app::MarketplaceApp::new(
-        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+    let app = oz_market_server::app::MarketplaceApp::new(
+        oz_market_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        oz_market_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        oz_market_server::repositories::reservations::PostgresReservationLeaseRepository::new(
             pool.clone(),
         ),
-        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+        oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
             pool.clone(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+            oz_market_server::repositories::negotiations::PostgresNegotiationRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::PostgresAuditEventRepository::new(
+            oz_market_server::repositories::audit_events::PostgresAuditEventRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::PostgresOutboxEventRepository::new(
+            oz_market_server::repositories::outbox_events::PostgresOutboxEventRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
                 pool,
             ),
         ),
     );
 
-    let claims = marketplace_auth_core::Claims {
+    let claims = oz_market_auth_core::Claims {
         sub: owner.clone(),
-        roles: vec![marketplace_auth_core::Role::SellerListingWriter],
-        scopes: vec![marketplace_auth_core::Scope::ListingCreate],
+        roles: vec![oz_market_auth_core::Role::SellerListingWriter],
+        scopes: vec![oz_market_auth_core::Scope::ListingCreate],
         seller_account_id: Some(format!("seller_{}", suffix)),
         buyer_agent_id: None,
         hardware_id: None,
         exp: Some(1715475600),
     };
 
-    let request = marketplace_api_contract::CreateListingRequest {
+    let request = oz_market_api_contract::CreateListingRequest {
         idempotency_key: format!("create_auth_{}", suffix),
-        listing: marketplace_api_contract::ListingPayload {
+        listing: oz_market_api_contract::ListingPayload {
             schema_version: "1.0".to_string(),
             owner_id: format!("seller_{}", suffix),
-            listing_type: marketplace_api_contract::ListingType::Product,
-            category: Some(marketplace_api_contract::Category::Laptop),
+            listing_type: oz_market_api_contract::ListingType::Product,
+            category: Some(oz_market_api_contract::Category::Laptop),
             title: "Auth Test Laptop".to_string(),
-            condition: Some(marketplace_api_contract::Condition::New),
-            price: marketplace_api_contract::Price {
+            condition: Some(oz_market_api_contract::Condition::New),
+            price: oz_market_api_contract::Price {
                 currency: "USD".to_string(),
                 amount: 1000.0,
             },
-            location: marketplace_api_contract::ListingLocation {
+            location: oz_market_api_contract::ListingLocation {
                 country_code: "US".to_string(),
                 country_name: "United States".to_string(),
                 city: "New York".to_string(),
@@ -669,7 +669,7 @@ async fn postgres_seller_account_trust_level_update() -> Result<(), Box<dyn Erro
     .await?;
 
     let repo =
-        marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+        oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
             pool.clone(),
         );
 
@@ -732,38 +732,38 @@ async fn postgres_rejects_outsider_reveal_request() -> Result<(), Box<dyn Error 
     .execute(&pool)
     .await?;
 
-    let app = marketplace_server::app::MarketplaceApp::new(
-        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+    let app = oz_market_server::app::MarketplaceApp::new(
+        oz_market_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        oz_market_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        oz_market_server::repositories::reservations::PostgresReservationLeaseRepository::new(
             pool.clone(),
         ),
-        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+        oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
             pool.clone(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+            oz_market_server::repositories::negotiations::PostgresNegotiationRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+            oz_market_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+            oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
                 pool,
             ),
         ),
     );
 
     // Outsider buyer tries to request reveal
-    let outsider = marketplace_auth_core::Claims {
+    let outsider = oz_market_auth_core::Claims {
         sub: "buyer-2".to_string(),
-        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
-        scopes: vec![marketplace_auth_core::Scope::NegotiationRevealRequest],
+        roles: vec![oz_market_auth_core::Role::BuyerNegotiator],
+        scopes: vec![oz_market_auth_core::Scope::NegotiationRevealRequest],
         seller_account_id: None,
         buyer_agent_id: Some("buyer-2".to_string()),
         hardware_id: None,
@@ -784,7 +784,7 @@ async fn postgres_rejects_outsider_reveal_request() -> Result<(), Box<dyn Error 
     assert!(
         matches!(
             result,
-            Err(marketplace_server::http::handlers::HandlerError::Authz(_))
+            Err(oz_market_server::http::handlers::HandlerError::Authz(_))
         ),
         "outsider reveal request should be forbidden, got {:?}",
         result
@@ -846,38 +846,38 @@ async fn postgres_rejects_wrong_seller_reveal_approval() -> Result<(), Box<dyn E
     .execute(&pool)
     .await?;
 
-    let app = marketplace_server::app::MarketplaceApp::new(
-        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+    let app = oz_market_server::app::MarketplaceApp::new(
+        oz_market_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        oz_market_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        oz_market_server::repositories::reservations::PostgresReservationLeaseRepository::new(
             pool.clone(),
         ),
-        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+        oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
             pool.clone(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+            oz_market_server::repositories::negotiations::PostgresNegotiationRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+            oz_market_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+            oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
                 pool,
             ),
         ),
     );
 
     // Wrong seller tries to approve
-    let wrong_seller = marketplace_auth_core::Claims {
+    let wrong_seller = oz_market_auth_core::Claims {
         sub: "seller-2".to_string(),
-        roles: vec![marketplace_auth_core::Role::SellerContactRevealApprover],
-        scopes: vec![marketplace_auth_core::Scope::RevealApprove],
+        roles: vec![oz_market_auth_core::Role::SellerContactRevealApprover],
+        scopes: vec![oz_market_auth_core::Scope::RevealApprove],
         seller_account_id: Some("seller-2".to_string()),
         buyer_agent_id: None,
         hardware_id: None,
@@ -888,7 +888,7 @@ async fn postgres_rejects_wrong_seller_reveal_approval() -> Result<(), Box<dyn E
     assert!(
         matches!(
             result,
-            Err(marketplace_server::http::handlers::HandlerError::Authz(_))
+            Err(oz_market_server::http::handlers::HandlerError::Authz(_))
         ),
         "wrong seller approval should be forbidden, got {:?}",
         result
@@ -922,37 +922,37 @@ async fn postgres_rejects_open_negotiation_invalid_amount(
     .execute(&pool)
     .await?;
 
-    let app = marketplace_server::app::MarketplaceApp::new(
-        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+    let app = oz_market_server::app::MarketplaceApp::new(
+        oz_market_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        oz_market_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        oz_market_server::repositories::reservations::PostgresReservationLeaseRepository::new(
             pool.clone(),
         ),
-        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+        oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
             pool.clone(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+            oz_market_server::repositories::negotiations::PostgresNegotiationRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+            oz_market_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+            oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
                 pool,
             ),
         ),
     );
 
-    let buyer = marketplace_auth_core::Claims {
+    let buyer = oz_market_auth_core::Claims {
         sub: "buyer-1".to_string(),
-        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
-        scopes: vec![marketplace_auth_core::Scope::NegotiationCreate],
+        roles: vec![oz_market_auth_core::Role::BuyerNegotiator],
+        scopes: vec![oz_market_auth_core::Scope::NegotiationCreate],
         seller_account_id: None,
         buyer_agent_id: Some("buyer-1".to_string()),
         hardware_id: None,
@@ -963,7 +963,7 @@ async fn postgres_rejects_open_negotiation_invalid_amount(
     let result = app
         .open_negotiation(
             &buyer,
-            &marketplace_api_contract::OpenNegotiationRequest {
+            &oz_market_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
                 buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),
@@ -980,7 +980,7 @@ async fn postgres_rejects_open_negotiation_invalid_amount(
     let result = app
         .open_negotiation(
             &buyer,
-            &marketplace_api_contract::OpenNegotiationRequest {
+            &oz_market_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
                 buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),
@@ -1021,37 +1021,37 @@ async fn postgres_open_negotiation_conflict_compensation(
     .execute(&pool)
     .await?;
 
-    let app = marketplace_server::app::MarketplaceApp::new(
-        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+    let app = oz_market_server::app::MarketplaceApp::new(
+        oz_market_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        oz_market_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        oz_market_server::repositories::reservations::PostgresReservationLeaseRepository::new(
             pool.clone(),
         ),
-        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+        oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
             pool.clone(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+            oz_market_server::repositories::negotiations::PostgresNegotiationRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+            oz_market_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+            oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
                 pool,
             ),
         ),
     );
 
-    let seller = marketplace_auth_core::Claims {
+    let seller = oz_market_auth_core::Claims {
         sub: "buyer-1".to_string(),
-        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
-        scopes: vec![marketplace_auth_core::Scope::NegotiationCreate],
+        roles: vec![oz_market_auth_core::Role::BuyerNegotiator],
+        scopes: vec![oz_market_auth_core::Scope::NegotiationCreate],
         seller_account_id: None,
         buyer_agent_id: Some("buyer-1".to_string()),
         hardware_id: None,
@@ -1062,7 +1062,7 @@ async fn postgres_open_negotiation_conflict_compensation(
     let result = app
         .open_negotiation(
             &seller,
-            &marketplace_api_contract::OpenNegotiationRequest {
+            &oz_market_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
                 buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),
@@ -1083,7 +1083,7 @@ async fn postgres_open_negotiation_conflict_compensation(
     let result = app
         .open_negotiation(
             &seller,
-            &marketplace_api_contract::OpenNegotiationRequest {
+            &oz_market_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
                 buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),
@@ -1095,7 +1095,7 @@ async fn postgres_open_negotiation_conflict_compensation(
         )
         .await;
     assert!(
-        matches!(result, Err(marketplace_server::http::handlers::HandlerError::Repository(ref e)) if e.kind == marketplace_server::repositories::RepositoryErrorKind::Conflict),
+        matches!(result, Err(oz_market_server::http::handlers::HandlerError::Repository(ref e)) if e.kind == oz_market_server::repositories::RepositoryErrorKind::Conflict),
         "second open-negotiation should conflict, got {:?}",
         result
     );
@@ -1128,37 +1128,37 @@ async fn postgres_open_negotiation_inactive_listing_commits_idempotency_failure(
     .execute(&pool)
     .await?;
 
-    let app = marketplace_server::app::MarketplaceApp::new(
-        marketplace_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
-        marketplace_server::services::idempotency::InMemoryIdempotencyRepository::new(),
-        marketplace_server::repositories::reservations::PostgresReservationLeaseRepository::new(
+    let app = oz_market_server::app::MarketplaceApp::new(
+        oz_market_server::repositories::listings::PostgresListingRepository::new(pool.clone()),
+        oz_market_server::services::idempotency::InMemoryIdempotencyRepository::new(),
+        oz_market_server::repositories::reservations::PostgresReservationLeaseRepository::new(
             pool.clone(),
         ),
-        marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
+        oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository::new(
             pool.clone(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::negotiations::PostgresNegotiationRepository::new(
+            oz_market_server::repositories::negotiations::PostgresNegotiationRepository::new(
                 pool.clone(),
             ),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
+            oz_market_server::repositories::audit_events::InMemoryAuditEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
+            oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository::new(),
         ),
         std::sync::Arc::new(
-            marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
+            oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository::new(
                 pool,
             ),
         ),
     );
 
-    let buyer = marketplace_auth_core::Claims {
+    let buyer = oz_market_auth_core::Claims {
         sub: "buyer-1".to_string(),
-        roles: vec![marketplace_auth_core::Role::BuyerNegotiator],
-        scopes: vec![marketplace_auth_core::Scope::NegotiationCreate],
+        roles: vec![oz_market_auth_core::Role::BuyerNegotiator],
+        scopes: vec![oz_market_auth_core::Scope::NegotiationCreate],
         seller_account_id: None,
         buyer_agent_id: Some("buyer-1".to_string()),
         hardware_id: None,
@@ -1168,7 +1168,7 @@ async fn postgres_open_negotiation_inactive_listing_commits_idempotency_failure(
     let result = app
         .open_negotiation(
             &buyer,
-            &marketplace_api_contract::OpenNegotiationRequest {
+            &oz_market_api_contract::OpenNegotiationRequest {
                 listing_id: listing_id.clone(),
                 buyer_agent_id: "buyer-1".to_string(),
                 offer_currency: "USD".to_string(),

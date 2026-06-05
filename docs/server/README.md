@@ -24,7 +24,7 @@ The server is **production-ready** with:
 
 | **OpenAPI Spec** | ✅ **COMPLETE** | 20+ endpoints documented |
 | **Interactive Docs** | ✅ | Swagger Editor at `/docs` |
-| **MCP Server** | ✅ **SMOKE-TESTED** | marketplace-mcp sidecar built |
+| **MCP Server** | ✅ **SMOKE-TESTED** | oz-market-mcp sidecar built |
 | **Test Data** | 100k+ listings, 70k+ reviews | |
 
 ---
@@ -76,8 +76,8 @@ We've built an **MCP (Model Context Protocol)** server for AI agent integration!
 - `docs/mcp/tool-catalog.md` - Tool definitions
 
 **Status**: 
-- `marketplace-mcp` sidecar **COMPILES** and the tester now passes the launcher smoke path
-- Binary built: `target/debug/marketplace-mcp.exe`
+- `oz-market-mcp` sidecar **COMPILES** and the tester now passes the launcher smoke path
+- Binary built: `target/debug/oz-market-mcp.exe`
 - Launcher claims are passed explicitly through `MARKETPLACE_MCP_CLAIMS_JSON`
 - `MARKETPLACE_MCP_DATABASE_URL` is the explicit Postgres switch for the sidecar
 - The nightly smoke workflow uses the shared Rust schema bootstrap helper before the current listing create/search/get smoke path.
@@ -102,7 +102,7 @@ We've built an **MCP (Model Context Protocol)** server for AI agent integration!
 {
   "mcpServers": {
     "marketplace": {
-      "command": "path/to/marketplace-mcp.exe",
+      "command": "path/to/oz-market-mcp.exe",
       "env": {
         "MARKETPLACE_MCP_CLAIMS_JSON": "<launcher-provided-claims-json>",
         "MARKETPLACE_MCP_DATABASE_URL": "<optional-postgres-url>"
@@ -329,9 +329,9 @@ The server includes:
 
 | Task | Command |
 |------|---------|
-| Build server | `cd backend && cargo build --release --package marketplace-server` |
-| Build MCP | `cd backend && cargo build --package marketplace-mcp` |
-| Run server | `./target/release/marketplace-server` |
+| Build server | `cd backend && cargo build --release --package oz-market-server` |
+| Build MCP | `cd backend && cargo build --package oz-market-mcp` |
+| Run server | `./target/release/oz-market-server` |
 | View API docs | `http://localhost:3000/docs` |
 | Get OpenAPI JSON | `curl http://localhost:3000/api-docs/openapi.json` |
 | Run benchmarks | `./target/release/bench_concurrent "http://..." 5000 "100,200,500" "rotating"` |

@@ -14,7 +14,7 @@ use crate::auth::{
     authorize_open_negotiation, authorize_request_contact_reveal, authorize_search_listings,
     Action, AuthzError, AuthzErrorKind, OwnershipContext,
 };
-use marketplace_auth_core::{Claims, Role, Scope};
+use oz_market_auth_core::{Claims, Role, Scope};
 
 // -----------------------------------------------------------------------
 // Helpers

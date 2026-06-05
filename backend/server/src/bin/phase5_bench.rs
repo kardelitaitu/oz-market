@@ -1,27 +1,27 @@
 use async_trait::async_trait;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     Category, Condition, CreateListingRequest, ListingLocation, ListingPayload,
     OpenNegotiationRequest, Price, RequestContactRevealRequest, SearchRequest, SearchSort,
     ShippingInfo,
 };
-use marketplace_auth_core::{Claims, Role, Scope};
-use marketplace_server::app::MarketplaceApp;
-use marketplace_server::repositories::audit_events::InMemoryAuditEventRepository;
-use marketplace_server::repositories::audit_events::PostgresAuditEventRepository;
-use marketplace_server::repositories::contact_reveals::InMemoryContactRevealRepository;
-use marketplace_server::repositories::contact_reveals::PostgresContactRevealRepository;
-use marketplace_server::repositories::listings::InMemoryListingRepository;
-use marketplace_server::repositories::listings::PostgresListingRepository;
-use marketplace_server::repositories::negotiations::{
+use oz_market_auth_core::{Claims, Role, Scope};
+use oz_market_server::app::MarketplaceApp;
+use oz_market_server::repositories::audit_events::InMemoryAuditEventRepository;
+use oz_market_server::repositories::audit_events::PostgresAuditEventRepository;
+use oz_market_server::repositories::contact_reveals::InMemoryContactRevealRepository;
+use oz_market_server::repositories::contact_reveals::PostgresContactRevealRepository;
+use oz_market_server::repositories::listings::InMemoryListingRepository;
+use oz_market_server::repositories::listings::PostgresListingRepository;
+use oz_market_server::repositories::negotiations::{
     InMemoryNegotiationRepository, PostgresNegotiationRepository,
 };
-use marketplace_server::repositories::outbox_events::InMemoryOutboxEventRepository;
-use marketplace_server::repositories::outbox_events::PostgresOutboxEventRepository;
-use marketplace_server::repositories::reservations::InMemoryReservationLeaseRepository;
-use marketplace_server::repositories::reservations::PostgresReservationLeaseRepository;
-use marketplace_server::repositories::seller_accounts::InMemorySellerAccountRepository;
-use marketplace_server::repositories::seller_accounts::PostgresSellerAccountRepository;
-use marketplace_server::services::idempotency::InMemoryIdempotencyRepository;
+use oz_market_server::repositories::outbox_events::InMemoryOutboxEventRepository;
+use oz_market_server::repositories::outbox_events::PostgresOutboxEventRepository;
+use oz_market_server::repositories::reservations::InMemoryReservationLeaseRepository;
+use oz_market_server::repositories::reservations::PostgresReservationLeaseRepository;
+use oz_market_server::repositories::seller_accounts::InMemorySellerAccountRepository;
+use oz_market_server::repositories::seller_accounts::PostgresSellerAccountRepository;
+use oz_market_server::services::idempotency::InMemoryIdempotencyRepository;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::error::Error;
 use std::time::Instant;
@@ -72,19 +72,19 @@ trait BenchmarkAppFacade {
         request: &CreateListingRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<marketplace_api_contract::CreateListingResponse, Box<dyn Error + Send + Sync>>;
+    ) -> Result<oz_market_api_contract::CreateListingResponse, Box<dyn Error + Send + Sync>>;
 
     async fn get_listing(
         &self,
         claims: Option<&Claims>,
         listing_id: &str,
-    ) -> Result<Option<marketplace_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>>;
+    ) -> Result<Option<oz_market_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>>;
 
     async fn search_listings(
         &self,
         claims: Option<&Claims>,
         request: &SearchRequest,
-    ) -> Result<marketplace_api_contract::SearchResponse, Box<dyn Error + Send + Sync>>;
+    ) -> Result<oz_market_api_contract::SearchResponse, Box<dyn Error + Send + Sync>>;
 
     async fn open_negotiation(
         &self,
@@ -92,7 +92,7 @@ trait BenchmarkAppFacade {
         request: &OpenNegotiationRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<marketplace_api_contract::NegotiationResponse, Box<dyn Error + Send + Sync>>;
+    ) -> Result<oz_market_api_contract::NegotiationResponse, Box<dyn Error + Send + Sync>>;
 
     async fn request_contact_reveal(
         &self,
@@ -101,13 +101,13 @@ trait BenchmarkAppFacade {
         request: &RequestContactRevealRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>>;
+    ) -> Result<oz_market_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>>;
 
     async fn approve_contact_reveal(
         &self,
         claims: &Claims,
         reveal_id: &str,
-    ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>>;
+    ) -> Result<oz_market_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>>;
 
     fn get_pool(&self) -> Option<&sqlx::PgPool>;
 }
@@ -120,7 +120,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         request: &CreateListingRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<marketplace_api_contract::CreateListingResponse, Box<dyn Error + Send + Sync>> {
+    ) -> Result<oz_market_api_contract::CreateListingResponse, Box<dyn Error + Send + Sync>> {
         match self {
             Self::Postgres(harness) => Ok(harness
                 .app
@@ -138,8 +138,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         &self,
         claims: Option<&Claims>,
         listing_id: &str,
-    ) -> Result<Option<marketplace_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>>
-    {
+    ) -> Result<Option<oz_market_api_contract::ListingSummary>, Box<dyn Error + Send + Sync>> {
         match self {
             Self::Postgres(harness) => Ok(harness.app.get_listing(claims, listing_id).await?),
             Self::Memory(app) => Ok(app.get_listing(claims, listing_id).await?),
@@ -150,7 +149,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         &self,
         claims: Option<&Claims>,
         request: &SearchRequest,
-    ) -> Result<marketplace_api_contract::SearchResponse, Box<dyn Error + Send + Sync>> {
+    ) -> Result<oz_market_api_contract::SearchResponse, Box<dyn Error + Send + Sync>> {
         match self {
             Self::Postgres(harness) => Ok(harness.app.search_listings(claims, request).await?),
             Self::Memory(app) => Ok(app.search_listings(claims, request).await?),
@@ -163,7 +162,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         request: &OpenNegotiationRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<marketplace_api_contract::NegotiationResponse, Box<dyn Error + Send + Sync>> {
+    ) -> Result<oz_market_api_contract::NegotiationResponse, Box<dyn Error + Send + Sync>> {
         match self {
             Self::Postgres(harness) => Ok(harness
                 .app
@@ -184,7 +183,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         request: &RequestContactRevealRequest,
         request_fingerprint: &str,
         now_rfc3339: &str,
-    ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>> {
+    ) -> Result<oz_market_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>> {
         match self {
             Self::Postgres(harness) => Ok(harness
                 .app
@@ -212,7 +211,7 @@ impl BenchmarkAppFacade for BenchmarkHarness {
         &self,
         claims: &Claims,
         reveal_id: &str,
-    ) -> Result<marketplace_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>> {
+    ) -> Result<oz_market_api_contract::ContactRevealResponse, Box<dyn Error + Send + Sync>> {
         match self {
             Self::Postgres(harness) => Ok(harness
                 .app
@@ -429,7 +428,7 @@ fn benchmark_approver_claims() -> Claims {
 }
 
 fn benchmark_search_request() -> SearchRequest {
-    use marketplace_api_contract::ListingType;
+    use oz_market_api_contract::ListingType;
 
     SearchRequest {
         query: Some("Benchmark".to_string()), // Changed to match all listing titles
@@ -528,7 +527,7 @@ async fn seed_listings<A: BenchmarkAppFacade + Sync>(
 }
 
 fn build_listing_request(seed: usize) -> CreateListingRequest {
-    use marketplace_api_contract::{
+    use oz_market_api_contract::{
         ListingType, PropertySubType, PropertyTransactionType, ServiceType,
     };
 

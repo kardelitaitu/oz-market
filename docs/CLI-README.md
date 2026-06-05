@@ -37,13 +37,13 @@ cargo test --lib
 
 ```powershell
 cd backend
-cargo run --package marketplace-server
+cargo run --package oz-market-server
 ```
 
 ### Seed the database once
 
 ```powershell
-cargo run --manifest-path backend/Cargo.toml -p marketplace-server --bin populate_db
+cargo run --manifest-path backend/Cargo.toml -p oz-market-server --bin populate_db
 ```
 
 ### Run the real HTTP benchmark

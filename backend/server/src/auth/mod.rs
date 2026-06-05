@@ -1,6 +1,6 @@
-use marketplace_auth_core::{Claims, Role, Scope};
+use oz_market_auth_core::{Claims, Role, Scope};
 
-pub use marketplace_auth_core::{Action, OwnershipContext};
+pub use oz_market_auth_core::{Action, OwnershipContext};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthzErrorKind {

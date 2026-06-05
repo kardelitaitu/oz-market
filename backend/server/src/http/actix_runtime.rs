@@ -39,7 +39,7 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let worker_threads = resolve_worker_threads();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(worker_threads)
-        .thread_name("marketplace-worker")
+        .thread_name("oz-market-worker")
         .thread_stack_size(2 * 1024 * 1024) // 2MB stack
         .enable_all()
         .build()?;
@@ -387,7 +387,7 @@ async fn build_repositories() -> Result<
     let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(200); // Increased for high concurrency performance
+        .unwrap_or(50); // Safe default for small environments; increase to 200+ for high-concurrency benchmarks
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(max_connections)

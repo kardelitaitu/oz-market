@@ -33,7 +33,7 @@ Add to `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'marketplace-server'
+  - job_name: 'oz-market-server'
     static_configs:
       - targets: ['localhost:3000']
     metrics_path: '/metrics'

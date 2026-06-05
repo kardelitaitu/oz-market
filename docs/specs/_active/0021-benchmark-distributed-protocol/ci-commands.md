@@ -4,8 +4,8 @@ Execute these commands to verify implementation of this spec:
 
 ```bash
 # Compile gRPC protobuf interfaces
-cd backend && cargo build --bin marketplace-server
+cd backend && cargo build --bin oz-market-server
 
 # Run clustering connection integration tests
-cargo test --package marketplace-server --test distributed_benchmarks
+cargo test --package oz-market-server --test distributed_benchmarks
 ```

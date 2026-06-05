@@ -187,7 +187,7 @@ redis = { version = "0.27", features = ["tokio-comp"] }
 
 - Android scaffold: `mobile/app-android/`
 - iOS scaffold: `mobile/app-ios/`
-- Shared contract via `marketplace-api-contract`
+- Shared contract via `oz-market-api-contract`
 
 ### C. Advanced Features
 
@@ -221,7 +221,7 @@ redis = { version = "0.27", features = ["tokio-comp"] }
 cargo install flamegraph
 
 # Profile the server
-cargo flamegraph --package marketplace-server --bin marketplace-server
+cargo flamegraph --package oz-market-server --bin oz-market-server
 
 # Check if allocation is > 30% CPU
 # If yes, proceed to Step 2

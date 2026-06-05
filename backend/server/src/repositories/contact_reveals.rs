@@ -1,7 +1,7 @@
 use crate::models::db::ContactRevealRow;
 use crate::repositories::{RepositoryError, RepositoryErrorKind};
 use async_trait::async_trait;
-use marketplace_api_contract::{
+use oz_market_api_contract::{
     ContactRevealResponse, ContactRevealStatus, RequestContactRevealRequest,
 };
 use sqlx::{

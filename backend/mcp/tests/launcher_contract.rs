@@ -2,9 +2,9 @@ use std::process::Command;
 
 #[test]
 fn mcp_tester_spawns_the_real_sidecar_with_explicit_launcher_claims() {
-    let claims_json = marketplace_mcp::dev_launcher_claims_json()
+    let claims_json = oz_market_mcp::dev_launcher_claims_json()
         .expect("failed to serialize built-in dev launcher claims");
-    let sidecar = env!("CARGO_BIN_EXE_marketplace-mcp");
+    let sidecar = env!("CARGO_BIN_EXE_oz-market-mcp");
     let tester = env!("CARGO_BIN_EXE_mcp_tester");
 
     let output = Command::new(tester)

@@ -206,7 +206,7 @@ if (-not $SkipTests -and -not $failed) {
 if (-not $SkipTests -and -not $failed) {
     $websiteDir = Join-Path $repoRoot "web/website"
     if (Test-Path (Join-Path $websiteDir "package.json")) {
-        $cmd = "npm run build (website)"
+        $cmd = "npm run build (oz-market-website)"
         Write-StepHeader $stepNum "$cmd"
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         try {

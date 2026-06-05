@@ -16,12 +16,12 @@ Push-Location (Join-Path $PSScriptRoot "..")
 try {
     $manifestPath = Resolve-Path (Join-Path $PSScriptRoot "..\..\Cargo.toml")
     if (-not $SkipBootstrap) {
-        & cargo run --manifest-path $manifestPath.Path -p marketplace-server --bin bootstrap_schema
+        & cargo run --manifest-path $manifestPath.Path -p oz-market-server --bin bootstrap_schema
         if ($LASTEXITCODE -ne 0) {
             throw "schema bootstrap failed"
         }
     }
-    & cargo test --manifest-path $manifestPath.Path -p marketplace-server --test postgres_flows
+    & cargo test --manifest-path $manifestPath.Path -p oz-market-server --test postgres_flows
     $exitCode = $LASTEXITCODE
 }
 finally {
