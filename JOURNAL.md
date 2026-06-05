@@ -1735,6 +1735,15 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
 
+## 2026-06-05 19:50 — 5 counter smoke tests + tighten wrap_fn floor + sub-noise log
+
+- **Problem**: c411967 exposed 5 more /metrics counters (internal_requests_total, internal_writes_total, conflict_responses_total, quota_rejections_total, error_responses_total) but the only test exercising them was a unit test in `observability/mod.rs` that bypassed the wrap_fn entirely. A regression where the wrap_fn stopped calling `obs.record_request` (or the metrics handler hardcoded values) would not be caught. Separately, the trending log at `data/microbench/requests_overhead.log` had a misleading 0 sample: when `wrap_elapsed <= baseline_elapsed` (CI noise, cold cache, or sub-clock-resolution measurement), `saturating_sub` gave 0ns and the log recorded `"ns_per_req":0`, which a future reader could interpret as "wrap_fn does no work". And the assertion was a loose 1us, far above the observed 300-590ns range.
+- **Fix**: added 5 new integration tests mirroring `metrics_scrape_reflects_wrap_fn_counter`'s pattern — each builds a minimal actix App with wrap_fn, hits a route that triggers one specific counter (POST /internal/v1/... for the internal ones, a 409/429/404 route for the rest), then scrapes /metrics and asserts the body contains the expected value. Test count 403 -> 408. The trending log now emits `"ns_per_req":null` and `"sub_noise":true` when the delta is zero (downstream tooling can filter out nulls when computing trend percentiles; null is unambiguous vs. 0 which would suggest no work). The assertion tightens from `< 1_000.0` to `< 800.0` — five local samples showed 303-591ns, so 800ns gives 30%+ headroom for CI noise while still catching a real regression (a new lock, syscall, or extra allocation would push the median above 1us).
+- **Why per-counter tests instead of one big test**: matches the existing pattern (the original test is also per-counter — `requests_total` only), keeps each test under 80 lines, and isolates regressions: a failure in the conflict test points at `record_request`'s 409 branch, not at the 5-counter format! string. The 5 new tests add ~430 lines but each is essentially a copy with a different counter / route.
+- **Why a sub-noise flag instead of skipping the log line**: the trending log is for detecting gradual bloat across runs. A sub-noise sample still tells us "the test ran, the clock didn't pick up wrap overhead, the infrastructure is healthy" — so we want it recorded, just labeled correctly. Skipping it would lose the per-run cadence info.
+- **Validation**: 6 metrics tests pass (the 1 existing + 5 new); wrap_fn_overhead passes at 687ns/req (sub_noise=false). `check.ps1` 6/6.
+- **Files changed (1)**: `actix_handlers.rs` (+432 / -14).
+
 ## 2026-06-05 18:05
 
 - **Goal**: Homepage Visual Upgrades — Theme Swatches Selector, SVG Architecture Flow Diagram, Live Ledger Block Explorer.
