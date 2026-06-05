@@ -11,6 +11,17 @@
   let simLogs = $state([]);
   let currentPrice = $state(700);
   let logContainer = $state();
+  let ledgerContainer = $state();
+
+  // Live Ledger Explorer — seed 3 historical blocks
+  function randHash() {
+    return '0x' + Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0');
+  }
+  let committedBlocks = $state([
+    { hash: '0x3f8a21c94d07', price: 480, item: 'Samsung S24 Ultra', ts: '14:22:07', isNew: false },
+    { hash: '0xa1b09e3f72cc', price: 320, item: 'iPad Pro 11"', ts: '13:55:41', isNew: false },
+    { hash: '0x7cd45f183a92', price: 650, item: 'MacBook Air M3', ts: '12:08:19', isNew: false },
+  ]);
   
   let timeouts = [];
   
@@ -84,7 +95,21 @@
       if (isPaused) return;
       simState = 'consensus';
       simLogs = [...simLogs, `[${buyerName}] Accept offer $500.00. Consensus reached! Writing to ledger cache...`];
-      
+
+      // Commit a new ledger block
+      const newBlock = {
+        hash: randHash(),
+        price: 500,
+        item: 'iPhone 15 Pro',
+        ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        isNew: true,
+      };
+      committedBlocks = [newBlock, ...committedBlocks];
+      if (ledgerContainer) ledgerContainer.scrollTop = 0;
+      setTimeout(() => {
+        committedBlocks = committedBlocks.map((b, i) => i === 0 ? { ...b, isNew: false } : b);
+      }, 600);
+
       let t9 = setTimeout(() => {
         approveReveal();
       }, 1200);
@@ -206,15 +231,23 @@
     <button class={currentTab === 'guide' ? 'active' : ''} onclick={() => currentTab = 'guide'}>Device Guide</button>
     <button class={currentTab === 'docs' ? 'active' : ''} onclick={() => currentTab = 'docs'}>Documentation</button>
   </nav>
-  <div class="theme-selector-container">
-    <span>Theme:</span>
-    <select bind:value={currentTheme} class="theme-select" aria-label="Select Theme">
-      <option value="midnight">Midnight</option>
-      <option value="emerald">Emerald</option>
-      <option value="crimson">Crimson</option>
-      <option value="solar">Solar</option>
-      <option value="nordic">Nordic</option>
-    </select>
+  <div class="theme-swatches" role="group" aria-label="Select Theme">
+    <span class="theme-swatches-label">Theme</span>
+    {#each [
+      { id: 'midnight', label: 'Midnight' },
+      { id: 'emerald',  label: 'Emerald'  },
+      { id: 'crimson',  label: 'Crimson'  },
+      { id: 'solar',    label: 'Solar'    },
+      { id: 'nordic',   label: 'Nordic'   },
+    ] as th}
+      <button
+        class="theme-swatch swatch-{th.id} {currentTheme === th.id ? 'active' : ''}"
+        aria-label="{th.label} theme"
+        aria-pressed={currentTheme === th.id}
+        title={th.label}
+        onclick={() => currentTheme = th.id}
+      ></button>
+    {/each}
   </div>
 </header>
 
@@ -263,16 +296,55 @@
       </p>
       
       <div style="background: rgba(0, 0, 0, 0.25); border-radius: 12px; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1.5rem;">
+
+        <!-- Agent Cards Row -->
         <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1.5rem;">
+
           <!-- Buyer Agent Card -->
-          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center; max-width: 280px; overflow: hidden;">
+          <div style="background: var(--bg-card); border: 1px solid {simState === 'negotiating' || simState === 'revealing' ? 'var(--color-primary)' : 'rgba(255,255,255,0.08)'}; padding: 1.5rem; border-radius: 12px; min-width: 160px; text-align: center; max-width: 220px; overflow: hidden; transition: border-color 0.4s ease; box-shadow: {simState === 'negotiating' || simState === 'revealing' ? '0 0 14px var(--color-primary-glow)' : 'none'};">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
             <h4 style="font-family: var(--font-heading); font-size: 1rem; color: var(--color-primary); word-wrap: break-word; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title={buyerName}>{buyerName}</h4>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">`buyer_negotiator` role</p>
           </div>
-          
-          <!-- State Display -->
-          <div style="text-align: center; min-width: 150px;">
+
+          <!-- State Display + SVG Flow -->
+          <div style="text-align: center; min-width: 160px; flex: 1; max-width: 280px;">
+
+            <!-- SVG Architecture Flow Diagram -->
+            <svg class="flow-diagram" viewBox="0 0 260 66" xmlns="http://www.w3.org/2000/svg" aria-label="Agent negotiation flow diagram">
+              <!-- Paths -->
+              <line class="flow-path {simState !== 'idle' ? 'active' : ''}" x1="55" y1="33" x2="108" y2="33" />
+              <line class="flow-path {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' || simState === 'revealing' || simState === 'completed' ? 'active' : ''}" x1="152" y1="33" x2="205" y2="33" />
+
+              <!-- Buyer Node -->
+              <circle class="flow-node-circle" cx="33" cy="33" r="20" />
+              <text class="flow-node-label" x="33" y="30">🤖</text>
+              <text class="flow-node-label" x="33" y="58" style="font-size: 7px;">BUYER</text>
+
+              <!-- API Server Node -->
+              <circle class="flow-node-circle" cx="130" cy="33" r="22"
+                style="stroke: {simState !== 'idle' ? 'var(--color-secondary)' : 'var(--color-primary)'};"
+              />
+              <text class="flow-node-label" x="130" y="30">⚙️</text>
+              <text class="flow-node-label" x="130" y="58" style="font-size: 7px;">SERVER</text>
+
+              <!-- Seller Node -->
+              <circle class="flow-node-circle" cx="227" cy="33" r="20"
+                style="stroke: {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' ? 'var(--color-secondary)' : 'var(--color-primary)'};"
+              />
+              <text class="flow-node-label" x="227" y="30">🤖</text>
+              <text class="flow-node-label" x="227" y="58" style="font-size: 7px;">SELLER</text>
+
+              <!-- Ledger badge (consensus+) -->
+              {#if simState === 'consensus' || simState === 'revealing' || simState === 'completed'}
+                <circle cx="130" cy="33" r="26" fill="none"
+                  stroke="var(--color-success)" stroke-width="1"
+                  stroke-dasharray="4 3" opacity="0.6"
+                  style="animation: laserTravel 2s linear infinite;"
+                />
+              {/if}
+            </svg>
+
             <div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Status</div>
             <div style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0.25rem 0;">
               {#if simState === 'idle'}Idle
@@ -287,25 +359,55 @@
               ${currentPrice.toFixed(2)}
             </div>
           </div>
-          
+
           <!-- Seller Agent Card -->
-          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center; max-width: 280px; overflow: hidden;">
+          <div style="background: var(--bg-card); border: 1px solid {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' ? 'var(--color-secondary)' : 'rgba(255,255,255,0.08)'}; padding: 1.5rem; border-radius: 12px; min-width: 160px; text-align: center; max-width: 220px; overflow: hidden; transition: border-color 0.4s ease; box-shadow: {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' ? '0 0 14px var(--color-secondary-glow)' : 'none'};">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
             <h4 style="font-family: var(--font-heading); font-size: 1rem; color: var(--color-secondary); word-wrap: break-word; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title={sellerName}>{sellerName}</h4>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">`seller_negotiator` role</p>
           </div>
         </div>
-        
-        <!-- Simulation Logs -->
-        <div bind:this={logContainer} style="text-align: left; height: 160px; overflow-y: auto;">
-          <h5 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h5>
-          {#if simLogs.length === 0}
-            <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
-          {:else}
-            {#each simLogs as log}
-              <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-secondary); margin-bottom: 0.25rem;">{log}</div>
-            {/each}
-          {/if}
+
+        <!-- Sim Split: Logs + Ledger Explorer -->
+        <div class="sim-split">
+
+          <!-- Column 1: Simulation Logs -->
+          <div>
+            <div bind:this={logContainer} style="text-align: left; height: 175px; overflow-y: auto;">
+              <h5 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h5>
+              {#if simLogs.length === 0}
+                <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
+              {:else}
+                {#each simLogs as log}
+                  <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-secondary); margin-bottom: 0.25rem;">{log}</div>
+                {/each}
+              {/if}
+            </div>
+          </div>
+
+          <!-- Column 2: Live Ledger Block Explorer -->
+          <div class="ledger-explorer">
+            <div class="ledger-title">
+              <span class="ledger-live-dot"></span>
+              Ledger Cache
+            </div>
+            <div class="ledger-blocks" bind:this={ledgerContainer}>
+              {#each committedBlocks as block}
+                <div class="ledger-block {block.isNew ? 'new' : ''}">
+                  <div class="ledger-block-hash">{block.hash}</div>
+                  <div class="ledger-block-meta">
+                    <span>{block.item}</span>
+                    <span class="ledger-block-price">${block.price}.00</span>
+                  </div>
+                  <div class="ledger-block-meta" style="margin-top: 0.2rem;">
+                    <span>⏱ {block.ts}</span>
+                    <span style="color: var(--color-success);">✓ committed</span>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+
         </div>
       </div>
       

@@ -1,4 +1,4 @@
-﻿## 2026-05-10 11:23
+## 2026-05-10 11:23
 
 - Fixed compilation errors in populate_db.rs:
   - Added missing geolocation fields to all match arms (products, services, properties)
@@ -1608,6 +1608,16 @@ pm run build compiles clean with zero warnings.
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
 
+## 2026-06-05 18:30 — Wire wrap_fn microbench output to trending file
+
+- **Problem**: The `wrap_fn_overhead_is_sub_microsecond` test in `actix_handlers.rs` only `eprintln!`s its measurement. CI logs surface it for one run, but there's no persistent record across runs. Gradual bloat (a new lock here, an extra allocation there) would only be visible if someone manually compared log lines.
+- **Fix**: extended the test to also append a JSON line to `data/microbench/requests_overhead.log` at the repo root. One line per run, fields: `timestamp` (RFC3339 UTC), `commit` (from `MARKETPLACE_MICROBENCH_COMMIT` env var, or `"local"` for dev runs), `ns_per_req` (the measured overhead), `iters` (50_000), `platform` (`std::env::consts::OS`). The file is in `data/` which is already covered by `*.log` and untracked. The path is computed via `env!("CARGO_MANIFEST_DIR").parent().parent()` so it always resolves to `<repo_root>/data/microbench/`, regardless of where `cargo test` was invoked from. Failure to write the file is non-fatal (the eprintln! is the primary signal, the assertion is the real gate).
+- **CI integration**: the GitHub Actions workflow can set `MARKETPLACE_MICROBENCH_COMMIT=${{ github.sha }}` and `cat data/microbench/requests_overhead.log` will show one line per CI run, with the commit that produced it. A future enhancement could `git diff` the file across PRs to catch regressions, but that's out of scope.
+- **Why not write to `target/microbench/...` instead**: `target/` is cleaned by `cargo clean`, defeating the purpose of trending. `data/` survives clean/build cycles.
+- **Why a flat file and not a metrics DB**: 1 line per CI run, ~100 bytes, so even 1000 runs is only 100KB. Anything more sophisticated (SQLite, InfluxDB) is overkill for a single-counter trend.
+- **Validation**: `cargo test --lib wrap_fn_overhead` passes; the log file is created and appended. Two measurements already recorded: 272ns/req and 591ns/req (the variance is normal — first run was warmer than the second due to CPU thermal state). `check.ps1` 6/6 pass.
+- **Files changed (1)**: `actix_handlers.rs` (+28 / -0).
+
 ## 2026-06-05 18:20 - Bind dev to 0.0.0.0, Pause controls, & Live API integration
 
 - **Goal**: Expose Vite dev host to all network devices, add manual play/pause controls, and wire live backend API and Prometheus metrics directly into Svelte.
@@ -1724,3 +1734,16 @@ pm run build compiles clean.
 pm run test:e2e tests pass successfully (7.6s duration).
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
+
+## 2026-06-05 18:05
+
+- **Goal**: Homepage Visual Upgrades — Theme Swatches Selector, SVG Architecture Flow Diagram, Live Ledger Block Explorer.
+- **Changed**:
+  - `web/website/src/global.css`: Replaced `.theme-selector-container` / `.theme-select` CSS block with new `.theme-swatches` pill + `.theme-swatch` circular button styles (with `--swatch-color` per-theme custom property, hover scale glow, active ring). Added SVG flow diagram styles (`.flow-diagram`, `.flow-path`, `.flow-node-circle`, `.flow-node-label`, `@keyframes laserTravel`, `@keyframes nodePulse`). Added Live Ledger Explorer styles (`.sim-split` 2-column grid, `.ledger-explorer`, `.ledger-block`, `.ledger-block-hash/.meta/.price`, `@keyframes blockSlideIn`). Updated responsive media queries to use `.theme-swatches` and hide label on mobile.
+  - `web/website/src/App.svelte`: Replaced `<select class="theme-select">` in header with `{#each}` swatch `<button>` elements bound to `currentTheme` via `onclick`. Added `committedBlocks` state pre-seeded with 3 historical mock ledger blocks and `randHash()` helper. In `runSimulation()`, on consensus stage, appended a new block (with random hash, negotiated price $500.00, current time) to the front of `committedBlocks` with `isNew` flag for animation. Added SVG flow diagram inside the State Display column (Buyer/Server/Seller nodes, active path lines, ledger ring on consensus). Restructured simulator panel inner area to a `sim-split` 2-column layout: Column 1 = logs; Column 2 = live ledger block list. Agent cards now reactively glow via inline style bindings per `simState`.
+  - `web/website/tests/theme.spec.js`: Replaced `.theme-select.selectOption(theme)` calls with `page.click('[aria-label="X theme"]')` swatch button selectors to match the new UI.
+- **Validation**:
+  - `npm run build` compiles clean (61.99 kB JS, 13.18 kB CSS).
+  - `npm run test:e2e` — all 4 tests pass (8.2s).
+  - `check.ps1` spec governance PASS.
+- **Files changed (3)**: web/website/src/global.css, web/website/src/App.svelte, web/website/tests/theme.spec.js.

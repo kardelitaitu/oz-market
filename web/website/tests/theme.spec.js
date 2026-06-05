@@ -13,23 +13,28 @@ test.describe('Theme Switcher & UI Interactions', () => {
     await expect(body).toHaveAttribute('data-theme', 'midnight');
   });
 
-  test('should change theme and persist across reloads', async ({ page }) => {
+  test('should change theme via swatches and persist across reloads', async ({ page }) => {
     const body = page.locator('body');
-    const select = page.locator('.theme-select');
 
-    // Change theme to emerald
-    await select.selectOption('emerald');
+    // Change theme to emerald via swatch button
+    await page.click('[aria-label="Emerald theme"]');
     await expect(body).toHaveAttribute('data-theme', 'emerald');
 
     // Reload page and check if it persists
     await page.reload();
     await expect(body).toHaveAttribute('data-theme', 'emerald');
 
-    // Cycle through all 5 themes
-    const themes = ['midnight', 'emerald', 'crimson', 'solar', 'nordic'];
+    // Cycle through all 5 themes using swatch buttons
+    const themes = [
+      { id: 'midnight', label: 'Midnight' },
+      { id: 'emerald',  label: 'Emerald'  },
+      { id: 'crimson',  label: 'Crimson'  },
+      { id: 'solar',    label: 'Solar'    },
+      { id: 'nordic',   label: 'Nordic'   },
+    ];
     for (const theme of themes) {
-      await select.selectOption(theme);
-      await expect(body).toHaveAttribute('data-theme', theme);
+      await page.click(`[aria-label="${theme.label} theme"]`);
+      await expect(body).toHaveAttribute('data-theme', theme.id);
     }
   });
 

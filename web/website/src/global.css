@@ -519,42 +519,237 @@ footer {
   font-size: 0.85rem;
 }
 
-/* Theme Selector Styling */
-.theme-selector-container {
+/* Theme Swatches Selector */
+.theme-swatches {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 30px;
+  padding: 0.4rem 0.75rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.theme-swatches:hover {
+  border-color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
+.theme-swatches-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding-right: 0.25rem;
+  white-space: nowrap;
+}
+
+.theme-swatch {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  flex-shrink: 0;
+}
+
+.theme-swatch::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  transition: transform 0.2s ease;
+}
+
+.theme-swatch:hover {
+  transform: scale(1.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 10px var(--swatch-color);
+  z-index: 1;
+}
+
+.theme-swatch.active {
+  border-color: white;
+  box-shadow: 0 0 0 2px var(--swatch-color), 0 0 12px var(--swatch-color);
+  transform: scale(1.15);
+}
+
+.theme-swatch.active::before {
+  transform: scale(0.85);
+}
+
+/* Swatch color definitions */
+.swatch-midnight { --swatch-color: HSL(263, 90%, 65%); }
+.swatch-emerald  { --swatch-color: HSL(142, 80%, 50%); }
+.swatch-crimson  { --swatch-color: HSL(342, 85%, 60%); }
+.swatch-solar    { --swatch-color: HSL(38, 95%, 55%); }
+.swatch-nordic   { --swatch-color: HSL(200, 85%, 60%); }
+
+/* SVG Architecture Flow Diagram */
+.flow-diagram {
+  width: 100%;
+  overflow: visible;
+  margin-bottom: 1.5rem;
+  min-height: 90px;
+}
+
+.flow-node-circle {
+  fill: rgba(0, 0, 0, 0.45);
+  stroke: var(--color-primary);
+  stroke-width: 1.5;
+  transition: stroke 0.4s ease;
+}
+
+.flow-node-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-anchor: middle;
+}
+
+.flow-path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  transition: stroke 0.4s ease;
+}
+
+.flow-path.active {
+  stroke: var(--color-primary);
+  opacity: 0.8;
+}
+
+.flow-laser {
+  r: 3;
+  fill: var(--color-secondary);
+  opacity: 0;
+}
+
+.flow-laser.active {
+  opacity: 1;
+  animation: laserTravel 1.6s ease-in-out infinite;
+}
+
+@keyframes laserTravel {
+  0%   { offset-distance: 0%;   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+
+@keyframes nodePulse {
+  0%, 100% { r: 20; opacity: 1; }
+  50%       { r: 23; opacity: 0.75; }
+}
+
+.flow-node-active .flow-node-circle {
+  stroke: var(--color-secondary);
+  animation: nodePulse 1.2s ease-in-out infinite;
+}
+
+/* Live Ledger Explorer */
+.sim-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .sim-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ledger-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ledger-title {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.6rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 0.4rem 0.8rem;
-  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, box-shadow 0.4s ease 0.1s;
 }
 
-.theme-selector-container:hover {
-  border-color: var(--color-primary);
-  background: rgba(255, 255, 255, 0.06);
+.ledger-title .ledger-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
+  animation: pulse 2s infinite;
 }
 
-.theme-selector-container span {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+.ledger-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-glow) transparent;
 }
 
-.theme-select {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  outline: none;
+.ledger-block {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glow);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  animation: blockSlideIn 0.4s ease;
 }
 
-.theme-select option {
-  background: var(--bg-dark);
-  color: var(--text-primary);
+.ledger-block.new {
+  border-color: var(--color-success);
+  box-shadow: 0 0 10px rgba(var(--color-success), 0.15);
+}
+
+@keyframes blockSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ledger-block-hash {
+  color: var(--color-secondary);
+  font-weight: 500;
+  margin-bottom: 0.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledger-block-meta {
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ledger-block-price {
+  color: var(--color-accent);
+  font-weight: 700;
 }
 
 /* Responsive Design & Mobile Media Queries */
@@ -573,8 +768,12 @@ footer {
     width: 100%;
   }
   
-  .theme-selector-container {
+  .theme-swatches {
     justify-self: end;
+  }
+
+  .theme-swatches-label {
+    display: none;
   }
 }
 
@@ -587,7 +786,7 @@ footer {
     padding: 1rem;
   }
   
-  .theme-selector-container {
+  .theme-swatches {
     width: 100%;
     justify-content: center;
     align-self: center;
