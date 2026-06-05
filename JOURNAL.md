@@ -1757,3 +1757,12 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `web/website/src/global.css`: Updated `.flow-diagram` `min-height` to 100px to accommodate the larger 80-unit viewBox.
 - **Validation**: `npm run build` compiles clean (64.10 kB JS).
 - **Files changed (2)**: web/website/src/App.svelte, web/website/src/global.css.
+
+## 2026-06-05 18:12
+
+- **Goal**: Fix broken signal dot animation in SVG Architecture Flow Diagram.
+- **Root Causes**: (1) `<animateMotion><mpath href="#id"/></animateMotion>` fails when Svelte re-renders `{#if}` blocks because the `<path>` referenced by ID may not be found in the DOM at the time the `<mpath>` resolves. (2) `begin="0.7s"` on the second dot is wall-clock-relative to document load, not to when the element enters the DOM — once the page has been open more than 0.7s the dot never fires.
+- **Changed**:
+  - `web/website/src/App.svelte`: Switched from `<mpath href="#id">` to inline `path="M x,y L x2,y2"` attribute directly on `<animateMotion>` (universally supported, no ID lookup). Removed `begin="0.7s"`. Added bidirectional dots during `negotiating` state: secondary (accent-colored) dots travel server→buyer and server→seller at a 0.55s offset within the same 1.1s cycle to show counter-offers. Removed orphaned duplicate SVG block left over from previous edit.
+- **Validation**: `npm run build` compiles clean (64.54 kB JS).
+- **Files changed (1)**: web/website/src/App.svelte.

@@ -318,38 +318,67 @@
                   <feGaussianBlur stdDeviation="3" result="blur"/>
                   <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
                 </filter>
-
-                <!-- Path for buyer→server signal dot -->
-                <path id="path-bs" d="M 68 40 L 122 40"/>
-                <!-- Path for server→seller signal dot -->
-                <path id="path-ss" d="M 198 40 L 252 40"/>
               </defs>
 
               <!-- ─── Connector lines ─── -->
-              <!-- Buyer → Server -->
               <line
                 class="flow-path {simState !== 'idle' ? 'active' : ''}"
-                x1="68" y1="40" x2="122" y2="40"
+                x1="68" y1="40" x2="134" y2="40"
               />
-              <!-- Server → Seller -->
               <line
                 class="flow-path {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' || simState === 'revealing' || simState === 'completed' ? 'active' : ''}"
-                x1="198" y1="40" x2="252" y2="40"
+                x1="186" y1="40" x2="256" y2="40"
               />
 
-              <!-- ─── Animated signal dots ─── -->
+              <!-- ─── Signal dots: inline path avoids mpath ID lookup failures ─── -->
+
+              <!-- Buyer→Server forward dot (active when sim is running) -->
               {#if simState !== 'idle'}
                 <circle r="3.5" fill="var(--color-secondary)" opacity="0.9">
-                  <animateMotion dur="1.4s" repeatCount="indefinite" rotate="auto">
-                    <mpath href="#path-bs"/>
-                  </animateMotion>
+                  <animateMotion
+                    dur="1.1s"
+                    repeatCount="indefinite"
+                    calcMode="linear"
+                    path="M 68,40 L 134,40"
+                  />
                 </circle>
               {/if}
+
+              <!-- Server→Buyer return dot (only during negotiation for counter-offer feel) -->
+              {#if simState === 'negotiating'}
+                <circle r="2.8" fill="var(--color-accent)" opacity="0.75">
+                  <animateMotion
+                    dur="1.1s"
+                    repeatCount="indefinite"
+                    calcMode="linear"
+                    path="M 134,40 L 68,40"
+                    begin="0.55s"
+                  />
+                </circle>
+              {/if}
+
+              <!-- Server→Seller forward dot -->
               {#if simState === 'listing' || simState === 'negotiating' || simState === 'consensus' || simState === 'revealing' || simState === 'completed'}
                 <circle r="3.5" fill="var(--color-secondary)" opacity="0.9">
-                  <animateMotion dur="1.4s" repeatCount="indefinite" rotate="auto" begin="0.7s">
-                    <mpath href="#path-ss"/>
-                  </animateMotion>
+                  <animateMotion
+                    dur="1.1s"
+                    repeatCount="indefinite"
+                    calcMode="linear"
+                    path="M 186,40 L 256,40"
+                  />
+                </circle>
+              {/if}
+
+              <!-- Seller→Server return dot (during negotiation) -->
+              {#if simState === 'negotiating'}
+                <circle r="2.8" fill="var(--color-accent)" opacity="0.75">
+                  <animateMotion
+                    dur="1.1s"
+                    repeatCount="indefinite"
+                    calcMode="linear"
+                    path="M 256,40 L 186,40"
+                    begin="0.55s"
+                  />
                 </circle>
               {/if}
 
@@ -374,10 +403,10 @@
                   cx="160" cy="40" r="26"
                   style="stroke: {simState !== 'idle' ? 'var(--color-secondary)' : 'var(--color-primary)'}; stroke-width: {simState !== 'idle' ? '2' : '1.5'};"
                 />
-                <!-- Gear body: outer ring + inner circle + teeth -->
+                <!-- Gear ring + hub -->
                 <circle cx="160" cy="40" r="9" fill="none" stroke="var(--color-secondary)" stroke-width="1.5" opacity="0.8"/>
                 <circle cx="160" cy="40" r="4" fill="var(--color-secondary)" opacity="0.8"/>
-                <!-- 8 gear teeth as small rects rotated -->
+                <!-- 8 gear teeth -->
                 {#each [0,45,90,135,180,225,270,315] as deg}
                   <rect
                     x="158.5" y="27"
@@ -404,21 +433,20 @@
               </g>
               <text class="flow-node-label" x="280" y="73">SELLER</text>
 
-              <!-- ─── Consensus ring pulse around SERVER ─── -->
+              <!-- ─── Consensus ring: rotating dashed ring around server ─── -->
               {#if simState === 'consensus' || simState === 'revealing' || simState === 'completed'}
                 <circle cx="160" cy="40" r="32" fill="none"
-                  stroke="var(--color-success)" stroke-width="1"
-                  stroke-dasharray="5 3" opacity="0.55"
+                  stroke="var(--color-success)" stroke-width="1.5"
+                  stroke-dasharray="5 3" opacity="0.6"
                 >
                   <animateTransform attributeName="transform" type="rotate"
-                    from="0 160 40" to="360 160 40" dur="4s" repeatCount="indefinite"/>
+                    from="0 160 40" to="360 160 40" dur="3s" repeatCount="indefinite"/>
                 </circle>
               {/if}
             </svg>
 
-
-
             <div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Status</div>
+
             <div style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0.25rem 0;">
               {#if simState === 'idle'}Idle
               {:else if simState === 'listing'}Publishing...
