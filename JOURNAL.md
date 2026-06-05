@@ -1698,3 +1698,16 @@ pm run build compiles clean.
 pm run test:e2e E2E tests pass successfully (7.8s duration).
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
+
+## 2026-06-05 19:10 - Adjust simulator price parameters
+
+- **Goal**: Update the Interactive Agent Negotiation Simulator price sequence to reflect new negotiation values.
+- **Changed**:
+  - Modified script initialization, unSimulation, and esetSim inside web/website/src/App.svelte to use the new price sequence (700 -> 200 -> 650 -> 350 -> 600 -> 400 -> 500).
+- **Validation**:
+  - 
+pm run build compiles clean.
+  - 
+pm run test:e2e tests pass successfully (7.7s duration).
+  - check.ps1 runs pass successfully.
+- **Files changed (1)**: web/website/src/App.svelte (modified).

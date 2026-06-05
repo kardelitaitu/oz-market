@@ -1778,6 +1778,34 @@ mod tests {
             wrap_elapsed.as_micros(),
             ITERS
         );
+
+        // Persist the measurement to a trending file so gradual bloat is
+        // visible across runs. Path is <repo_root>/data/microbench/requests_overhead.log
+        // (one JSON object per line). `data/` and `*.log` are gitignored.
+        // Failure to write is non-fatal — the assertion below is the real gate.
+        if let Some(parent) = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+        {
+            let dir = parent.join("data").join("microbench");
+            let path = dir.join("requests_overhead.log");
+            let _ = std::fs::create_dir_all(&dir);
+            let line = format!(
+                "{{\"timestamp\":\"{}\",\"commit\":\"{}\",\"ns_per_req\":{:.0},\"iters\":{},\"platform\":\"{}\"}}\n",
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                std::env::var("MARKETPLACE_MICROBENCH_COMMIT")
+                    .unwrap_or_else(|_| "local".to_string()),
+                overhead_per_req_ns,
+                ITERS,
+                std::env::consts::OS,
+            );
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+        }
+
         assert!(
             overhead_per_req_ns < 1_000.0,
             "wrap_fn overhead is {overhead_per_req_ns:.0}ns/req, exceeds 1us budget"

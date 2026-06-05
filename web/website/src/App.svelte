@@ -9,7 +9,7 @@
   // Simulator States
   let simState = $state('idle'); // idle, negotiating, consensus, revealing, completed
   let simLogs = $state([]);
-  let currentPrice = $state(200);
+  let currentPrice = $state(700);
   let logContainer = $state();
   
   let timeouts = [];
@@ -35,8 +35,8 @@
     if (isPaused) return;
     
     simState = 'listing';
-    simLogs = [`[${sellerName}] Publishing new product listing: "iPhone 15 Pro" at base price $200.00 (listing_id: #L-8821)...`];
-    currentPrice = 200;
+    simLogs = [`[${sellerName}] Publishing new product listing: "iPhone 15 Pro" at base price $700.00 (listing_id: #L-8821)...`];
+    currentPrice = 700;
     
     let t1 = setTimeout(() => {
       if (isPaused) return;
@@ -46,44 +46,44 @@
     let t2 = setTimeout(() => {
       if (isPaused) return;
       simState = 'negotiating';
-      simLogs = [...simLogs, `[${buyerName}] Sent initial low-ball offer: $150.00 (idempotency_key: tx-771a)`];
-      currentPrice = 150;
+      simLogs = [...simLogs, `[${buyerName}] Sent initial low-ball offer: $200.00 (idempotency_key: tx-771a)`];
+      currentPrice = 200;
     }, 1600);
     
     let t3 = setTimeout(() => {
       if (isPaused) return;
-      simLogs = [...simLogs, `[${sellerName}] Counter-offer received: $195.00 (min_seller_rating check: PASS)`];
-      currentPrice = 195;
+      simLogs = [...simLogs, `[${sellerName}] Counter-offer received: $650.00 (min_seller_rating check: PASS)`];
+      currentPrice = 650;
     }, 2400);
     
     let t4 = setTimeout(() => {
       if (isPaused) return;
-      simLogs = [...simLogs, `[${buyerName}] Countering with price history average: $165.00`];
-      currentPrice = 165;
+      simLogs = [...simLogs, `[${buyerName}] Countering with price history average: $350.00`];
+      currentPrice = 350;
     }, 3200);
     
     let t5 = setTimeout(() => {
       if (isPaused) return;
-      simLogs = [...simLogs, `[${sellerName}] Adjusting bid within discount limits. Counter-offer: $185.00`];
-      currentPrice = 185;
+      simLogs = [...simLogs, `[${sellerName}] Adjusting bid within discount limits. Counter-offer: $600.00`];
+      currentPrice = 600;
     }, 4000);
     
     let t6 = setTimeout(() => {
       if (isPaused) return;
-      simLogs = [...simLogs, `[${buyerName}] Near upper utility limit. Final offer: $178.00`];
-      currentPrice = 178;
+      simLogs = [...simLogs, `[${buyerName}] Near upper utility limit. Final offer: $400.00`];
+      currentPrice = 400;
     }, 4800);
 
     let t7 = setTimeout(() => {
       if (isPaused) return;
-      simLogs = [...simLogs, `[${sellerName}] Final counter split difference: $180.00`];
-      currentPrice = 180;
+      simLogs = [...simLogs, `[${sellerName}] Final counter split difference: $500.00`];
+      currentPrice = 500;
     }, 5600);
 
     let t8 = setTimeout(() => {
       if (isPaused) return;
       simState = 'consensus';
-      simLogs = [...simLogs, `[${buyerName}] Accept offer $180.00. Consensus reached! Writing to ledger cache...`];
+      simLogs = [...simLogs, `[${buyerName}] Accept offer $500.00. Consensus reached! Writing to ledger cache...`];
       
       let t9 = setTimeout(() => {
         approveReveal();
@@ -126,7 +126,7 @@
     clearAllTimeouts();
     simState = 'idle';
     simLogs = [];
-    currentPrice = 200;
+    currentPrice = 700;
   }
   
   function togglePause() {
