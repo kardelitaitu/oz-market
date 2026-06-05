@@ -1595,3 +1595,15 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 pm run build compiles clean with zero compiler or accessibility (a11y) warnings.
   - check.ps1 executed locally; all 6 verification stages passed successfully.
 - **Files changed (8 new, 2 modified)**: Scaffolds web/website/ and registers workspace changes.
+
+## 2026-06-05 18:10 - Autoplay AI Negotiation Simulator Loop
+
+- **Goal**: Make the AI Negotiation Simulator autoplay, pause for 5 seconds in its completed state, and loop indefinitely to provide a dynamic, live showcase of agent-to-agent commerce on the home page.
+- **Changed**:
+  - Refactored App.svelte simulation functions (unSimulation, pproveReveal) to clear active timers, auto-transition states, and schedule loop resets.
+  - Added a Svelte 5 $effect block to trigger the first autoplay execution on mount and safely clear active timeouts on component destroy.
+- **Validation**:
+  - 
+pm run build compiles clean with zero warnings.
+  - check.ps1 runs pass successfully.
+- **Files changed (1)**: web/website/src/App.svelte (modified).

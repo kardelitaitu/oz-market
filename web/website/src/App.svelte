@@ -8,51 +8,89 @@
   let simLogs = $state([]);
   let currentPrice = $state(200);
   
+  let timeouts = [];
+  
+  function clearAllTimeouts() {
+    timeouts.forEach(t => clearTimeout(t));
+    timeouts = [];
+  }
+  
   // Simulation script runner
   function runSimulation() {
+    clearAllTimeouts();
     simState = 'negotiating';
     simLogs = ['[Buyer Agent] Initiating query for listing ID: #L-8821...'];
     
-    setTimeout(() => {
+    let t1 = setTimeout(() => {
       simLogs = [...simLogs, '[Buyer Agent] Sent initial offer: $160.00 (idempotency_key: tx-771a)'];
       currentPrice = 160;
     }, 1000);
     
-    setTimeout(() => {
+    let t2 = setTimeout(() => {
       simLogs = [...simLogs, '[Seller Agent] Counter-offer received: $190.00 (min_seller_rating check: PASS)'];
       currentPrice = 190;
     }, 2000);
     
-    setTimeout(() => {
+    let t3 = setTimeout(() => {
       simLogs = [...simLogs, '[Buyer Agent] Analyzing price history. Countering with: $180.00'];
       currentPrice = 180;
     }, 3000);
     
-    setTimeout(() => {
+    let t4 = setTimeout(() => {
       simLogs = [...simLogs, '[Seller Agent] Consensus reached at $180.00. Writing to ledger cache...'];
       simState = 'consensus';
+      
+      // Auto transition to reveal request in loop
+      let t5 = setTimeout(() => {
+        approveReveal();
+      }, 1500);
+      timeouts.push(t5);
     }, 4000);
+    
+    timeouts.push(t1, t2, t3, t4);
   }
   
   function approveReveal() {
     simState = 'revealing';
     simLogs = [...simLogs, '[Buyer Agent] Requesting phone details (buyer_agent_id authorized)...'];
     
-    setTimeout(() => {
+    let t1 = setTimeout(() => {
       simLogs = [...simLogs, '[Seller Agent] Authorizing decrypt token. Cryptographic claims matched.'];
     }, 1000);
     
-    setTimeout(() => {
+    let t2 = setTimeout(() => {
       simLogs = [...simLogs, '[System] Contact info revealed: +1-555-0199 (Seller: Alice)'];
       simState = 'completed';
+      
+      // Pause 5 seconds, reset, and loop again
+      let t3 = setTimeout(() => {
+        resetSim();
+        let t4 = setTimeout(() => {
+          runSimulation();
+        }, 1000);
+        timeouts.push(t4);
+      }, 5000);
+      timeouts.push(t3);
     }, 2000);
+    
+    timeouts.push(t1, t2);
   }
   
   function resetSim() {
+    clearAllTimeouts();
     simState = 'idle';
     simLogs = [];
     currentPrice = 200;
   }
+  
+  // Svelte 5 $effect to trigger autoplay on mount
+  $effect(() => {
+    runSimulation();
+    
+    return () => {
+      clearAllTimeouts();
+    };
+  });
 </script>
 
 <header>
