@@ -187,9 +187,8 @@ if (-not $SkipTests -and -not $failed) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        $output = cargo test --lib 2>&1
+        cargo test --lib
         $passed = $LASTEXITCODE -eq 0
-        if (-not $passed) { Write-Host $output }
         $elapsed = $sw.Elapsed.TotalSeconds
         $results.Tests = @{ Passed = $passed; Duration = $elapsed }
         Write-StepResult $passed

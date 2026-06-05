@@ -1999,4 +1999,5 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 - **Database Provisioning**: Executed `bootstrap_schema` locally against the Neon PostgreSQL production database connection string. All 14 migrations (`0001_init.sql` to `0014_add_credit_ledger.sql`) successfully compiled and applied, completing the schema configuration on Neon.
 - **Dynamic Backend URL Injection**: Modified Svelte frontend entry point `web/website/src/main.js` to read `import.meta.env.VITE_BACKEND_URL` and expose it via `window.__BACKEND_URL` to allow dynamic connection overrides (e.g., when deployed on Netlify to connect to Render).
+- **Stabilized check.ps1 Tests Step**: Removed stdout/stderr redirection from `cargo test --lib` inside `check.ps1` to prevent PowerShell from incorrectly reporting a non-zero exit code when compile output is emitted to stderr.
 - **Validation**: Ran full local verification via `check.ps1`; website build and Playwright E2E tests all pass cleanly with zero errors.
