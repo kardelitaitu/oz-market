@@ -137,6 +137,9 @@ body[data-theme="nordic"] {
 
 /* Body base */
 body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   font-family: var(--font-sans);
   background-color: var(--bg-dark);
   color: var(--text-primary);
@@ -146,6 +149,10 @@ body {
     radial-gradient(circle at 10% 20%, var(--bg-glow-1) 0%, transparent 40%),
     radial-gradient(circle at 90% 80%, var(--bg-glow-2) 0%, transparent 40%);
   background-attachment: fixed;
+}
+
+main {
+  flex: 1;
 }
 
 /* Background variants */
@@ -278,4 +285,15 @@ button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

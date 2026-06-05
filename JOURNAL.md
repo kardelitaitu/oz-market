@@ -1896,14 +1896,13 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Validation**: Playwright E2E tests run successfully (96/96 pass). Workspace compliance verification `./check.ps1` runs clean.
 - **Files changed**: `backend/server/Cargo.toml`, `backend/server/src/http/actix_handlers.rs`, `backend/server/src/http/actix_runtime.rs`, `web/website/playwright.config.js`, `web/website/src/lib/LedgerExplorer.svelte`, `web/website/src/lib/Simulator.svelte`, `web/website/src/lib/simulator.svelte.js`, `web/website/tests/a11y.spec.js`, `web/website/tests/components.spec.js`, `JOURNAL.md` (modified); `backend/server/src/bin/sse_bench.rs`, `web/website/src/lib/MetricsPanel.svelte`, `web/website/src/lib/BlockInspectionModal.svelte` (new).
 
-## 2026-06-06 00:35 — Nav expansion: FAQs, Status tabs + Sign In/Up
+## 2026-06-06 01:55 — prefers-reduced-motion, check.ps1 audit, bundle comparison
 
-- **Nav updated to 5 tabs**: Home, Getting Started, FAQs, Status, Docs — with URL routing for each (`/faqs`, `/status`).
-- **Sign In / Sign Up buttons**: Added to the right side of the header next to ThemeSwitcher, styled as ghost (Sign In) and filled primary (Sign Up).
-- **FAQTab.svelte**: New component with 5 mock FAQ items covering platform basics, getting started, status, contributing, and tech stack.
-- **StatusTab.svelte**: New component showing MetricsBar + system status cards (API Server, Database, Ledger Cache) all in offline state.
-- **Test updates**: Nav button count 3→5, button labels updated, keyboard tab sequence adjusted.
-- **Validation**: `npm run build` passes with zero warnings.
+- **prefers-reduced-motion**: Added `@media (prefers-reduced-motion: reduce)` to global.css — disables all animations and transitions for users who request reduced motion.
+- **check.ps1 audit**: Verified the pre-push script exists at root; runs `cargo check`, `fmt`, `clippy`, `tests`, and `npm run build` + `npm run test:e2e` for the website. 
+- **Bundle size comparison**: Net result of all refactors — JS shrank (107.29 KB vs ~108+ KB pre-refactor), CSS grew marginally from new features, zero warnings.
+- **Font CLS audit**: Non-blocking font strategy confirmed — `preload` + `media="print"` swap + `display=swap` ensures text remains visible during load.
+- **Validation**: `npm run build` zero warnings; `npm run test:e2e` confirmed working (96 tests).
 
 ## 2026-06-06 01:45 — Design review polish (3 rounds) + accessibility + performance
 
@@ -1937,6 +1936,15 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **URL routing**: Added pathname-based routing to App.svelte — `/getting-started`, `/getting-started/iphone`, etc. now work as shareable URLs via `history.pushState` + `popstate`. GuideTab converted from owning state to receiving props.
 - **Vite config**: Added `historyApiFallback: true` for SPA fallback + custom middleware to serve `/docs/*` from repo root `docs/` directory.
 - **Cleanup**: Removed unused `.mock-placeholder` CSS, fixed stale test refs (`guide-step` → `step-card`, step counts updated).
+- **Validation**: `npm run build` passes with zero warnings.
+
+## 2026-06-06 00:35 — Nav expansion: FAQs, Status tabs + Sign In/Up
+
+- **Nav updated to 5 tabs**: Home, Getting Started, FAQs, Status, Docs — with URL routing for each (`/faqs`, `/status`).
+- **Sign In / Sign Up buttons**: Added to the right side of the header next to ThemeSwitcher, styled as ghost (Sign In) and filled primary (Sign Up).
+- **FAQTab.svelte**: New component with 5 mock FAQ items covering platform basics, getting started, status, contributing, and tech stack.
+- **StatusTab.svelte**: New component showing MetricsBar + system status cards (API Server, Database, Ledger Cache) all in offline state.
+- **Test updates**: Nav button count 3→5, button labels updated, keyboard tab sequence adjusted.
 - **Validation**: `npm run build` passes with zero warnings.
 
 ## 2026-06-05 23:55 — Post-commit review fixes
