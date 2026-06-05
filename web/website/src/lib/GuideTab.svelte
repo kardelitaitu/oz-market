@@ -31,7 +31,7 @@
   .platform-tab.active {
     background: var(--color-primary-glow);
     border-color: var(--color-primary);
-    box-shadow: 0 4px 14px rgba(170, 59, 255, 0.15);
+    box-shadow: 0 4px 14px var(--color-primary-glow);
   }
 
   .platform-tab-icon {

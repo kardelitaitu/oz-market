@@ -167,7 +167,7 @@
   nav button.active {
     background: var(--color-primary);
     color: var(--text-primary);
-    box-shadow: 0 4px 14px rgba(170, 59, 255, 0.3), inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.25);
+    box-shadow: 0 4px 14px var(--color-primary-glow), inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.25);
   }
 
   .header-right {
