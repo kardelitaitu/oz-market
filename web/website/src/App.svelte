@@ -13,15 +13,28 @@
   let logContainer = $state();
   let ledgerContainer = $state();
 
-  // Live Ledger Explorer — seed 3 historical blocks
+  // Live Ledger Explorer — seed historical blocks
   function randHash() {
     return '0x' + Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0');
   }
   let committedBlocks = $state([
-    { hash: '0x3f8a21c94d07', price: 480, item: 'Samsung S24 Ultra', ts: '14:22:07', isNew: false },
-    { hash: '0xa1b09e3f72cc', price: 320, item: 'iPad Pro 11"', ts: '13:55:41', isNew: false },
-    { hash: '0x7cd45f183a92', price: 650, item: 'MacBook Air M3', ts: '12:08:19', isNew: false },
+    { hash: '0x3f8a21c94d07', price: 480,  item: 'Samsung Galaxy S24 Ultra', ts: '17:58:02', isNew: false },
+    { hash: '0xa1b09e3f72cc', price: 320,  item: 'iPad Pro 11" M4',          ts: '17:41:35', isNew: false },
+    { hash: '0x7cd45f183a92', price: 650,  item: 'MacBook Air M3',           ts: '17:22:19', isNew: false },
+    { hash: '0xb2e70d9c15f1', price: 210,  item: 'Sony WH-1000XM5',          ts: '17:05:44', isNew: false },
+    { hash: '0xf9a3c841de02', price: 890,  item: 'DJI Mini 4 Pro',           ts: '16:48:11', isNew: false },
+    { hash: '0x0d72fe5b8a63', price: 145,  item: 'Apple AirPods Pro 2',      ts: '16:30:57', isNew: false },
+    { hash: '0x5c1b947e2f80', price: 1100, item: 'ASUS ROG Zephyrus G14',    ts: '16:12:33', isNew: false },
+    { hash: '0xe8d04c3791ab', price: 390,  item: 'Google Pixel 8 Pro',       ts: '15:55:08', isNew: false },
+    { hash: '0x29fc8b60a347', price: 275,  item: 'Nintendo Switch OLED',     ts: '15:37:44', isNew: false },
+    { hash: '0xc6a51e082d94', price: 560,  item: 'Samsung 49" Odyssey G9',   ts: '15:19:20', isNew: false },
+    { hash: '0x84b3d7f91c50', price: 720,  item: 'iPhone 15 Pro Max',        ts: '15:02:55', isNew: false },
+    { hash: '0x1a9e5042bc76', price: 430,  item: 'Fujifilm X-T5 Body',       ts: '14:44:31', isNew: false },
+    { hash: '0x6d27cf3e54b8', price: 185,  item: 'Meta Quest 3 (128GB)',      ts: '14:27:06', isNew: false },
+    { hash: '0xd50e8f1a7263', price: 310,  item: 'Garmin Fenix 7S Pro',      ts: '14:09:42', isNew: false },
+    { hash: '0x92bc4d6f3e01', price: 95,   item: 'Anker 737 Power Bank',     ts: '13:52:18', isNew: false },
   ]);
+
   
   let timeouts = [];
   
