@@ -167,6 +167,80 @@ pub async fn negotiation_event_stream(
         .streaming(stream)
 }
 
+/// SSE handler: streams global block commits (unauthenticated) for demo/ledger dashboard.
+pub async fn global_commits_stream(
+    app: web::Data<ActixApp>,
+    event_bus: web::Data<broadcast::Sender<String>>,
+) -> HttpResponse {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(32);
+    let mut broadcast_rx = event_bus.subscribe();
+
+    tokio::spawn(async move {
+        let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            tokio::select! {
+                event = broadcast_rx.recv() => {
+                    match event {
+                        Ok(msg) => {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&msg) {
+                                if parsed.get("event_type").and_then(|v| v.as_str()) == Some("negotiation_accepted") {
+                                    if let Some(resp) = parsed.get("response") {
+                                        let listing_id_str = resp.get("listing_id").and_then(|v| v.as_str()).unwrap_or("").to_owned();
+                                        let price = resp.get("final_offer_amount")
+                                            .or_else(|| resp.get("latest_offer_amount"))
+                                            .and_then(|v| v.as_f64())
+                                            .unwrap_or(500.0);
+
+                                        let mut item = "Autonomous Listing".to_owned();
+                                        if !listing_id_str.is_empty() {
+                                            if let Ok(Some(listing)) = app.get_listing(None, &listing_id_str).await {
+                                                item = listing.listing.title;
+                                            }
+                                        }
+
+                                        let rand_val = format!("0x{}", &uuid::Uuid::new_v4().to_string()[0..12]);
+                                        let ts = chrono::Utc::now().format("%H:%M:%S").to_string();
+                                        let block_payload = serde_json::json!({
+                                            "hash": rand_val,
+                                            "price": price as u64,
+                                            "item": item,
+                                            "ts": ts,
+                                        });
+
+                                        if let Ok(json_str) = serde_json::to_string(&block_payload) {
+                                            if tx.send(Bytes::from(format!(
+                                                "event: commit_block\ndata: {}\n\n",
+                                                json_str
+                                            ))).await.is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+                _ = heartbeat.tick() => {
+                    if tx.send(Bytes::from(": heartbeat\n\n")).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    let stream = ReceiverStream::new(rx).map(Ok::<_, actix_web::Error>);
+    HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .insert_header(("Cache-Control", "no-cache"))
+        .insert_header(("Connection", "keep-alive"))
+        .insert_header(("Access-Control-Allow-Origin", "*"))
+        .streaming(stream)
+}
+
 #[cfg(test)]
 fn parse_fields_param(query: &str) -> Option<HashSet<String>> {
     let result: HashSet<String> = query
@@ -1400,7 +1474,8 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
                 .route(
                     "/events/negotiations/{negotiation_id}",
                     web::get().to(negotiation_event_stream),
-                ),
+                )
+                .route("/events/commits", web::get().to(global_commits_stream)),
         )
         // Internal admin/support routes
         .service(
@@ -1566,7 +1641,7 @@ pub async fn adjust_credits(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observability::ServerObservability;
+    use crate::observability::{ServerObservability, ServerObservabilitySnapshot};
     use actix_web::dev::Service;
     use actix_web::http::StatusCode;
     use actix_web::test::TestRequest;
@@ -1574,6 +1649,119 @@ mod tests {
     use actix_web::App;
     use actix_web::HttpResponse;
     use std::sync::Arc;
+
+    /// Render a single-counter Prometheus text body for test fixtures.
+    /// Each per-counter smoke test installs this body on its `/metrics`
+    /// route so the assertion can check the wrap_fn-driven value
+    /// propagated to the response. The real `metrics_handler` in
+    /// `actix_runtime.rs` emits a much larger body with all 25 metrics;
+    /// tests use this minimal version to stay focused on a single
+    /// counter's increment path.
+    fn render_test_metrics_body(
+        counter: &'static str,
+        snap: &ServerObservabilitySnapshot,
+    ) -> String {
+        let (help, value) = match counter {
+            "requests_total" => ("Total requests", snap.requests_total),
+            "internal_requests_total" => (
+                "Total requests to /internal/v1/ routes",
+                snap.internal_requests_total,
+            ),
+            "internal_writes_total" => (
+                "Total 200/201/204 responses on /internal/v1/ routes",
+                snap.internal_writes_total,
+            ),
+            "conflict_responses_total" => (
+                "Total 409 Conflict responses",
+                snap.conflict_responses_total,
+            ),
+            "quota_rejections_total" => (
+                "Total 429 Too Many Requests responses",
+                snap.quota_rejections_total,
+            ),
+            "error_responses_total" => (
+                "Total responses with status >= 400",
+                snap.error_responses_total,
+            ),
+            other => panic!("render_test_metrics_body: unknown counter `{other}`"),
+        };
+        format!("# HELP {counter} {help}\n# TYPE {counter} counter\n{counter} {value}\n")
+    }
+
+    /// Build a minimal actix App pre-wired with the production `wrap_fn`
+    /// middleware (the one that calls `obs.record_request(path, status)` on
+    /// every response) and a `/metrics` route that emits a single
+    /// `counter` value. Test-supplied trigger routes are added via the
+    /// `configure` closure.
+    ///
+    /// Usage:
+    /// ```ignore
+    /// init_metrics_test_app!(obs, app, "conflict_responses_total", |cfg| {
+    ///     cfg.route(
+    ///         "/reserve",
+    ///         web::post().to(|| async { HttpResponse::Conflict().finish() }),
+    ///     );
+    /// });
+    /// ```
+    ///
+    /// `obs` and `app` are bound as new locals in the caller's scope.
+    /// The wrap_fn captures `obs`, so `obs.snapshot().*` reflects every
+    /// request the App processes.
+    macro_rules! init_metrics_test_app {
+        ($obs:ident, $app:ident, $counter:literal, $configure:expr) => {
+            let $obs = Arc::new(ServerObservability::new());
+            let obs_data = web::Data::new($obs.clone());
+            let $app = actix_web::test::init_service(
+                App::new()
+                    .app_data(obs_data.clone())
+                    .wrap_fn(move |req, srv| {
+                        let obs = obs_data.clone();
+                        let path = req.path().to_owned();
+                        let fut = srv.call(req);
+                        async move {
+                            let res: Result<_, actix_web::Error> = fut.await;
+                            if let Ok(ref response) = res {
+                                obs.record_request(&path, response.status().as_u16());
+                            }
+                            res
+                        }
+                    })
+                    .configure($configure)
+                    .route(
+                        "/metrics",
+                        web::get().to({
+                            let obs = $obs.clone();
+                            move || {
+                                let snap = obs.snapshot();
+                                async move {
+                                    HttpResponse::Ok()
+                                        .content_type("text/plain; version=0.0.4; charset=utf-8")
+                                        .body(render_test_metrics_body($counter, &snap))
+                                }
+                            }
+                        }),
+                    ),
+            )
+            .await;
+        };
+    }
+
+    /// Scrape the test App's `/metrics` route and return the body as a
+    /// `String`. Inlined as a macro (rather than an `async fn`) so we
+    /// don't have to name the actix `Service` generic types that
+    /// `init_service` returns — call sites all use the same shape, and
+    /// the macro keeps the test body self-contained.
+    macro_rules! scrape_metrics_body {
+        ($app:expr) => {{
+            let req = TestRequest::get().uri("/metrics").to_request();
+            let resp = actix_web::test::call_service($app, req).await;
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = actix_web::test::read_body(resp).await;
+            std::str::from_utf8(&body)
+                .expect("metrics body is utf-8")
+                .to_owned()
+        }};
+    }
 
     /// Regression test for the metrics request-counter middleware.
     /// Verifies that wrap_fn middleware actually records requests (not a hardcoded 0).
@@ -1632,57 +1820,21 @@ mod tests {
     /// observability snapshot.
     #[actix_web::test]
     async fn metrics_scrape_reflects_wrap_fn_counter() {
-        use crate::observability::ServerObservability;
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = actix_web::test::init_service(
-            App::new()
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
+        init_metrics_test_app!(
+            obs,
+            app,
+            "requests_total",
+            |cfg: &mut web::ServiceConfig| {
+                cfg.route(
                     "/ping",
                     web::get().to(|| async { HttpResponse::Ok().body("pong") }),
-                )
-                .route(
-                    "/metrics",
-                    web::get().to({
-                        let obs = obs.clone();
-                        move || {
-                            let snap = obs.snapshot();
-                            async move {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP requests_total Total requests\n\
-                                         # TYPE requests_total counter\n\
-                                         requests_total {}\n",
-                                        snap.requests_total
-                                    ))
-                            }
-                        }
-                    }),
-                ),
-        )
-        .await;
+                );
+            }
+        );
 
         // Hit a route 5 times.
         for _ in 0..5 {
-            let req = actix_web::test::TestRequest::get()
-                .uri("/ping")
-                .to_request();
+            let req = TestRequest::get().uri("/ping").to_request();
             let _resp = actix_web::test::call_service(&app, req).await;
         }
 
@@ -1691,13 +1843,7 @@ mod tests {
         // increments the counter AFTER the response is rendered with the
         // pre-scrape value. This is the correct semantics for a Prometheus
         // counter — scrapes see the count of prior requests, not themselves.)
-        let req = actix_web::test::TestRequest::get()
-            .uri("/metrics")
-            .to_request();
-        let resp = actix_web::test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = actix_web::test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        let body_str = scrape_metrics_body!(&app);
         assert!(
             body_str.contains("requests_total 5"),
             "metrics body should reflect 5 pings (the scrape itself hasn't been recorded yet); got: {body_str}"
@@ -1711,66 +1857,26 @@ mod tests {
     /// handler hardcodes a constant instead of reading the snapshot.
     #[actix_web::test]
     async fn metrics_scrape_reflects_internal_requests_counter() {
-        use crate::observability::ServerObservability;
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = actix_web::test::init_service(
-            App::new()
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
+        init_metrics_test_app!(
+            obs,
+            app,
+            "internal_requests_total",
+            |cfg: &mut web::ServiceConfig| {
+                cfg.route(
                     "/internal/v1/listings/seed",
                     web::post().to(|| async { HttpResponse::NoContent().finish() }),
-                )
-                .route(
-                    "/metrics",
-                    web::get().to({
-                        let obs = obs.clone();
-                        move || {
-                            let snap = obs.snapshot();
-                            async move {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP internal_requests_total Total requests to /internal/v1/ routes\n\
-                                         # TYPE internal_requests_total counter\n\
-                                         internal_requests_total {}\n",
-                                        snap.internal_requests_total
-                                    ))
-                            }
-                        }
-                    }),
-                ),
-        )
-        .await;
+                );
+            }
+        );
 
         for _ in 0..3 {
-            let req = actix_web::test::TestRequest::post()
+            let req = TestRequest::post()
                 .uri("/internal/v1/listings/seed")
                 .to_request();
             let _resp = actix_web::test::call_service(&app, req).await;
         }
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/metrics")
-            .to_request();
-        let resp = actix_web::test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = actix_web::test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        let body_str = scrape_metrics_body!(&app);
         assert!(
             body_str.contains("internal_requests_total 3"),
             "metrics body should reflect 3 internal requests; got: {body_str}"
@@ -1783,66 +1889,26 @@ mod tests {
     /// a write (it counts as a conflict instead).
     #[actix_web::test]
     async fn metrics_scrape_reflects_internal_writes_counter() {
-        use crate::observability::ServerObservability;
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = actix_web::test::init_service(
-            App::new()
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
+        init_metrics_test_app!(
+            obs,
+            app,
+            "internal_writes_total",
+            |cfg: &mut web::ServiceConfig| {
+                cfg.route(
                     "/internal/v1/sellers/quota",
                     web::post().to(|| async { HttpResponse::Created().finish() }),
-                )
-                .route(
-                    "/metrics",
-                    web::get().to({
-                        let obs = obs.clone();
-                        move || {
-                            let snap = obs.snapshot();
-                            async move {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP internal_writes_total Total 200/201/204 responses on /internal/v1/ routes\n\
-                                         # TYPE internal_writes_total counter\n\
-                                         internal_writes_total {}\n",
-                                        snap.internal_writes_total
-                                    ))
-                            }
-                        }
-                    }),
-                ),
-        )
-        .await;
+                );
+            }
+        );
 
         for _ in 0..2 {
-            let req = actix_web::test::TestRequest::post()
+            let req = TestRequest::post()
                 .uri("/internal/v1/sellers/quota")
                 .to_request();
             let _resp = actix_web::test::call_service(&app, req).await;
         }
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/metrics")
-            .to_request();
-        let resp = actix_web::test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = actix_web::test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        let body_str = scrape_metrics_body!(&app);
         assert!(
             body_str.contains("internal_writes_total 2"),
             "metrics body should reflect 2 successful internal writes; got: {body_str}"
@@ -1853,66 +1919,24 @@ mod tests {
     /// Mirrors the real handler for that single counter.
     #[actix_web::test]
     async fn metrics_scrape_reflects_conflict_responses_counter() {
-        use crate::observability::ServerObservability;
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = actix_web::test::init_service(
-            App::new()
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
+        init_metrics_test_app!(
+            obs,
+            app,
+            "conflict_responses_total",
+            |cfg: &mut web::ServiceConfig| {
+                cfg.route(
                     "/reserve",
                     web::post().to(|| async { HttpResponse::Conflict().finish() }),
-                )
-                .route(
-                    "/metrics",
-                    web::get().to({
-                        let obs = obs.clone();
-                        move || {
-                            let snap = obs.snapshot();
-                            async move {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP conflict_responses_total Total 409 Conflict responses\n\
-                                         # TYPE conflict_responses_total counter\n\
-                                         conflict_responses_total {}\n",
-                                        snap.conflict_responses_total
-                                    ))
-                            }
-                        }
-                    }),
-                ),
-        )
-        .await;
+                );
+            }
+        );
 
         for _ in 0..4 {
-            let req = actix_web::test::TestRequest::post()
-                .uri("/reserve")
-                .to_request();
+            let req = TestRequest::post().uri("/reserve").to_request();
             let _resp = actix_web::test::call_service(&app, req).await;
         }
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/metrics")
-            .to_request();
-        let resp = actix_web::test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = actix_web::test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        let body_str = scrape_metrics_body!(&app);
         assert!(
             body_str.contains("conflict_responses_total 4"),
             "metrics body should reflect 4 conflict responses; got: {body_str}"
@@ -1923,68 +1947,24 @@ mod tests {
     /// Mirrors the real handler for that single counter.
     #[actix_web::test]
     async fn metrics_scrape_reflects_quota_rejections_counter() {
-        use crate::observability::ServerObservability;
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = actix_web::test::init_service(
-            App::new()
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
+        init_metrics_test_app!(
+            obs,
+            app,
+            "quota_rejections_total",
+            |cfg: &mut web::ServiceConfig| {
+                cfg.route(
                     "/throttled",
-                    web::get().to(|| async {
-                        HttpResponse::TooManyRequests().finish()
-                    }),
-                )
-                .route(
-                    "/metrics",
-                    web::get().to({
-                        let obs = obs.clone();
-                        move || {
-                            let snap = obs.snapshot();
-                            async move {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP quota_rejections_total Total 429 Too Many Requests responses\n\
-                                         # TYPE quota_rejections_total counter\n\
-                                         quota_rejections_total {}\n",
-                                        snap.quota_rejections_total
-                                    ))
-                            }
-                        }
-                    }),
-                ),
-        )
-        .await;
+                    web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
+                );
+            }
+        );
 
         for _ in 0..5 {
-            let req = actix_web::test::TestRequest::get()
-                .uri("/throttled")
-                .to_request();
+            let req = TestRequest::get().uri("/throttled").to_request();
             let _resp = actix_web::test::call_service(&app, req).await;
         }
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/metrics")
-            .to_request();
-        let resp = actix_web::test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = actix_web::test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        let body_str = scrape_metrics_body!(&app);
         assert!(
             body_str.contains("quota_rejections_total 5"),
             "metrics body should reflect 5 quota rejections; got: {body_str}"
@@ -1997,81 +1977,33 @@ mod tests {
     /// Mirrors the real handler for that single counter.
     #[actix_web::test]
     async fn metrics_scrape_reflects_error_responses_counter() {
-        use crate::observability::ServerObservability;
-
-        let obs = Arc::new(ServerObservability::new());
-        let obs_data = web::Data::new(obs.clone());
-
-        let app = actix_web::test::init_service(
-            App::new()
-                .app_data(obs_data.clone())
-                .wrap_fn(move |req, srv| {
-                    let obs = obs_data.clone();
-                    let path = req.path().to_owned();
-                    let fut = srv.call(req);
-                    async move {
-                        let res: Result<_, actix_web::Error> = fut.await;
-                        if let Ok(ref response) = res {
-                            obs.record_request(&path, response.status().as_u16());
-                        }
-                        res
-                    }
-                })
-                .route(
+        init_metrics_test_app!(
+            obs,
+            app,
+            "error_responses_total",
+            |cfg: &mut web::ServiceConfig| {
+                cfg.route(
                     "/conflict",
                     web::post().to(|| async { HttpResponse::Conflict().finish() }),
-                )
-                .route(
+                );
+                cfg.route(
                     "/throttled",
-                    web::get().to(|| async {
-                        HttpResponse::TooManyRequests().finish()
-                    }),
-                )
-                .route(
-                    "/metrics",
-                    web::get().to({
-                        let obs = obs.clone();
-                        move || {
-                            let snap = obs.snapshot();
-                            async move {
-                                HttpResponse::Ok()
-                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
-                                    .body(format!(
-                                        "# HELP error_responses_total Total responses with status >= 400\n\
-                                         # TYPE error_responses_total counter\n\
-                                         error_responses_total {}\n",
-                                        snap.error_responses_total
-                                    ))
-                            }
-                        }
-                    }),
-                ),
-        )
-        .await;
+                    web::get().to(|| async { HttpResponse::TooManyRequests().finish() }),
+                );
+            }
+        );
 
         // 1 conflict + 1 throttled + 1 not-found = 3 error responses.
-        let req = actix_web::test::TestRequest::post()
-            .uri("/conflict")
-            .to_request();
+        let req = TestRequest::post().uri("/conflict").to_request();
         let _resp = actix_web::test::call_service(&app, req).await;
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/throttled")
-            .to_request();
+        let req = TestRequest::get().uri("/throttled").to_request();
         let _resp = actix_web::test::call_service(&app, req).await;
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/nonexistent")
-            .to_request();
+        let req = TestRequest::get().uri("/nonexistent").to_request();
         let _resp = actix_web::test::call_service(&app, req).await;
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/metrics")
-            .to_request();
-        let resp = actix_web::test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = actix_web::test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        let body_str = scrape_metrics_body!(&app);
         assert!(
             body_str.contains("error_responses_total 3"),
             "metrics body should reflect 3 error responses (1 conflict + 1 throttled + 1 not-found); got: {body_str}"

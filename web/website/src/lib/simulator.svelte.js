@@ -41,6 +41,21 @@ const seedBlocks = [
   { hash: '0x92bc4d6f3e01', price: 95,   item: 'Anker 737 Power Bank',     ts: '13:52:18', isNew: false },
 ];
 
+// ─── Initial blocks retrieval from localStorage ───
+const initialBlocks = (typeof window !== 'undefined' && window.localStorage)
+  ? (function() {
+      const stored = localStorage.getItem('oz_market_committed_blocks');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {
+          return [...seedBlocks];
+        }
+      }
+      return [...seedBlocks];
+    })()
+  : [...seedBlocks];
+
 // ─── Shared reactive state (wrapped in object to satisfy Svelte 5 export restriction) ───
 export const sim = $state({
   /** @type {'idle'|'listing'|'negotiating'|'consensus'|'revealing'|'completed'} */
@@ -48,7 +63,7 @@ export const sim = $state({
   logs: [],
   currentPrice: 700,
   isPaused: false,
-  committedBlocks: [...seedBlocks],
+  committedBlocks: initialBlocks,
   serverStatus: 'disconnected',
   liveAgents: [],
   totalServerRequests: null,
@@ -78,6 +93,61 @@ function clearNewFlag() {
   sim.committedBlocks = sim.committedBlocks.map((b, i) => i === 0 ? { ...b, isNew: false } : b);
 }
 
+// ─── Ledger Reset Action ───
+export function resetSeedLedger() {
+  sim.committedBlocks = [...seedBlocks];
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem('oz_market_committed_blocks', JSON.stringify(seedBlocks));
+  }
+}
+
+// ─── Real-Time SSE Commits Stream Listener ───
+let eventSource = null;
+
+function connectSSE() {
+  if (eventSource) return;
+  if (typeof window === 'undefined' || !window.EventSource) return;
+
+  eventSource = new EventSource('http://localhost:3000/v1/events/commits');
+
+  eventSource.addEventListener('commit_block', (event) => {
+    try {
+      const block = JSON.parse(event.data);
+      const newBlock = {
+        hash: block.hash,
+        price: block.price,
+        item: block.item,
+        ts: block.ts,
+        isNew: true,
+      };
+      
+      if (!sim.committedBlocks.some(b => b.hash === newBlock.hash)) {
+        sim.committedBlocks = [newBlock, ...sim.committedBlocks];
+        if (window.localStorage) {
+          localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
+        }
+
+        setTimeout(() => {
+          clearNewFlag();
+        }, 600);
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  eventSource.onerror = () => {
+    disconnectSSE();
+  };
+}
+
+function disconnectSSE() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
+
 // ─── Fetch live server metrics ───
 export async function fetchLiveMetrics() {
   try {
@@ -85,11 +155,14 @@ export async function fetchLiveMetrics() {
     if (healthResp.ok) {
       sim.liveAgents = await healthResp.json();
       sim.serverStatus = 'connected';
+      connectSSE();
     } else {
       sim.serverStatus = 'disconnected';
+      disconnectSSE();
     }
   } catch (err) {
     sim.serverStatus = 'disconnected';
+    disconnectSSE();
   }
 
   try {
@@ -185,6 +258,9 @@ export function runSimulation() {
       isNew: true,
     };
     sim.committedBlocks = [newBlock, ...sim.committedBlocks];
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
+    }
 
     setTimeout(() => {
       clearNewFlag();
@@ -241,6 +317,10 @@ export function togglePause() {
   } else {
     runSimulation();
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.__sim = sim;
 }
 
 

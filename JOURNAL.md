@@ -1801,3 +1801,16 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `web/website/tests/`: Added new integration and accessibility test suites `a11y.spec.js` and `components.spec.js`.
 - **Validation**: All 89 Playwright tests passed successfully (1.8m). Workspace verification `check.ps1` runs clean.
 - **Files changed**: `web/website/src/App.svelte`, `web/website/src/global.css`, `JOURNAL.md` (modified); `web/website/src/lib/*`, `web/website/tests/a11y.spec.js`, `web/website/tests/components.spec.js` (new).
+
+## 2026-06-05 21:50 — Ledger search, LocalStorage, and SSE Commit Stream
+
+- **Goal**: Implement unauthenticated backend SSE endpoint, filterable transaction blocks, local storage persistence with cache resets, and live event synchronization.
+- **Changed**:
+  - `backend/server/src/http/actix_handlers.rs`: Added global commits broadcaster `global_commits_stream` and implemented the GET `/v1/events/commits` Server-Sent Events (SSE) route.
+  - `backend/server/src/http/actix_runtime.rs`: Added comprehensive integration tests verifying the `/metrics` endpoint exposes all six request counters, and formatted.
+  - `web/website/src/lib/LedgerExplorer.svelte`: Integrated search input, clear button, and "Reset" cache button with proper layout and theme styles.
+  - `web/website/src/lib/simulator.svelte.js`: Wired `localStorage` to save and load `committedBlocks` on initialization. Added an auto-established backend SSE EventSource client connected to `/v1/events/commits` that updates the ledger reactively on transaction commits.
+  - `web/website/tests/components.spec.js`: Wrote three comprehensive E2E tests verifying ledger searching, resetting, and reactive badge and total volume calculation updates.
+- **Validation**: Playwright E2E tests run successfully (92/92 pass). Workspace validation `./check.ps1` runs clean.
+- **Files changed (5)**: `backend/server/src/http/actix_handlers.rs`, `backend/server/src/http/actix_runtime.rs`, `web/website/src/lib/LedgerExplorer.svelte`, `web/website/src/lib/simulator.svelte.js`, `web/website/tests/components.spec.js`.
+

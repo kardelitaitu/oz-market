@@ -43,8 +43,36 @@ jobs:
         # The wrap_fn middleware added in fc157c4 runs on every HTTP request
         # to count requests_total for /metrics. This test runs the microbench
         # in release mode to surface the eprintln! timing output and catch
-        # any future regression above 1us/req.
+        # any future regression above 800ns/req. The test also appends a
+        # JSON line to data/microbench/requests_overhead.log; we feed the
+        # current commit SHA in via MARKETPLACE_MICROBENCH_COMMIT so the
+        # log records per-commit measurements instead of "local".
+        env:
+          MARKETPLACE_MICROBENCH_COMMIT: ${{ github.sha }}
         run: cargo test --release -p marketplace-server --lib -- wrap_fn_overhead --nocapture
+
+      - name: Publish microbench trend to job summary
+        if: always()
+        # Reads the last line of data/microbench/requests_overhead.log (the
+        # line this run just appended) and surfaces it in the GitHub Actions
+        # run summary so the trend is visible without scraping the file.
+        # Filter out `null` ns_per_req (sub-noise samples — wrap ≤ baseline)
+        # so a single noisy run doesn't appear as a 0ns/req measurement.
+        shell: bash
+        run: |
+          LOG="data/microbench/requests_overhead.log"
+          if [ -f "$LOG" ]; then
+            LAST=$(tail -1 "$LOG")
+            echo "## Wrap_fn microbench (last sample)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            echo "$LAST" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            NS=$(echo "$LAST" | python3 -c "import json,sys; d=json.load(sys.stdin); v=d.get('ns_per_req'); print('sub-noise' if v is None else f'{v:.0f}ns/req')")
+            echo "::notice title=wrap_fn_overhead::$NS"
+          else
+            echo "::warning title=wrap_fn_microbench::log file not found at $LOG"
+          fi
 
   server-postgres:
     name: Server Postgres Integration

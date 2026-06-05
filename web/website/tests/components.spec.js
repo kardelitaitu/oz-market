@@ -553,6 +553,82 @@ test.describe('LedgerExplorer Component', () => {
     const hasKnownItem = knownItems.some(item => itemTexts.some(t => t.includes(item)));
     expect(hasKnownItem).toBe(true);
   });
+
+  test('should filter ledger blocks when search input is typed', async ({ page }) => {
+    await page.goto('/');
+    const searchInput = page.locator('.ledger-search-input');
+    await expect(searchInput).toBeVisible();
+
+    // Type "MacBook" in the filter input
+    await searchInput.fill('MacBook');
+    await page.waitForTimeout(300);
+
+    // Verify all filtered blocks contain "MacBook"
+    const blocks = page.locator('.ledger-block');
+    const count = await blocks.count();
+    expect(count).toBeGreaterThan(0);
+    
+    for (let i = 0; i < count; i++) {
+      const text = await blocks.nth(i).locator('.ledger-block-meta').first().locator('span').first().textContent();
+      expect(text.toLowerCase()).toContain('macbook');
+    }
+
+    // Badge count should decrease and reflect the filtered list
+    const badge = page.locator('.ledger-count-badge');
+    await expect(badge).toContainText(`${count} blocks`);
+  });
+
+  test('should reset ledger to seed blocks when Reset button is clicked', async ({ page }) => {
+    await page.goto('/');
+    const resetBtn = page.locator('.ledger-reset-btn');
+    await expect(resetBtn).toBeVisible();
+
+    // Filter list to something small first to prove reset works
+    const searchInput = page.locator('.ledger-search-input');
+    await searchInput.fill('MacBook');
+    await page.waitForTimeout(300);
+
+    // Click Reset
+    await resetBtn.click();
+    await page.waitForTimeout(300);
+
+    // Explicitly clear the search input to ensure no filtering persists
+    await searchInput.fill('');
+    await page.waitForTimeout(300);
+
+    // Verify count is reset back to 15 blocks
+    const badge = page.locator('.ledger-count-badge');
+    await expect(badge).toContainText('15 blocks');
+  });
+
+  test('should update total volume and block count badge when a block is committed', async ({ page }) => {
+    await page.goto('/');
+
+    const badge = page.locator('.ledger-count-badge');
+    const initialText = await badge.textContent();
+    const initialCount = parseInt(initialText, 10);
+
+    const volumeValue = page.locator('.ledger-volume-value');
+    const initialVolText = (await volumeValue.textContent()).replace('$', '').replace(/,/g, '');
+    const initialVol = parseInt(initialVolText, 10);
+
+    // Commit a mock block via the window.__sim store
+    await page.evaluate(() => {
+      window.__sim.committedBlocks = [
+        { hash: '0xmockedhash12', price: 999, item: 'Mock Test Item', ts: '12:00:00', isNew: true },
+        ...window.__sim.committedBlocks
+      ];
+    });
+    await page.waitForTimeout(100);
+
+    // Verify badge increments
+    await expect(badge).toContainText(`${initialCount + 1} blocks`);
+
+    // Verify total volume increases by 999
+    const newVolText = (await volumeValue.textContent()).replace('$', '').replace(/,/g, '');
+    const newVol = parseInt(newVolText, 10);
+    expect(newVol).toBe(initialVol + 999);
+  });
 });
 
 test.describe('Simulator - Autoplay Toggle', () => {
