@@ -86,7 +86,7 @@
   }
 
   .doc-meta {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
     margin-top: 0.25rem;
   }

@@ -31,6 +31,7 @@
     if (parts[0] === 'faqs') return { tab: 'faqs', platform: 'web' };
     if (parts[0] === 'status') return { tab: 'status', platform: 'web' };
     if (parts[0] === 'docs') return { tab: 'docs', platform: 'web' };
+    if (parts[0] !== '') return { tab: 'not-found', platform: 'web' };
     return { tab: 'home', platform: 'web' };
   }
 
@@ -160,7 +161,7 @@
   nav button.active {
     background: var(--color-primary);
     color: var(--text-primary);
-    box-shadow: 0 4px 14px rgba(170, 59, 255, 0.3);
+    box-shadow: 0 4px 14px rgba(170, 59, 255, 0.3), inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.25);
   }
 
   .header-right {
@@ -205,11 +206,27 @@
     box-shadow: 0 4px 14px rgba(170, 59, 255, 0.3);
   }
 
+  .anchor-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-primary);
+    font-weight: 600;
+    font-size: inherit;
+    font-family: inherit;
+    text-decoration: underline;
+    padding: 0;
+  }
+
+  .anchor-btn:hover {
+    color: var(--color-secondary);
+  }
+
   /* ── Hero & Badge ── */
   .hero {
     text-align: center;
     padding: 4rem 1.5rem 2rem;
-    width: min(80%, 900px);
+    max-width: 900px;
     margin-inline: auto;
   }
 
@@ -585,7 +602,7 @@
 
     <!-- Benchmark Baselines -->
     <section class="card" style="margin-bottom: 3rem;">
-      <h3><span>📈</span> Core Performance Benchmarks (May 12, 2026)</h3>
+      <h3><span>📈</span> Core Performance Benchmarks</h3>
       <p>Simulating concurrent agent search lookups against a local PostgreSQL database with active rate-limiting diagnostics.</p>
 
       <div class="table-container">
@@ -635,8 +652,14 @@
   {:else if currentTab === 'status'}
     <StatusTab />
 
-  {:else}
+  {:else if currentTab === 'docs'}
     <DocsTab />
+
+  {:else if currentTab === 'not-found'}
+    <section class="hero" style="padding-top: 4rem;">
+      <h2 style="font-size: 5rem; margin-bottom: 0.5rem; opacity: 0.3;">404</h2>
+      <p style="font-size: 1.2rem; max-width: 500px; margin-inline: auto;">Page not found. Check the URL or head back <button class="anchor-btn" onclick={() => navigate('home')}>home</button>.</p>
+    </section>
   {/if}
 </main>
 
