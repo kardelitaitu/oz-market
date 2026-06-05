@@ -1766,3 +1766,11 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `web/website/src/App.svelte`: Switched from `<mpath href="#id">` to inline `path="M x,y L x2,y2"` attribute directly on `<animateMotion>` (universally supported, no ID lookup). Removed `begin="0.7s"`. Added bidirectional dots during `negotiating` state: secondary (accent-colored) dots travel server→buyer and server→seller at a 0.55s offset within the same 1.1s cycle to show counter-offers. Removed orphaned duplicate SVG block left over from previous edit.
 - **Validation**: `npm run build` compiles clean (64.54 kB JS).
 - **Files changed (1)**: web/website/src/App.svelte.
+
+## 2026-06-05 18:15
+
+- **Goal**: Slow down the Interactive Agent Negotiation Simulator so users can read each log line.
+- **Changed**:
+  - `web/website/src/App.svelte`: Increased each negotiation step interval from 800ms to 1800ms (total negotiation phase: 6.4s → 14.4s). Increased consensus→reveal transition delay from 1200ms to 2000ms. Increased reveal phase delays from 800ms/1600ms to 1800ms/3600ms. Extended completed-state hold from 5s to 8s. Extended restart gap from 1s to 2s. Total full-cycle time is now ~30s vs ~13s previously.
+- **Validation**: `npm run build` compiles clean.
+- **Files changed (1)**: web/website/src/App.svelte.

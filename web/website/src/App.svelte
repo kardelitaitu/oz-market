@@ -52,44 +52,44 @@
     let t1 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${buyerName}] Discovered active listing #L-8821 via search. Initiating negotiation...`];
-    }, 800);
+    }, 1800);
     
     let t2 = setTimeout(() => {
       if (isPaused) return;
       simState = 'negotiating';
       simLogs = [...simLogs, `[${buyerName}] Sent initial low-ball offer: $200.00 (idempotency_key: tx-771a)`];
       currentPrice = 200;
-    }, 1600);
+    }, 3600);
     
     let t3 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${sellerName}] Counter-offer received: $650.00 (min_seller_rating check: PASS)`];
       currentPrice = 650;
-    }, 2400);
+    }, 5400);
     
     let t4 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${buyerName}] Countering with price history average: $350.00`];
       currentPrice = 350;
-    }, 3200);
+    }, 7200);
     
     let t5 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${sellerName}] Adjusting bid within discount limits. Counter-offer: $600.00`];
       currentPrice = 600;
-    }, 4000);
+    }, 9000);
     
     let t6 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${buyerName}] Near upper utility limit. Final offer: $400.00`];
       currentPrice = 400;
-    }, 4800);
+    }, 10800);
 
     let t7 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${sellerName}] Final counter split difference: $500.00`];
       currentPrice = 500;
-    }, 5600);
+    }, 12600);
 
     let t8 = setTimeout(() => {
       if (isPaused) return;
@@ -112,9 +112,9 @@
 
       let t9 = setTimeout(() => {
         approveReveal();
-      }, 1200);
+      }, 2000);
       timeouts.push(t9);
-    }, 6400);
+    }, 14400);
     
     timeouts.push(t1, t2, t3, t4, t5, t6, t7, t8);
   }
@@ -127,7 +127,7 @@
     let t1 = setTimeout(() => {
       if (isPaused) return;
       simLogs = [...simLogs, `[${sellerName}] Authorizing decrypt token. Cryptographic claims matched.`];
-    }, 800);
+    }, 1800);
     
     let t2 = setTimeout(() => {
       if (isPaused) return;
@@ -138,14 +138,15 @@
         resetSim();
         let t4 = setTimeout(() => {
           runSimulation();
-        }, 1000);
+        }, 2000);
         timeouts.push(t4);
-      }, 5000);
+      }, 8000);
       timeouts.push(t3);
-    }, 1600);
+    }, 3600);
     
     timeouts.push(t1, t2);
   }
+
   
   function resetSim() {
     clearAllTimeouts();
