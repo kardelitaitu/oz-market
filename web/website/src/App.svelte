@@ -10,6 +10,16 @@
   
   let timeouts = [];
   
+  // Live Server Metrics States
+  let serverStatus = $state('disconnected'); // connected, disconnected
+  let liveAgents = $state([]);
+  let totalServerRequests = $state(null);
+  let isPaused = $state(false);
+  
+  // Derived active agents mapping (falls back to defaults if server offline)
+  let buyerName = $derived(liveAgents.length > 0 ? liveAgents[0].agent_id : 'Buyer Agent');
+  let sellerName = $derived(liveAgents.length > 1 ? liveAgents[1].agent_id : 'Seller Agent');
+  
   function clearAllTimeouts() {
     timeouts.forEach(t => clearTimeout(t));
     timeouts = [];
@@ -18,26 +28,28 @@
   // Simulation script runner
   function runSimulation() {
     clearAllTimeouts();
+    if (isPaused) return;
+    
     simState = 'negotiating';
     simLogs = ['[Buyer Agent] Initiating query for listing ID: #L-8821...'];
     
     let t1 = setTimeout(() => {
-      simLogs = [...simLogs, '[Buyer Agent] Sent initial offer: $160.00 (idempotency_key: tx-771a)'];
+      simLogs = [...simLogs, `[${buyerName}] Sent initial offer: $160.00 (idempotency_key: tx-771a)`];
       currentPrice = 160;
     }, 1000);
     
     let t2 = setTimeout(() => {
-      simLogs = [...simLogs, '[Seller Agent] Counter-offer received: $190.00 (min_seller_rating check: PASS)'];
+      simLogs = [...simLogs, `[${sellerName}] Counter-offer received: $190.00 (min_seller_rating check: PASS)`];
       currentPrice = 190;
     }, 2000);
     
     let t3 = setTimeout(() => {
-      simLogs = [...simLogs, '[Buyer Agent] Analyzing price history. Countering with: $180.00'];
+      simLogs = [...simLogs, `[${buyerName}] Analyzing price history. Countering with: $180.00`];
       currentPrice = 180;
     }, 3000);
     
     let t4 = setTimeout(() => {
-      simLogs = [...simLogs, '[Seller Agent] Consensus reached at $180.00. Writing to ledger cache...'];
+      simLogs = [...simLogs, `[${sellerName}] Consensus reached at $180.00. Writing to ledger cache...`];
       simState = 'consensus';
       
       // Auto transition to reveal request in loop
@@ -51,11 +63,12 @@
   }
   
   function approveReveal() {
+    if (isPaused) return;
     simState = 'revealing';
-    simLogs = [...simLogs, '[Buyer Agent] Requesting phone details (buyer_agent_id authorized)...'];
+    simLogs = [...simLogs, `[${buyerName}] Requesting phone details (buyer_agent_id authorized)...`];
     
     let t1 = setTimeout(() => {
-      simLogs = [...simLogs, '[Seller Agent] Authorizing decrypt token. Cryptographic claims matched.'];
+      simLogs = [...simLogs, `[${sellerName}] Authorizing decrypt token. Cryptographic claims matched.`];
     }, 1000);
     
     let t2 = setTimeout(() => {
@@ -83,12 +96,55 @@
     currentPrice = 200;
   }
   
-  // Svelte 5 $effect to trigger autoplay on mount
+  function togglePause() {
+    isPaused = !isPaused;
+    if (isPaused) {
+      clearAllTimeouts();
+    } else {
+      runSimulation();
+    }
+  }
+  
+  // Live Server Metrics Fetcher
+  async function fetchLiveMetrics() {
+    try {
+      let healthResp = await fetch('http://localhost:3000/v1/health/agents');
+      if (healthResp.ok) {
+        liveAgents = await healthResp.json();
+        serverStatus = 'connected';
+      } else {
+        serverStatus = 'disconnected';
+      }
+    } catch (err) {
+      serverStatus = 'disconnected';
+    }
+    
+    try {
+      let metricsResp = await fetch('http://localhost:3000/metrics');
+      if (metricsResp.ok) {
+        let text = await metricsResp.text();
+        let match = text.match(/requests_total\s+(\d+)/);
+        if (match) {
+          totalServerRequests = parseInt(match[1], 10);
+        }
+      }
+    } catch (err) {
+      // Silence
+    }
+  }
+  
+  // Svelte 5 $effect to trigger autoplay and metrics polling
   $effect(() => {
-    runSimulation();
+    if (!isPaused) {
+      runSimulation();
+    }
+    
+    fetchLiveMetrics();
+    let interval = setInterval(fetchLiveMetrics, 3000);
     
     return () => {
       clearAllTimeouts();
+      clearInterval(interval);
     };
   });
 </script>
@@ -116,6 +172,30 @@
       </p>
     </section>
     
+    <!-- Live Server Stats Banner -->
+    <div style="max-width: 800px; margin: -1.5rem auto 2.5rem; display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;">
+      <div style="background: var(--bg-card); backdrop-filter: var(--glass-backdrop); border: 1px solid {serverStatus === 'connected' ? 'var(--color-success)' : 'rgba(255,255,255,0.05)'}; padding: 0.6rem 1.25rem; border-radius: 30px; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: var(--glass-shadow);">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: {serverStatus === 'connected' ? 'var(--color-success)' : 'var(--text-muted)'}; display: inline-block;"></span>
+        <span style="font-weight: 600; color: var(--text-primary);">
+          Backend: {serverStatus === 'connected' ? 'Connected (Live)' : 'Offline (Demo Mode)'}
+        </span>
+      </div>
+      {#if serverStatus === 'connected'}
+        <div style="background: var(--bg-card); backdrop-filter: var(--glass-backdrop); border: 1px solid rgba(255,255,255,0.05); padding: 0.6rem 1.25rem; border-radius: 30px; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: var(--glass-shadow);">
+          <span style="color: var(--color-secondary);">📈</span>
+          <span style="font-weight: 600; color: var(--text-primary);">
+            Requests: {totalServerRequests ?? 0}
+          </span>
+        </div>
+        <div style="background: var(--bg-card); backdrop-filter: var(--glass-backdrop); border: 1px solid rgba(255,255,255,0.05); padding: 0.6rem 1.25rem; border-radius: 30px; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: var(--glass-shadow);">
+          <span style="color: var(--color-primary);">🤖</span>
+          <span style="font-weight: 600; color: var(--text-primary);">
+            Live Agents: {liveAgents.length}
+          </span>
+        </div>
+      {/if}
+    </div>
+    
     <!-- Interactive Agent Simulator -->
     <section class="card" style="margin-bottom: 3rem; border-color: var(--color-primary-glow);">
       <h3 style="color: var(--color-secondary);">
@@ -128,9 +208,9 @@
       <div style="background: HSL(224, 25%, 6%); border-radius: 12px; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1.5rem;">
         <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1.5rem;">
           <!-- Buyer Agent Card -->
-          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center;">
+          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center; max-width: 280px; overflow: hidden;">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
-            <h4 style="font-family: var(--font-heading); font-size: 1.1rem; color: var(--color-primary);">Buyer Agent</h4>
+            <h4 style="font-family: var(--font-heading); font-size: 1rem; color: var(--color-primary); word-wrap: break-word; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title={buyerName}>{buyerName}</h4>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">`buyer_negotiator` role</p>
           </div>
           
@@ -151,9 +231,9 @@
           </div>
           
           <!-- Seller Agent Card -->
-          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center;">
+          <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center; max-width: 280px; overflow: hidden;">
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
-            <h4 style="font-family: var(--font-heading); font-size: 1.1rem; color: var(--color-secondary);">Seller Agent</h4>
+            <h4 style="font-family: var(--font-heading); font-size: 1rem; color: var(--color-secondary); word-wrap: break-word; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title={sellerName}>{sellerName}</h4>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">`seller_negotiator` role</p>
           </div>
         </div>
@@ -172,7 +252,7 @@
       </div>
       
       <!-- Simulation Controls -->
-      <div style="display: flex; gap: 1rem; justify-content: center;">
+      <div style="display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap;">
         {#if simState === 'idle'}
           <button class="counter" onclick={runSimulation}>
             Run Negotiation Simulator
@@ -194,6 +274,10 @@
             Reset Simulation
           </button>
         {/if}
+        
+        <button class="counter" onclick={togglePause} style="background: var(--color-primary-glow); border-color: var(--color-primary);">
+          {isPaused ? '▶ Resume Autoplay' : '⏸ Pause Autoplay'}
+        </button>
       </div>
     </section>
     

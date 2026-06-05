@@ -1607,3 +1607,18 @@ pm run build compiles clean with zero compiler or accessibility (a11y) warnings.
 pm run build compiles clean with zero warnings.
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
+
+## 2026-06-05 18:20 - Bind dev to 0.0.0.0, Pause controls, & Live API integration
+
+- **Goal**: Expose Vite dev host to all network devices, add manual play/pause controls, and wire live backend API and Prometheus metrics directly into Svelte.
+- **Changed**:
+  - Modified package.json dev script to use ite --host 0.0.0.0.
+  - Added isPaused state in App.svelte and structured a custom pause/play button next to the simulation logs.
+  - Implemented asynchronous API fetcher etchLiveMetrics in App.svelte that polls /v1/health/agents and /metrics on the local server (port 3000) every 3 seconds.
+  - Formulated a reactive status banner on the Home page, showing connection status (Connected (Live) / Offline (Demo Mode)), live request counts, and active agent numbers.
+  - Mapped derived Svelte 5 states (uyerName, sellerName) to show actual registered Agent UIDs in the simulator card when connected.
+- **Validation**:
+  - 
+pm run build compiles clean.
+  - check.ps1 runs pass successfully.
+- **Files changed (2)**: web/website/package.json and web/website/src/App.svelte (modified).
