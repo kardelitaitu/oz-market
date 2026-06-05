@@ -310,40 +310,113 @@
           <!-- State Display + SVG Flow -->
           <div style="text-align: center; min-width: 160px; flex: 1; max-width: 280px;">
 
-            <!-- SVG Architecture Flow Diagram -->
-            <svg class="flow-diagram" viewBox="0 0 260 66" xmlns="http://www.w3.org/2000/svg" aria-label="Agent negotiation flow diagram">
-              <!-- Paths -->
-              <line class="flow-path {simState !== 'idle' ? 'active' : ''}" x1="55" y1="33" x2="108" y2="33" />
-              <line class="flow-path {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' || simState === 'revealing' || simState === 'completed' ? 'active' : ''}" x1="152" y1="33" x2="205" y2="33" />
+            <!-- SVG Architecture Flow Diagram — pure SVG geometry, no emoji -->
+            <svg class="flow-diagram" viewBox="0 0 320 80" xmlns="http://www.w3.org/2000/svg" aria-label="Agent negotiation flow diagram">
+              <defs>
+                <!-- Glow filter for active nodes -->
+                <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
 
-              <!-- Buyer Node -->
-              <circle class="flow-node-circle" cx="33" cy="33" r="20" />
-              <text class="flow-node-label" x="33" y="30">🤖</text>
-              <text class="flow-node-label" x="33" y="58" style="font-size: 7px;">BUYER</text>
+                <!-- Path for buyer→server signal dot -->
+                <path id="path-bs" d="M 68 40 L 122 40"/>
+                <!-- Path for server→seller signal dot -->
+                <path id="path-ss" d="M 198 40 L 252 40"/>
+              </defs>
 
-              <!-- API Server Node -->
-              <circle class="flow-node-circle" cx="130" cy="33" r="22"
-                style="stroke: {simState !== 'idle' ? 'var(--color-secondary)' : 'var(--color-primary)'};"
+              <!-- ─── Connector lines ─── -->
+              <!-- Buyer → Server -->
+              <line
+                class="flow-path {simState !== 'idle' ? 'active' : ''}"
+                x1="68" y1="40" x2="122" y2="40"
               />
-              <text class="flow-node-label" x="130" y="30">⚙️</text>
-              <text class="flow-node-label" x="130" y="58" style="font-size: 7px;">SERVER</text>
-
-              <!-- Seller Node -->
-              <circle class="flow-node-circle" cx="227" cy="33" r="20"
-                style="stroke: {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' ? 'var(--color-secondary)' : 'var(--color-primary)'};"
+              <!-- Server → Seller -->
+              <line
+                class="flow-path {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' || simState === 'revealing' || simState === 'completed' ? 'active' : ''}"
+                x1="198" y1="40" x2="252" y2="40"
               />
-              <text class="flow-node-label" x="227" y="30">🤖</text>
-              <text class="flow-node-label" x="227" y="58" style="font-size: 7px;">SELLER</text>
 
-              <!-- Ledger badge (consensus+) -->
-              {#if simState === 'consensus' || simState === 'revealing' || simState === 'completed'}
-                <circle cx="130" cy="33" r="26" fill="none"
-                  stroke="var(--color-success)" stroke-width="1"
-                  stroke-dasharray="4 3" opacity="0.6"
-                  style="animation: laserTravel 2s linear infinite;"
+              <!-- ─── Animated signal dots ─── -->
+              {#if simState !== 'idle'}
+                <circle r="3.5" fill="var(--color-secondary)" opacity="0.9">
+                  <animateMotion dur="1.4s" repeatCount="indefinite" rotate="auto">
+                    <mpath href="#path-bs"/>
+                  </animateMotion>
+                </circle>
+              {/if}
+              {#if simState === 'listing' || simState === 'negotiating' || simState === 'consensus' || simState === 'revealing' || simState === 'completed'}
+                <circle r="3.5" fill="var(--color-secondary)" opacity="0.9">
+                  <animateMotion dur="1.4s" repeatCount="indefinite" rotate="auto" begin="0.7s">
+                    <mpath href="#path-ss"/>
+                  </animateMotion>
+                </circle>
+              {/if}
+
+              <!-- ─── BUYER node (cx=40) ─── -->
+              <g filter="url(#node-glow)">
+                <circle
+                  class="flow-node-circle"
+                  cx="40" cy="40" r="24"
+                  style="stroke: {simState === 'negotiating' || simState === 'revealing' ? 'var(--color-secondary)' : 'var(--color-primary)'}; stroke-width: {simState === 'negotiating' || simState === 'revealing' ? '2' : '1.5'};"
                 />
+                <!-- Head -->
+                <circle cx="40" cy="31" r="5" fill="var(--color-primary)" opacity="0.9"/>
+                <!-- Body -->
+                <path d="M 33 43 Q 40 38 47 43 L 47 52 L 33 52 Z" fill="var(--color-primary)" opacity="0.7"/>
+              </g>
+              <text class="flow-node-label" x="40" y="73">BUYER</text>
+
+              <!-- ─── SERVER node (cx=160) ─── -->
+              <g filter="url(#node-glow)">
+                <circle
+                  class="flow-node-circle"
+                  cx="160" cy="40" r="26"
+                  style="stroke: {simState !== 'idle' ? 'var(--color-secondary)' : 'var(--color-primary)'}; stroke-width: {simState !== 'idle' ? '2' : '1.5'};"
+                />
+                <!-- Gear body: outer ring + inner circle + teeth -->
+                <circle cx="160" cy="40" r="9" fill="none" stroke="var(--color-secondary)" stroke-width="1.5" opacity="0.8"/>
+                <circle cx="160" cy="40" r="4" fill="var(--color-secondary)" opacity="0.8"/>
+                <!-- 8 gear teeth as small rects rotated -->
+                {#each [0,45,90,135,180,225,270,315] as deg}
+                  <rect
+                    x="158.5" y="27"
+                    width="3" height="5"
+                    fill="var(--color-secondary)"
+                    opacity="0.75"
+                    transform="rotate({deg} 160 40)"
+                  />
+                {/each}
+              </g>
+              <text class="flow-node-label" x="160" y="75">SERVER</text>
+
+              <!-- ─── SELLER node (cx=280) ─── -->
+              <g filter="url(#node-glow)">
+                <circle
+                  class="flow-node-circle"
+                  cx="280" cy="40" r="24"
+                  style="stroke: {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' ? 'var(--color-secondary)' : 'var(--color-primary)'}; stroke-width: {simState === 'listing' || simState === 'negotiating' || simState === 'consensus' ? '2' : '1.5'};"
+                />
+                <!-- Head -->
+                <circle cx="280" cy="31" r="5" fill="var(--color-secondary)" opacity="0.9"/>
+                <!-- Body -->
+                <path d="M 273 43 Q 280 38 287 43 L 287 52 L 273 52 Z" fill="var(--color-secondary)" opacity="0.7"/>
+              </g>
+              <text class="flow-node-label" x="280" y="73">SELLER</text>
+
+              <!-- ─── Consensus ring pulse around SERVER ─── -->
+              {#if simState === 'consensus' || simState === 'revealing' || simState === 'completed'}
+                <circle cx="160" cy="40" r="32" fill="none"
+                  stroke="var(--color-success)" stroke-width="1"
+                  stroke-dasharray="5 3" opacity="0.55"
+                >
+                  <animateTransform attributeName="transform" type="rotate"
+                    from="0 160 40" to="360 160 40" dur="4s" repeatCount="indefinite"/>
+                </circle>
               {/if}
             </svg>
+
+
 
             <div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Status</div>
             <div style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0.25rem 0;">

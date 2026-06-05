@@ -600,8 +600,8 @@ footer {
 .flow-diagram {
   width: 100%;
   overflow: visible;
-  margin-bottom: 1.5rem;
-  min-height: 90px;
+  margin-bottom: 1rem;
+  min-height: 100px;
 }
 
 .flow-node-circle {

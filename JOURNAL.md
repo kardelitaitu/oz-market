@@ -1747,3 +1747,13 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `npm run test:e2e` — all 4 tests pass (8.2s).
   - `check.ps1` spec governance PASS.
 - **Files changed (3)**: web/website/src/global.css, web/website/src/App.svelte, web/website/tests/theme.spec.js.
+
+## 2026-06-05 18:10
+
+- **Goal**: Fix broken emoji rendering in the SVG Architecture Flow Diagram inside the simulator.
+- **Root Cause**: SVG `<text>` elements cannot reliably render emoji across browsers — they render as colored placeholder boxes.
+- **Changed**:
+  - `web/website/src/App.svelte`: Replaced all emoji `<text>` nodes in the SVG with pure SVG geometry: humanoid silhouettes (circle head + triangular body path) for Buyer/Seller nodes colored in `--color-primary` / `--color-secondary` respectively, and an 8-tooth gear (concentric circles + rotated rect teeth) for the Server node. Added `<animateMotion>` signal dots that travel along named `<path>` references between nodes. Added a rotating dashed `<animateTransform>` ring around the server on consensus states. Removed the duplicate old SVG block that was accidentally left in.
+  - `web/website/src/global.css`: Updated `.flow-diagram` `min-height` to 100px to accommodate the larger 80-unit viewBox.
+- **Validation**: `npm run build` compiles clean (64.10 kB JS).
+- **Files changed (2)**: web/website/src/App.svelte, web/website/src/global.css.
