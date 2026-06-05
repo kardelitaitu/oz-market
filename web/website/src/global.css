@@ -2,6 +2,7 @@
 /* Component-specific styles live in each .svelte component's <style> block */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
+/* font-display: swap is specified in the URL above */
 
 @property --bg-glow-1 {
   syntax: '<color>';
@@ -23,7 +24,7 @@
   --border-glow-hover: HSL(263, 70%, 50%, 0.4);
   --text-primary: HSL(210, 40%, 98%);
   --text-secondary: HSL(215, 20%, 65%);
-  --text-muted: HSL(215, 16%, 47%);
+  --text-muted: HSL(215, 16%, 52%);
   --color-primary: HSL(263, 90%, 65%);
   --color-primary-glow: HSL(263, 90%, 65%, 0.15);
   --color-secondary: HSL(190, 90%, 50%);
@@ -49,7 +50,7 @@ body[data-theme="midnight"] {
   --border-glow-hover: HSL(263, 70%, 50%, 0.4);
   --text-primary: HSL(210, 40%, 98%);
   --text-secondary: HSL(215, 20%, 65%);
-  --text-muted: HSL(215, 16%, 47%);
+  --text-muted: HSL(215, 16%, 52%);
   --color-primary: HSL(263, 90%, 65%);
   --color-primary-glow: HSL(263, 90%, 65%, 0.15);
   --color-secondary: HSL(190, 90%, 50%);
@@ -67,7 +68,7 @@ body[data-theme="emerald"] {
   --border-glow-hover: HSL(142, 70%, 45%, 0.4);
   --text-primary: HSL(140, 40%, 98%);
   --text-secondary: HSL(140, 15%, 65%);
-  --text-muted: HSL(140, 12%, 47%);
+  --text-muted: HSL(140, 12%, 52%);
   --color-primary: HSL(142, 80%, 50%);
   --color-primary-glow: HSL(142, 80%, 50%, 0.15);
   --color-secondary: HSL(160, 90%, 45%);
@@ -85,7 +86,7 @@ body[data-theme="crimson"] {
   --border-glow-hover: HSL(342, 75%, 50%, 0.4);
   --text-primary: HSL(345, 30%, 98%);
   --text-secondary: HSL(345, 12%, 65%);
-  --text-muted: HSL(345, 10%, 47%);
+  --text-muted: HSL(345, 10%, 52%);
   --color-primary: HSL(342, 85%, 60%);
   --color-primary-glow: HSL(342, 85%, 60%, 0.15);
   --color-secondary: HSL(25, 95%, 55%);
@@ -103,7 +104,7 @@ body[data-theme="solar"] {
   --border-glow-hover: HSL(38, 85%, 50%, 0.4);
   --text-primary: HSL(35, 40%, 98%);
   --text-secondary: HSL(35, 15%, 65%);
-  --text-muted: HSL(35, 12%, 47%);
+  --text-muted: HSL(35, 12%, 52%);
   --color-primary: HSL(38, 95%, 55%);
   --color-primary-glow: HSL(38, 95%, 55%, 0.15);
   --color-secondary: HSL(20, 90%, 55%);
@@ -121,7 +122,7 @@ body[data-theme="nordic"] {
   --border-glow-hover: HSL(200, 75%, 50%, 0.4);
   --text-primary: HSL(200, 30%, 98%);
   --text-secondary: HSL(200, 15%, 70%);
-  --text-muted: HSL(200, 10%, 50%);
+  --text-muted: HSL(200, 10%, 55%);
   --color-primary: HSL(200, 85%, 60%);
   --color-primary-glow: HSL(200, 85%, 60%, 0.15);
   --color-secondary: HSL(180, 70%, 50%);

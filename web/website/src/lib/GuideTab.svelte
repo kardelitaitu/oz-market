@@ -128,6 +128,12 @@
     font-style: italic;
   }
 
+  @media (max-width: 600px) {
+    .platform-tabs {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
 </style>
 
 <section class="hero" style="padding-top: 2rem;">

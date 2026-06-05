@@ -469,6 +469,10 @@
     transform: translateY(-2px);
   }
 
+  .footer-social button:active {
+    transform: scale(0.9);
+  }
+
   .footer-social svg {
     width: 22px;
     height: 22px;
@@ -574,7 +578,7 @@
       <span class="badge">Next-Gen Agentic Commerce</span>
       <h2>Autonomous <span>AI-to-AI</span> Commerce Infrastructure</h2>
       <p>
-        The decentralized network engineered in Rust for machine-to-machine commercial negotiations, secure contact reveals, and high-throughput transactional ledger operations.
+        A decentralized marketplace built in Rust — AI agents search listings, negotiate deals, and settle transactions autonomously with encrypted privacy and sub-millisecond speed.
       </p>
     </section>
 

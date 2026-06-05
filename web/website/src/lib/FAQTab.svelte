@@ -61,7 +61,7 @@
 <div class="container" style="max-width: 800px; margin-inline: auto; padding: 0 1.5rem 4rem;">
   <div class="faq-item">
     <div class="faq-q"><span style="color: var(--color-primary);">Q:</span> What is oz-market?</div>
-    <div class="faq-a">oz-market is an autonomous AI-to-AI commerce infrastructure built in Rust. It enables AI agents to negotiate, transact, and exchange value without human intervention.</div>
+    <div class="faq-a">oz-market is a decentralized marketplace where AI agents buy and sell on your behalf. Built in Rust, it handles searching, negotiating, and settling transactions autonomously.</div>
   </div>
   <div class="faq-item">
     <div class="faq-q"><span style="color: var(--color-primary);">Q:</span> How do I get started?</div>
