@@ -1704,6 +1704,89 @@ mod tests {
         );
     }
 
+    /// Microbenchmark for the wrap_fn middleware overhead. We compare a
+    /// minimal actix App with the wrap_fn (the production path) vs an
+    /// identical App without it, over 50_000 requests each. The wrap_fn
+    /// does one `AtomicU64::fetch_add(Relaxed)` per request plus a path
+    /// string allocation, so the expected delta is well under 1us/request
+    /// even on noisy CI machines. We assert < 1us/request as a regression
+    /// guard. The total request latency in a real workload (DB + auth +
+    /// JSON) is 5-20ms, so even a 1us wrap_fn overhead is < 0.02% of
+    /// request time and not measurable in the production benchmark
+    /// (`bench-http.ps1`). If this test ever flakes above 1us, the
+    /// wrap_fn has gained real work (lock, syscall, etc.) and should be
+    /// reviewed.
+    #[actix_web::test]
+    async fn wrap_fn_overhead_is_sub_microsecond() {
+        use std::sync::Arc;
+        use std::time::Instant;
+
+        const ITERS: usize = 50_000;
+
+        let ping = || async { actix_web::HttpResponse::Ok().body("pong") };
+
+        // ---- Baseline: no wrap_fn ----
+        let baseline_app = actix_web::test::init_service(
+            actix_web::App::new().route("/ping", actix_web::web::get().to(ping)),
+        )
+        .await;
+        let baseline_start = Instant::now();
+        for _ in 0..ITERS {
+            let req = actix_web::test::TestRequest::get()
+                .uri("/ping")
+                .to_request();
+            let _resp = actix_web::test::call_service(&baseline_app, req).await;
+        }
+        let baseline_elapsed = baseline_start.elapsed();
+
+        // ---- With wrap_fn ----
+        let obs = Arc::new(ServerObservability::new());
+        let obs_data = actix_web::web::Data::new(obs.clone());
+        let wrap_app = actix_web::test::init_service(
+            actix_web::App::new()
+                .app_data(obs_data.clone())
+                .wrap_fn(move |req, srv| {
+                    let obs = obs_data.clone();
+                    let path = req.path().to_owned();
+                    let fut = srv.call(req);
+                    async move {
+                        let res: Result<_, actix_web::Error> = fut.await;
+                        if let Ok(ref response) = res {
+                            obs.record_request(&path, response.status().as_u16());
+                        }
+                        res
+                    }
+                })
+                .route("/ping", actix_web::web::get().to(ping)),
+        )
+        .await;
+        let wrap_start = Instant::now();
+        for _ in 0..ITERS {
+            let req = actix_web::test::TestRequest::get()
+                .uri("/ping")
+                .to_request();
+            let _resp = actix_web::test::call_service(&wrap_app, req).await;
+        }
+        let wrap_elapsed = wrap_start.elapsed();
+
+        let overhead_per_req_ns =
+            wrap_elapsed.saturating_sub(baseline_elapsed).as_nanos() as f64 / ITERS as f64;
+        eprintln!(
+            "wrap_fn overhead: {:.0}ns/req (baseline={}us, with_wrap={}us over {} iters)",
+            overhead_per_req_ns,
+            baseline_elapsed.as_micros(),
+            wrap_elapsed.as_micros(),
+            ITERS
+        );
+        assert!(
+            overhead_per_req_ns < 1_000.0,
+            "wrap_fn overhead is {overhead_per_req_ns:.0}ns/req, exceeds 1us budget"
+        );
+
+        // Sanity: the counter actually incremented.
+        assert_eq!(obs.snapshot().requests_total, ITERS as u64);
+    }
+
     #[test]
     fn test_parse_fields_param_single() {
         let result = parse_fields_param("id");

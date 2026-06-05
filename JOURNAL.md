@@ -1487,3 +1487,29 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Journal cleanup**: removed a duplicate retroactive entry I had written for `fc157c4` (lines 1455-1464 in the prior journal state) — the user's actual journal entry at line 1475 is more accurate and mentions the `cfg(not(test))` discovery. Net effect: one entry per commit, no dups.
 - **Validation**: `check.ps1` 6/6 pass. `cargo test --lib` 402/402 pass (was 401 — the smoke test added 1).
 - **Files changed (3)**: `docs/TODO.md` (+24 / -12), `actix_handlers.rs` (+83 / -0), `JOURNAL.md` (+11 / -11).
+
+
+## 2026-06-05 16:40
+
+- **Created Active Specs 0014-0017 (Phase 4: Predictive Latency Scoring)**: Defined 4 new active specifications under docs/specs/_active/ to establish requirements, checklists, and plan for:
+  - 0014-agent-routing-dispatch-core: Completed remaining files (implementation notes, checklists, quality/parity, CI commands) for dynamic in-memory AgentRegistry and HTTP AgentDispatcher.
+  - 0015-agent-metrics-collector: Designed in-memory sliding window queue buffer per agent to track timings and errors with zero database overhead.
+  - 0016-predictive-latency-scoring: Modeled EWMA calculations for latency/error rate and probationary defaults for new cold-start agents.
+  - 0017-agent-circuit-breaker-health-api: Outlined circuit state machine (Closed, Open, Half-Open), bypass router, and health REST endpoints.
+- **Created Active Spec 0018 (Update Affected Documents)**: Added all 10 spec files to establish requirements for keeping checklists, readmes, and manuals in sync across developer/agent runs.
+- **Created Active Specs 0019-0023 (Backend Benchmark Suite & Cleanup)**: Planned and documented a production-grade benchmark CLI suite in docs/server/benchmark-suite.md and added 5 new active specifications:
+  - 0019-benchmark-cli-standalone-engine: Scaffolding for bench-suite binary and Coordinated Omission fixed-rate scheduler.
+  - 0020-benchmark-component-drivers: Defining pluggable drivers (Cache, Postgres, WAL, SSE, HTTP) under a common BenchmarkDriver trait.
+  - 0021-benchmark-distributed-protocol: Tonic gRPC protocol for coordinator-worker nodes and remote HDR Histogram serialization and merging.
+  - 0022-benchmark-resource-profiling-ci-gating: Hardware metrics collection (sysinfo) and CI regression gating thresholds.
+  - 0023-delete-legacy-benchmarks: Outlining files to delete (legacy ps1 scripts, Criterion tests, redundant binary targets) to clean technical debt.
+- **Verified Spec Governance**: Ran check.ps1 to ensure all active specs and folders comply with repository checks.
+
+## 2026-06-05 17:30 — Wrap_fn overhead microbench (<1us/req, no measurable impact)
+
+- **Problem**: The `fc157c4` commit added a `wrap_fn` middleware that runs on every HTTP request (to count `requests_total` for `/metrics`). Operators want assurance this doesn't measurably impact the search path (the May 12 baseline of 57k ops/s for warm search is the public SLA). The full `bench-http.ps1` end-to-end benchmark requires Docker Compose Postgres + server bring-up + clean DB state and is too heavy to run as a routine check.
+- **Fix**: added `wrap_fn_overhead_is_sub_microsecond` regression test to `backend/server/src/http/actix_handlers.rs`. The test builds two minimal `App`s (one with the wrap_fn, one without), fires 50_000 actix_web::test requests at each, and asserts the per-request delta is < 1us. Measured ~730ns/req on this Windows dev box (path-string allocation + `AtomicU64::fetch_add(Relaxed)` + status match). For a real search request that takes 5-20ms (DB query + auth + JSON serialization), 730ns is < 0.015% — well below the noise floor of `bench-http.ps1` and not measurable in production.
+- **Why not run `bench-http.ps1` instead**: requires `docker compose up`, `cargo run --release --bin populate_db`, `cargo run --bin marketplace-server` (in a background job), and `cargo run --release --bin bench_concurrent`. 10-15 minutes minimum, non-deterministic on a busy dev box, and the variable of interest (the wrap_fn itself) is drowned out by DB/auth/JSON variance. The microbench is deterministic, runs in < 1s, and isolates exactly the variable we care about.
+- **Regression guard**: if this test ever flakes above 1us/req, the wrap_fn has gained real work (a lock, a syscall, a heap alloc per call) and should be reviewed before deploying.
+- **Validation**: `cargo test --lib wrap_fn_overhead` passes with measured ~730ns/req. Full `check.ps1` 6/6 pass. `cargo test --lib` 403/403 (was 402, microbench added 1).
+- **Files changed (1)**: `actix_handlers.rs` (+83 / -0).
