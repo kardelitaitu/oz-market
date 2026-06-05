@@ -407,6 +407,10 @@ pub async fn get_listing(
     }
 }
 
+fn search_cache_key(query: &SearchRequest) -> String {
+    format!("search:{:?}", query)
+}
+
 pub async fn search_listings(
     app: web::Data<ActixApp>,
     cache_enabled: web::Data<bool>,
@@ -430,31 +434,13 @@ pub async fn search_listings(
         rl_search = Some(rl);
     }
 
-    // Build cache key with meaningful search params for better cache hits
+    // Build cache key from the full SearchRequest state so every filter
+    // parameter is part of the key. An earlier version of this code only
+    // included listing_type, category, sort_by, limit, cursor — which meant
+    // two different searches (e.g. different owner_id, price, or location)
+    // would collide on the same cache entry.
     let modified_query = (*query).clone();
-    let listing_type_str = modified_query
-        .listing_type
-        .map(|t| format!("{:?}", t))
-        .unwrap_or_else(|| "all".to_string());
-    let sort_by_str = format!("{:?}", modified_query.sort_by);
-    let category_str = modified_query
-        .category
-        .map(|c| format!("{:?}", c))
-        .unwrap_or_else(|| "none".to_string());
-    let limit_str = modified_query
-        .limit
-        .map(|l| l.to_string())
-        .unwrap_or_else(|| "20".to_string());
-    let cursor_str = modified_query
-        .cursor
-        .as_deref()
-        .unwrap_or("none")
-        .to_string();
-
-    let cache_key = format!(
-        "search:lt:{}:cat:{}:sort:{}:limit:{}:cur:{}",
-        listing_type_str, category_str, sort_by_str, limit_str, cursor_str
-    );
+    let cache_key = search_cache_key(&modified_query);
 
     // Try cache first (stores pre-serialized JSON)
     if **cache_enabled {
@@ -1669,6 +1655,208 @@ mod tests {
         let includes = result.unwrap();
         assert!(includes.contains("seller"));
         assert!(includes.contains("reviews"));
+    }
+
+    #[test]
+    fn search_cache_key_distinguishes_every_filter_field() {
+        use marketplace_api_contract::{
+            Category, Condition, ListingStatus, ListingType, PropertySubType,
+            PropertyTransactionType, SearchLocationFilter, SearchPriceFilter, SearchSort,
+            ServiceType,
+        };
+
+        let base = SearchRequest::default();
+        let base_key = search_cache_key(&base);
+        assert!(
+            base_key.starts_with("search:"),
+            "cache key should preserve 'search:' prefix for observability, got {base_key}"
+        );
+
+        // Scalar filter fields
+        let mut q = base.clone();
+        q.query = Some("hello".into());
+        assert_ne!(search_cache_key(&q), base_key, "query");
+
+        let mut q = base.clone();
+        q.category = Some(Category::Laptop);
+        assert_ne!(search_cache_key(&q), base_key, "category");
+
+        let mut q = base.clone();
+        q.condition = Some(Condition::New);
+        assert_ne!(search_cache_key(&q), base_key, "condition");
+
+        let mut q = base.clone();
+        q.status = Some(ListingStatus::Active);
+        assert_ne!(search_cache_key(&q), base_key, "status");
+
+        let mut q = base.clone();
+        q.listing_type = Some(ListingType::Product);
+        assert_ne!(search_cache_key(&q), base_key, "listing_type");
+
+        let mut q = base.clone();
+        q.service_type = Some(ServiceType::Local);
+        assert_ne!(search_cache_key(&q), base_key, "service_type");
+
+        let mut q = base.clone();
+        q.property_transaction_type = Some(PropertyTransactionType::Sale);
+        assert_ne!(search_cache_key(&q), base_key, "property_transaction_type");
+
+        let mut q = base.clone();
+        q.property_sub_type = Some(PropertySubType::Apartment);
+        assert_ne!(search_cache_key(&q), base_key, "property_sub_type");
+
+        let mut q = base.clone();
+        q.min_bedrooms = Some(2);
+        assert_ne!(search_cache_key(&q), base_key, "min_bedrooms");
+
+        let mut q = base.clone();
+        q.min_bathrooms = Some(1);
+        assert_ne!(search_cache_key(&q), base_key, "min_bathrooms");
+
+        let mut q = base.clone();
+        q.min_area_sqm = Some(50.0);
+        assert_ne!(search_cache_key(&q), base_key, "min_area_sqm");
+
+        let mut q = base.clone();
+        q.max_area_sqm = Some(200.0);
+        assert_ne!(search_cache_key(&q), base_key, "max_area_sqm");
+
+        let mut q = base.clone();
+        q.min_seller_rating = Some(4.0);
+        assert_ne!(search_cache_key(&q), base_key, "min_seller_rating");
+
+        let mut q = base.clone();
+        q.is_verified_seller_only = Some(true);
+        assert_ne!(search_cache_key(&q), base_key, "is_verified_seller_only");
+
+        // Owner filter (the primary fix)
+        let mut q = base.clone();
+        q.owner_id = Some("seller-A".into());
+        assert_ne!(search_cache_key(&q), base_key, "owner_id");
+
+        let mut q = base.clone();
+        q.owner_id = Some("seller-B".into());
+        assert_ne!(search_cache_key(&q), base_key, "owner_id (different value)");
+
+        // Two different owner_ids must produce different keys (cache isolation
+        // between sellers). This is the regression that motivated this fix.
+        let key_a = search_cache_key(&{
+            let mut q = base.clone();
+            q.owner_id = Some("seller-A".into());
+            q
+        });
+        let key_b = search_cache_key(&{
+            let mut q = base.clone();
+            q.owner_id = Some("seller-B".into());
+            q
+        });
+        assert_ne!(
+            key_a, key_b,
+            "owner_id 'A' vs 'B' must produce distinct keys"
+        );
+
+        // Geolocation fields
+        let mut q = base.clone();
+        q.is_near_me = Some(true);
+        assert_ne!(search_cache_key(&q), base_key, "is_near_me");
+
+        let mut q = base.clone();
+        q.user_latitude = Some(40.7128);
+        assert_ne!(search_cache_key(&q), base_key, "user_latitude");
+
+        let mut q = base.clone();
+        q.user_longitude = Some(-74.0060);
+        assert_ne!(search_cache_key(&q), base_key, "user_longitude");
+
+        let mut q = base.clone();
+        q.radius_km = Some(5.0);
+        assert_ne!(search_cache_key(&q), base_key, "radius_km");
+
+        // Price substruct — each subfield must independently differentiate
+        let mut q = base.clone();
+        q.price = Some(SearchPriceFilter {
+            currency: Some("USD".into()),
+            min_amount: Some(10.0),
+            max_amount: Some(100.0),
+        });
+        assert_ne!(search_cache_key(&q), base_key, "price (all subfields set)");
+
+        let key_min = search_cache_key(&{
+            let mut q = base.clone();
+            q.price = Some(SearchPriceFilter {
+                currency: None,
+                min_amount: Some(10.0),
+                max_amount: None,
+            });
+            q
+        });
+        let key_max = search_cache_key(&{
+            let mut q = base.clone();
+            q.price = Some(SearchPriceFilter {
+                currency: None,
+                min_amount: None,
+                max_amount: Some(100.0),
+            });
+            q
+        });
+        let key_curr = search_cache_key(&{
+            let mut q = base.clone();
+            q.price = Some(SearchPriceFilter {
+                currency: Some("USD".into()),
+                min_amount: None,
+                max_amount: None,
+            });
+            q
+        });
+        assert_ne!(key_min, key_max, "price.min_amount vs price.max_amount");
+        assert_ne!(key_min, key_curr, "price.min_amount vs price.currency");
+        assert_ne!(key_max, key_curr, "price.max_amount vs price.currency");
+
+        // Location substruct — each subfield must independently differentiate
+        let mut q = base.clone();
+        q.location = Some(SearchLocationFilter {
+            country_code: Some("US".into()),
+            city: Some("NYC".into()),
+        });
+        assert_ne!(
+            search_cache_key(&q),
+            base_key,
+            "location (all subfields set)"
+        );
+
+        let key_country = search_cache_key(&{
+            let mut q = base.clone();
+            q.location = Some(SearchLocationFilter {
+                country_code: Some("US".into()),
+                city: None,
+            });
+            q
+        });
+        let key_city = search_cache_key(&{
+            let mut q = base.clone();
+            q.location = Some(SearchLocationFilter {
+                country_code: None,
+                city: Some("NYC".into()),
+            });
+            q
+        });
+        assert_ne!(
+            key_country, key_city,
+            "location.country_code vs location.city"
+        );
+
+        // Sort & pagination
+        let mut q = base.clone();
+        q.sort_by = SearchSort::Newest;
+        assert_ne!(search_cache_key(&q), base_key, "sort_by");
+
+        let mut q = base.clone();
+        q.limit = Some(50);
+        assert_ne!(search_cache_key(&q), base_key, "limit");
+
+        let mut q = base.clone();
+        q.cursor = Some("abc".into());
+        assert_ne!(search_cache_key(&q), base_key, "cursor");
     }
 
     #[test]
