@@ -251,15 +251,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let search_heavy_pattern = benchmark_search_heavy_pattern();
     let negotiation_burst_pattern = benchmark_negotiation_burst_pattern();
 
-    let listing_ids = if let Some(pool) = harness.get_pool() {
-        let listing_pool_size = benchmark_listing_pool_size(target_ops);
-        load_listing_ids(pool, listing_pool_size).await?
-    } else {
-        let seller_claims = benchmark_seller_claims();
-        seed_seller_accounts(&harness, &seller_claims).await?;
-        let seed_count = benchmark_seed_count(target_ops);
-        seed_listings(&harness, &seller_claims, seed_count).await?
-    };
+    let seller_claims = benchmark_seller_claims();
+    seed_seller_accounts(&harness, &seller_claims).await?;
+    let seed_count = benchmark_seed_count(target_ops);
+    let listing_ids = seed_listings(&harness, &seller_claims, seed_count).await?;
 
     if let Some(pool) = harness.get_pool() {
         clear_benchmark_transaction_tables(pool).await?;
@@ -596,8 +591,8 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
             (
                 ListingType::Service,
                 format!("Math Tutoring Service {seed}"),
-                None,
-                None,
+                Some(Category::Laptop),
+                Some(Condition::Used),
                 Some(ServiceType::Local),
                 Some(25.0 + (seed % 5) as f64),
                 Some(200.0 + (seed % 10) as f64),
@@ -621,8 +616,8 @@ fn build_listing_request(seed: usize) -> CreateListingRequest {
             (
                 ListingType::Property,
                 format!("Apartment for Rent {seed}"),
-                None,
-                None,
+                Some(Category::Laptop),
+                Some(Condition::Used),
                 None,
                 None,
                 None,
@@ -842,32 +837,6 @@ fn benchmark_target_ops() -> usize {
 
 fn benchmark_seed_count(target_ops: usize) -> usize {
     target_ops.div_ceil(3) + 100
-}
-
-fn benchmark_listing_pool_size(target_ops: usize) -> usize {
-    benchmark_seed_count(target_ops).max(2_000)
-}
-
-async fn load_listing_ids(pool: &PgPool, limit: usize) -> Result<Vec<String>, sqlx::Error> {
-    let rows = sqlx::query_scalar::<_, String>(
-        "SELECT l.listing_id
-         FROM listings l
-         LEFT JOIN reservation_leases rl
-           ON rl.listing_id = l.listing_id AND rl.status = 'active'
-         WHERE l.listing_type = 'product'
-           AND rl.listing_id IS NULL
-         ORDER BY l.listing_id
-         LIMIT $1",
-    )
-    .bind(limit as i64)
-    .fetch_all(pool)
-    .await?;
-
-    if rows.is_empty() {
-        return Err(sqlx::Error::RowNotFound);
-    }
-
-    Ok(rows)
 }
 
 fn rounds_for_target_ops(pattern: &[BenchmarkStep], target_ops: usize) -> usize {
