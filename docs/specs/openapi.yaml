@@ -570,6 +570,12 @@ paths:
     post:
       tags: [admin]
       summary: Archive a listing (admin)
+      description: >
+        Mark a listing as archived. The listing record is retained for audit
+        but is no longer surfaced in search or browse results. The seller can
+        later restore the listing via the seller self-service flow.
+        Requires admin authorization.
+      operationId: archiveListing
       parameters:
         - name: listing_id
           in: path
@@ -589,6 +595,12 @@ paths:
     post:
       tags: [admin]
       summary: Release a reservation (admin)
+      description: >
+        Force-release a reservation lease that another agent is still
+        holding. Use when a lease is stuck and the buyer can no longer
+        complete checkout, or to recover from an agent crash that left
+        a lease open. Requires admin authorization.
+      operationId: releaseReservation
       parameters:
         - name: lease_id
           in: path
@@ -606,6 +618,13 @@ paths:
     put:
       tags: [admin]
       summary: Set seller trust level (admin)
+      description: >
+        Set the trust level (e.g. unverified, basic, premium) for a seller
+        account. The trust level affects the seller's listing visibility
+        tier, daily listing quota, and rate-limit ceiling. The change
+        takes effect immediately for new requests. Requires admin
+        authorization.
+      operationId: setSellerTrustLevel
       parameters:
         - name: seller_id
           in: path
@@ -629,6 +648,13 @@ paths:
     put:
       tags: [admin]
       summary: Set seller quota override (admin)
+      description: >
+        Override the listing quota for a seller account. A non-null value
+        replaces the default quota for this seller; a null value clears
+        the override and reverts the seller to the platform default.
+        Used to grant temporary quota lifts to trusted sellers or to
+        throttle abusive ones. Requires admin authorization.
+      operationId: setSellerQuotaOverride
       parameters:
         - name: seller_id
           in: path
@@ -652,6 +678,13 @@ paths:
     post:
       tags: [admin]
       summary: Recalculate seller rating (admin)
+      description: >
+        Recompute the seller's aggregate rating and review distribution
+        from all approved reviews. Use after bulk-importing historical
+        reviews, recovering from a rating-aggregation bug, or to refresh
+        the cached rating that backs the search index. Requires admin
+        authorization.
+      operationId: recalculateSellerRating
       parameters:
         - name: seller_id
           in: path
@@ -708,6 +741,13 @@ paths:
     post:
       tags: [admin]
       summary: Approve a review (admin)
+      description: >
+        Approve a pending review so it becomes publicly visible on the
+        listing page and starts contributing to the seller's aggregate
+        rating. Reviews enter the pending state when buyers create them;
+        admins must approve them before they surface. Requires admin
+        authorization.
+      operationId: approveReview
       parameters:
         - name: review_id
           in: path
@@ -727,6 +767,12 @@ paths:
     post:
       tags: [admin]
       summary: Reject a review (admin)
+      description: >
+        Reject a pending review so it is never publicly visible. Use for
+        spam, abuse, or policy violations. The review record is retained
+        for audit and the rejection reason is recorded in the audit log.
+        Requires admin authorization.
+      operationId: rejectReview
       parameters:
         - name: review_id
           in: path

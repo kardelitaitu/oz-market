@@ -1334,3 +1334,42 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
   - ENV e1-e8: separate batch.
 - **Net diff**: 3 files, +24 / -3 lines, pure documentation.
 - **Next**: MINOR items remaining: m3 (partial), m5 (only remaining code-touching MINOR). Cleanup: 7 admin endpoint metadata, search cache-key bug. Plus ENV e1-e8. Suggested next batch: the 7 admin endpoint metadata cleanup (pure spec, eliminates 14 of 18 Redocly warnings, fast ship) plus the search cache-key bug fix (one-line code + test).
+
+
+## 2026-06-05 13:50 - Cleanup: add operationId + operation-level description to 7 admin endpoints in openapi.yaml
+
+- **Goal**: close the Redocly `operation-operationId` and `operation-description` warnings on the 7 admin endpoints under `/internal/v1/...` (release, trust-level, quota-override, recalculate-rating, approve, reject, archive). Pure spec change.
+- **What changed (1 file, +46 lines, no code change)**:
+  - `docs/specs/openapi.yaml`:
+    - Added `description:` (3-6 line multi-line block explaining use case and authorization) and `operationId:` (camelCase) to each of:
+      - `archiveListing` (line 569, POST /internal/v1/listings/{listing_id}/archive)
+      - `releaseReservation` (line 600, POST /internal/v1/reservations/{lease_id}/release)
+      - `setSellerTrustLevel` (line 629, PUT /internal/v1/sellers/{seller_id}/trust-level)
+      - `setSellerQuotaOverride` (line 666, PUT /internal/v1/sellers/{seller_id}/quota-override)
+      - `recalculateSellerRating` (line 701, POST /internal/v1/sellers/{seller_id}/recalculate-rating)
+      - `approveReview` (line 769, POST /internal/v1/reviews/{review_id}/approve)
+      - `rejectReview` (line 802, POST /internal/v1/reviews/{review_id}/reject)
+    - Each description explains the use case, the immediate effect, and the admin-only authorization requirement. The adjustSellerCredits endpoint (line 700 area) was already complete and served as the template.
+- **Validation**:
+  - `python -c 'import yaml; yaml.safe_load(...)'` parses cleanly. Path count 31 (unchanged).
+  - `npx @redocly/cli lint --config docs/specs/redocly.yaml` warning count: **34 -> 20 (-14)**.
+  - `cargo check` / `cargo clippy --all-targets -- -D warnings` clean.
+  - `cargo test -p marketplace-server`: 399 passed; 0 failed.
+  - `check.ps1` 6/6 pass.
+- **Honest accounting on prior journal entries**:
+  - My prior commits (M2, M5, MINOR batch) described the Redocly warning count as 2 (only the ListingPayload example warnings). The actual count on the pre-batch state was **34**; my partial `rg`-style grep was missing the 16 `operation-2xx/4xx-response` and `no-unused-components` warnings that redocly emits. This commit is the first one to report the count accurately.
+  - The 20 remaining warnings (all pre-existing, none caused by this commit) are:
+    - 2 `no-invalid-schema-examples` on ListingPayload/example/shipping_info (pre-existing).
+    - 2 `boolean-parameter-prefixes` on `verified_sellers_only` and `near_me` (pre-existing).
+    - 3 `operation-4xx-response` on the 3 health agents paths added in M2 (M2 paths missing 4xx responses; not blockers).
+    - 12 `operation-2xx-response` + `operation-4xx-response` on the 6 deprecated redirect paths added in M2 (6 paths x 2 warnings = 12; deprecated 301 redirects intentionally lack 2xx/4xx).
+    - 1 `no-unused-components` on NegotiationEvent (added in MINOR batch m4; referenced from a description string, not a $ref, so Redocly cannot trace the reference).
+  - All 20 are pre-existing. None are blocking. The Redocly config does not have `recommended.strict: true`, so warnings do not fail the lint.
+- **Out of scope (deferred, separate concerns)**:
+  - 3 health agents paths missing 4xx responses: low priority, would need to know the actual error model.
+  - 6 deprecated redirects: the routes are slated for removal anyway (their `Sunset: 2026-06-01` date is 5 days in the past). Documented in M2.
+  - `no-unused-components` on NegotiationEvent: would need to either convert the description to a $ref or add a `# x-used-in` annotation. Either is non-trivial.
+  - m3 (X-RateLimit-* headers, partial from M2), m5 (typed `CreateReviewRequest` bind), search cache-key bug: separate.
+  - ENV e1-e8: separate batch.
+- **Net diff**: 1 file, +46 / -0. Pure spec.
+- **Next**: address the search cache-key bug (one-line code + regression test, the only remaining correctness issue I found during audit-driven work). Then the remaining MINOR m5 and ENV e1-e8 batches.
