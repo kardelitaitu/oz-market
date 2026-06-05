@@ -1513,3 +1513,12 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Regression guard**: if this test ever flakes above 1us/req, the wrap_fn has gained real work (a lock, a syscall, a heap alloc per call) and should be reviewed before deploying.
 - **Validation**: `cargo test --lib wrap_fn_overhead` passes with measured ~730ns/req. Full `check.ps1` 6/6 pass. `cargo test --lib` 403/403 (was 402, microbench added 1).
 - **Files changed (1)**: `actix_handlers.rs` (+83 / -0).
+
+## 2026-06-05 16:45
+
+- **Created Active Specs 0024-0027 (Performance & Security Roadmap)**: Defined 4 new active specifications under docs/specs/_active/ to govern architecture upgrades:
+  - 0024-distributed-ledger-cache-redis: Governs Redis distributed cache clustering, write-through atomic balance updates, and pub/sub cache invalidation.
+  - 0025-zero-copy-ffi-serialization: Outlines MessagePack binary serialization for high-volume FFI communication between Tauri and Svelte.
+  - 0026-transactional-outbox-pattern: Details transactional event commits (outbox table) and background polling worker events publishing.
+  - 0027-refresh-token-rotation-jwt-blacklist: Establishes Redis-backed JWT blacklisting, refresh token rotation single-use rules, and session-reuse breach detection.
+- Verified that all active spec structures conform to repo governance rules and check.ps1 runs clean.
