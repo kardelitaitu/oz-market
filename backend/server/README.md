@@ -139,10 +139,19 @@ All errors return JSON in this shape:
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
+| `DATABASE_URL` | — | Postgres connection string (required) |
+| `DATABASE_MAX_CONNECTIONS` | `200` | Postgres pool size |
 | `MARKETPLACE_BIND` | `127.0.0.1:3000` | Bind address |
-| `DATABASE_URL` | — | Postgres connection string |
-| `DATABASE_MAX_CONNECTIONS` | `100` | Postgres pool size |
-| `TOKIO_WORKER_THREADS` | `num_cpus - 1` | Async worker threads |
+| `MARKETPLACE_CACHE_ENABLED` | `true` | Enable in-memory listing/search cache |
+| `MARKETPLACE_API_KEY` | — | Shared API key for zero-config auth (server + MCP) |
+| `TOKIO_WORKER_THREADS` | `auto` | Tokio async worker threads (auto: num_cpus-1, cap 8) |
+| `ACTIX_WORKERS` | `auto` | Actix-web HTTP worker threads (auto: num_cpus*4, 16-64) |
+| `SHUTDOWN_TIMEOUT_SECS` | `30` | Graceful shutdown timeout in seconds |
+| `LOG_FORMAT` | `plain` | Log format: `json` for structured JSON output |
+| `LISTING_CACHE_MAX_MB` | `200` | Max memory for listing cache in MB |
+| `SEARCH_CACHE_MAX_MB` | `100` | Max memory for search cache in MB |
+| `LEDGER_CACHE_TTL_SECS` | `3600` | Credit ledger cache TTL in seconds |
+| `LEDGER_WAL_PATH` | `./data/wal/` | Write-ahead log directory for crash recovery |
 
 ## Project Layout (relevant to mobile devs)
 

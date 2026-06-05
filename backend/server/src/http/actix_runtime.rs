@@ -36,14 +36,7 @@ use tracing_actix_web::TracingLogger;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Configure tokio runtime for high concurrency performance
-    let num_cpus = num_cpus::get();
-    let max_worker_threads = 8; // Cap at 8 for database-focused workload
-    let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
-
+    let worker_threads = resolve_worker_threads();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(worker_threads)
         .thread_name("marketplace-worker")
@@ -84,8 +77,8 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let app = build_app(pool.clone(), audit_repo, outbox_repo);
     let observability = Arc::new(ServerObservability::new());
 
-    let cache_enabled = std::env::var("MARKETPLACE_DISABLE_CACHE")
-        .map(|value| value != "1" && !value.eq_ignore_ascii_case("true"))
+    let cache_enabled = std::env::var("MARKETPLACE_CACHE_ENABLED")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(true);
 
     // Memory-based cache configuration (in MB)
@@ -225,6 +218,17 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
+/// Resolve the tokio worker thread count from env var or compute a sensible default.
+/// Used both by `run()` to configure the runtime and by `metrics_handler()` to report.
+fn resolve_worker_threads() -> usize {
+    let num_cpus = num_cpus::get();
+    let max_worker_threads = 8; // Cap at 8 for database-focused workload
+    std::env::var("TOKIO_WORKER_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads))
+}
+
 async fn metrics_handler(
     pool: web::Data<sqlx::postgres::PgPool>,
     listing_cache: web::Data<Cache<String, String>>,
@@ -239,11 +243,8 @@ async fn metrics_handler(
 
     // Runtime metrics
     let num_cpus = num_cpus::get();
-    let max_worker_threads = 8usize; // Must match the cap in run()
-    let worker_threads = std::env::var("TOKIO_WORKER_THREADS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| num_cpus.saturating_sub(1).max(1).min(max_worker_threads));
+    let max_worker_threads: usize = 8; // Cap at 8 for database-focused workload (must match resolve_worker_threads)
+    let worker_threads = resolve_worker_threads();
 
     // Cache metrics — derive size from the actual configured limits
     let listing_weight_capacity = **listing_max_bytes;
