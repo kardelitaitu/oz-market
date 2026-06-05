@@ -106,7 +106,7 @@
     
     let t2 = setTimeout(() => {
       if (isPaused) return;
-      simLogs = [...simLogs, '[System] Contact info revealed: +1-555-0199 (Seller: Alice)'];
+      simLogs = [...simLogs, '[System] Contact info revealed: Telegram +1-555-0199 (Seller: Alice)'];
       simState = 'completed';
       
       let t3 = setTimeout(() => {

@@ -1711,3 +1711,16 @@ pm run build compiles clean.
 pm run test:e2e tests pass successfully (7.7s duration).
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
+
+## 2026-06-05 19:20 - Update contact reveal log message in simulator
+
+- **Goal**: Update the contact reveal log message to specify Telegram contact details.
+- **Changed**:
+  - Appended "Telegram" prefix to the contact info revealed system log string inside web/website/src/App.svelte.
+- **Validation**:
+  - 
+pm run build compiles clean.
+  - 
+pm run test:e2e tests pass successfully (7.6s duration).
+  - check.ps1 runs pass successfully.
+- **Files changed (1)**: web/website/src/App.svelte (modified).
