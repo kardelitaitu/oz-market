@@ -1657,3 +1657,16 @@ px playwright install chromium downloaded browser binaries successfully.
 pm run test:e2e ran 4 E2E tests using Playwright and all passed (12.1s duration).
   - check.ps1 runs clean on all 6 stages.
 - **Files changed (4 new/modified)**: web/website/package.json, web/website/playwright.config.js, web/website/tests/theme.spec.js, and web/website/src/global.css.
+
+## 2026-06-05 18:50 - Fix simulator layout shift
+
+- **Goal**: Prevent the lower content of the Home page (buttons/cards) from moving when new logs are added to the Interactive Agent Negotiation Simulator.
+- **Changed**:
+  - Replaced max-height: 200px with a fixed height: 160px on the simulator log wrapper div in web/website/src/App.svelte.
+- **Validation**:
+  - 
+pm run build compiles clean.
+  - 
+pm run test:e2e E2E tests pass successfully (7.3s duration).
+  - check.ps1 runs pass successfully.
+- **Files changed (1)**: web/website/src/App.svelte (modified).

@@ -258,7 +258,7 @@
         </div>
         
         <!-- Simulation Logs -->
-        <div style="text-align: left; max-height: 200px; overflow-y: auto;">
+        <div style="text-align: left; height: 160px; overflow-y: auto;">
           <h5 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h5>
           {#if simLogs.length === 0}
             <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
