@@ -773,3 +773,44 @@ test.describe('BlockInspectionModal Component', () => {
   });
 });
 
+test.describe('Sticky Footer', () => {
+  test('footer is at viewport bottom on /status (short page)', async ({ page }) => {
+    await page.goto('/status');
+    await page.waitForTimeout(200);
+
+    const isFooterAtBottom = await page.evaluate(() => {
+      const footer = document.querySelector('footer');
+      if (!footer) return false;
+      const rect = footer.getBoundingClientRect();
+      return Math.abs(rect.bottom - window.innerHeight) < 2;
+    });
+
+    expect(isFooterAtBottom).toBe(true);
+  });
+
+  test('footer is at viewport bottom on /getting-started (short page)', async ({ page }) => {
+    await page.goto('/getting-started');
+    await page.waitForTimeout(200);
+
+    const isFooterAtBottom = await page.evaluate(() => {
+      const footer = document.querySelector('footer');
+      if (!footer) return false;
+      const rect = footer.getBoundingClientRect();
+      return Math.abs(rect.bottom - window.innerHeight) < 2;
+    });
+
+    expect(isFooterAtBottom).toBe(true);
+  });
+
+  test('no vertical scrollbar on /status', async ({ page }) => {
+    await page.goto('/status');
+    await page.waitForTimeout(200);
+
+    const hasScroll = await page.evaluate(() =>
+      document.documentElement.scrollHeight > window.innerHeight
+    );
+
+    expect(hasScroll).toBe(false);
+  });
+});
+
