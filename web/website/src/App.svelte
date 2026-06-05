@@ -203,11 +203,12 @@
   }
 
   .auth-btn.signup {
-    background: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary), var(--bg-dark) 30%);
     color: var(--text-primary);
   }
 
   .auth-btn.signup:hover {
+    background: var(--color-primary);
     box-shadow: 0 4px 14px rgba(170, 59, 255, 0.3);
   }
 
