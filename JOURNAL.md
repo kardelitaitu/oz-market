@@ -1308,3 +1308,29 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
   - m7, m8, m9 (done-spec plan drift): 3 small doc edits in `docs/specs/_done/0010..0013/plan.md`.
 - **Net diff**: 2 files, +76 / -3.
 - **Next**: TODO.md MINOR items remaining: m3 (partial), m5, m7, m8, m9. Plus the search cache-key bug found during this batch. Plus the 7 admin endpoint operationId/description missing. Plus ENV e1-e8. Suggested next batch: the 3 done-spec plan drift fixes (m7+m8+m9, pure docs) and the 7 admin endpoint metadata cleanup - both small, both pure spec.
+
+
+## 2026-06-05 13:10 - MINOR m7+m8+m9: Drift Notes for done specs 0010, 0011, 0012 (audit TODO.md MINOR items)
+
+- **Goal**: append Drift Notes to 3 done specs whose plans were never updated to reflect intentional implementation divergences. Pure docs, no code or schema change.
+- **What changed (3 files, +24 / -3 lines)**:
+  - `docs/specs/_done/0010-credit-ledger-schema-domain/plan.md` (+19 lines, m7):
+    - Appended `## Drift Notes` section with 3 subsections.
+    - `agent_id` is `TEXT PRIMARY KEY` (not UUID FK to `agents(id)`): migration `backend/server/migrations/0014_add_credit_ledger.sql:3-8, 15-23` uses TEXT; `agent_balances` has a SQL comment on lines 10-11 clarifying the logical reference to `agent_credentials.subject`.
+    - `CreditLedgerError::AgentNotFound` is `String` not `Uuid` (verified at `backend/server/src/domain/ledger.rs:73, 85, 167, 200`).
+    - Why the string-keyed, multi-account design: multi-tenant/guest agents, no CASCADE hazard on profile deletion, schema simplicity, idempotency-key compatibility.
+  - `docs/specs/_done/0011-dual-layer-ledger-cache/plan.md` (+3 / -1 lines, m8):
+    - Updated `DashMap<Uuid, Decimal>` to `DashMap<String, CachedEntry>`. The plan originally specified storing only the current balance as `Decimal`; the actual struct stores the full `CreditAccount` so `get_balance` can return the account verbatim, plus an `inserted_at: Instant` for TTL-based eviction. Added a note about `LEDGER_CACHE_TTL_SECS` (default 300s).
+  - `docs/specs/_done/0012-ledger-cache-invalidation/plan.md` (+3 / -1 lines, m9):
+    - Updated route from `POST /v1/admin/sellers/{id}/credits` to `POST /internal/v1/sellers/{seller_id}/credits` (matching `openapi.yaml:670`).
+    - Added a Drift Note in section 3 pointing to `adjust_credits` at `backend/server/src/http/actix_handlers.rs:1526` (registered at line 1496) instead of the deleted `backend/server/src/http/handlers.rs::admin_adjust_credits`. Response body, status code, and idempotency contract described in the plan are unchanged.
+- **Validation**:
+  - `check.ps1` 6/6 pass (no Rust change, all gates still green). The active-spec governance guard only scans `_active/`, so `_done/` edits are invisible to it.
+  - Lib tests: 399 (no test change).
+  - No code or schema migration.
+- **Out of scope (deferred, separate concerns)**:
+  - Path variable name drift: spec uses `seller_id` (`openapi.yaml:670`), code uses `agent_id` (`actix_handlers.rs:1496, 1510`). Documented in code as `agent_id`. The 0012 plan update above uses `seller_id` to match the spec, since the spec is the source of truth for plan documentation. Renaming the path variable in code (or the spec) to agree is a separate concern.
+  - m3 (X-RateLimit-* headers, partial from M2), m5 (typed `CreateReviewRequest` bind), search cache-key bug, 7 admin endpoint metadata cleanup: all separate.
+  - ENV e1-e8: separate batch.
+- **Net diff**: 3 files, +24 / -3 lines, pure documentation.
+- **Next**: MINOR items remaining: m3 (partial), m5 (only remaining code-touching MINOR). Cleanup: 7 admin endpoint metadata, search cache-key bug. Plus ENV e1-e8. Suggested next batch: the 7 admin endpoint metadata cleanup (pure spec, eliminates 14 of 18 Redocly warnings, fast ship) plus the search cache-key bug fix (one-line code + test).

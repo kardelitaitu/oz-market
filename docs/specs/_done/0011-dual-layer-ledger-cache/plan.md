@@ -4,8 +4,8 @@
 
 ### 1. In-Memory Struct Design
 * Create `backend/server/src/services/ledger_cache.rs` exposing the `LedgerCache` struct.
-* Utilize `dashmap::DashMap<Uuid, Decimal>` to store the current balance.
-* Ensure all cache interactions are non-blocking where possible, avoiding nesting locks to prevent deadlocks under parallel loads.
+* Utilize `dashmap::DashMap<String, CachedEntry>` to store one entry per agent. The plan originally specified `DashMap<Uuid, Decimal>` (current balance only); the actual struct stores the full `CreditAccount` so the read path can return the account verbatim, plus an `inserted_at: Instant` for TTL-based eviction. `CachedEntry` is private; `LedgerCache` exposes `get_balance`, `apply_transaction`, `get_transaction_history`, `invalidate`, `invalidate_all`.
+* Ensure all cache interactions are non-blocking where possible, avoiding nesting locks to prevent deadlocks under parallel loads. TTL is configurable via `LEDGER_CACHE_TTL_SECS` (default 300s); expired entries are evicted on read.
 
 ### 2. Read Cache Miss Resolution
 * When checking balances via `get_balance(agent_id)`:

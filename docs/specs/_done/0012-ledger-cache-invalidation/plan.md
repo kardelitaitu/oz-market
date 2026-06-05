@@ -4,7 +4,7 @@
 
 ### 1. Endpoint Contract Addition
 * Update `docs/specs/openapi.yaml` to include the administrative balance adjustment route:
-  `POST /v1/admin/sellers/{id}/credits`
+  `POST /internal/v1/sellers/{seller_id}/credits` (see `openapi.yaml:670`; the plan originally specified the un-namespaced `POST /v1/admin/sellers/{id}/credits`).
 * Define payload validation structures:
   * Check that `amount` is a string representation of a positive, finite decimal.
   * Check that `adjustment` matches one of the expected enum keys (`deposit`, `spend`, `refund`, `adjustment`).
@@ -34,6 +34,8 @@
   "updated_at": "2026-06-04T15:30:00Z"
 }
 ```
+
+> **Drift note (2026-06-05)**: the handler implementing this route is `adjust_credits` in `backend/server/src/http/actix_handlers.rs:1526` (the plan originally said `backend/server/src/http/handlers.rs::admin_adjust_credits`). It is registered at `actix_handlers.rs:1496` under the `/internal/v1` scope. The response body, status code, and idempotency contract described in this §3 are unchanged.
 
 #### Error Response: Insufficient Balance (400 Bad Request)
 ```json
