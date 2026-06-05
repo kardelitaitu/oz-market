@@ -30,14 +30,14 @@
 
   .pill {
     background: var(--bg-card);
-    backdrop-filter: var(--glass-backdrop);
+    backdrop-filter: blur(16px);
     border-radius: 30px;
     padding: 0.6rem 1.25rem;
     font-size: 0.85rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    box-shadow: var(--glass-shadow);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 
   .pill-dot {
