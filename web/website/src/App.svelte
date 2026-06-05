@@ -39,6 +39,19 @@
     timeouts.forEach(t => clearTimeout(t));
     timeouts = [];
   }
+
+  // Returns a CSS color variable string based on who is speaking in a log line
+  function logColor(log) {
+    if (log.startsWith('[System]'))  return 'var(--color-success)';
+    if (log.startsWith(`[${sellerName}]`) || log.startsWith('[Seller Agent]')) return 'var(--color-secondary)';
+    return 'var(--color-primary)';
+  }
+
+  // Splits a log line into a [Tag] prefix and the rest of the message
+  function logParts(log) {
+    const m = log.match(/^(\[[^\]]+\])\s*(.*)$/);
+    return m ? { tag: m[1], msg: m[2] } : { tag: '', msg: log };
+  }
   
   // Simulation script runner
   function runSimulation() {
@@ -481,7 +494,12 @@
                 <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
               {:else}
                 {#each simLogs as log}
-                  <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-secondary); margin-bottom: 0.25rem;">{log}</div>
+                  {@const p = logParts(log)}
+                  <div style="font-family: var(--font-mono); font-size: 0.82rem; margin-bottom: 0.35rem; line-height: 1.45;">
+                    <span style="color: {logColor(log)}; font-weight: 700; opacity: 0.95;">{p.tag}</span>
+                    {#if p.tag}<span style="color: var(--text-muted); margin: 0 0.15rem;"> </span>{/if}
+                    <span style="color: var(--text-secondary);">{p.msg}</span>
+                  </div>
                 {/each}
               {/if}
             </div>

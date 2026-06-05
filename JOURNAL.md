@@ -1774,3 +1774,11 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `web/website/src/App.svelte`: Increased each negotiation step interval from 800ms to 1800ms (total negotiation phase: 6.4s → 14.4s). Increased consensus→reveal transition delay from 1200ms to 2000ms. Increased reveal phase delays from 800ms/1600ms to 1800ms/3600ms. Extended completed-state hold from 5s to 8s. Extended restart gap from 1s to 2s. Total full-cycle time is now ~30s vs ~13s previously.
 - **Validation**: `npm run build` compiles clean.
 - **Files changed (1)**: web/website/src/App.svelte.
+
+## 2026-06-05 18:17
+
+- **Goal**: Color-code simulator log lines by speaker to improve readability.
+- **Changed**:
+  - `web/website/src/App.svelte`: Added `logColor(log)` helper returning `--color-primary` for Buyer, `--color-secondary` for Seller, `--color-success` for System. Added `logParts(log)` regex to split each line into `[Tag]` + message body. Log renderer now shows the `[Tag]` in bold with speaker's theme color, and message body in `--text-secondary`.
+- **Validation**: `npm run build` compiles clean.
+- **Files changed (1)**: web/website/src/App.svelte.
