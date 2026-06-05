@@ -1,0 +1,23 @@
+version: 1
+id: 0024-distributed-ledger-cache-redis
+title: Distributed Ledger Cache Synchronization
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - cache
+files:
+  code:
+    - backend/server/src/services/ledger_cache_distributed.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - LedgerCache interface integrates with a Redis backend client
+  - Write-through operations commit to PostgreSQL and update Redis atomically
+  - Cache invalidation pub/sub notifications propagate successfully to peer instances
+non_goals:
+  - Implementing persistent Redis storage (Postgres remains the source of truth)
+risks:
+  - Network split between server instances and Redis causing cache inconsistency (mitigated by using write-through + cache bypass fallback)

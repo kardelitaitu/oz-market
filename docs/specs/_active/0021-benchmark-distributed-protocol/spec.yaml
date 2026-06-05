@@ -1,0 +1,23 @@
+version: 1
+id: 0021-benchmark-distributed-protocol
+title: Benchmark Distributed Protocol
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - distributed
+files:
+  code:
+    - backend/server/src/bin/bench_suite.rs
+  docs:
+    - docs/server/benchmark-suite.md
+acceptance:
+  - gRPC service interfaces sync start states and streaming metrics between nodes successfully
+  - Workers connect to the coordinator gRPC server under the worker role configurations
+  - Coordinator successfully deserializes and merges HDR Histograms from multiple worker streams
+non_goals:
+  - Measuring hardware resource usage (deferred to Spec 0022)
+risks:
+  - High latency variance in coordinator metrics collection due to network transport delays (mitigated by asynchronous streaming channels)

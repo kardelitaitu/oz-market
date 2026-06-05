@@ -55,11 +55,11 @@ test.describe('Theme Switcher & UI Interactions', () => {
   });
 
   test('should navigate between tabs', async ({ page }) => {
-    const guideTabBtn = page.locator('nav button:has-text("Device Guide")');
+    const guideTabBtn = page.locator('nav button:has-text("Getting Started")');
     await guideTabBtn.click();
-    await expect(page.locator('h2:has-text("Multi-Device Setup Guide")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Getting Started")')).toBeVisible();
 
-    const docsTabBtn = page.locator('nav button:has-text("Documentation")');
+    const docsTabBtn = page.locator('nav button:has-text("Docs")');
     await docsTabBtn.click();
     await expect(page.locator('h2:has-text("Documentation Hub")')).toBeVisible();
   });

@@ -1,0 +1,24 @@
+version: 1
+id: 0019-benchmark-cli-standalone-engine
+title: Benchmark CLI and Standalone Engine
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - tooling
+files:
+  code:
+    - backend/server/src/bin/bench_suite.rs
+  docs:
+    - docs/server/benchmark-suite.md
+acceptance:
+  - Benchmark CLI target compiled successfully
+  - Clap argument parsing handles role standalone, targets, rate limits, and duration
+  - Coordinated omission correction fixed-rate scheduler executes tasks at precise intervals
+  - HDR Histogram library records latency samples locally
+non_goals:
+  - Implementing gRPC clustering protocol (deferred to Spec 0021)
+risks:
+  - Inaccuracies in scheduling intervals on OS with low clock precision (mitigated by using spin loops or tokio interval timers)

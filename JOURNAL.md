@@ -1866,6 +1866,18 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Validation**: 409 tests pass (all 7 metrics tests still pass, including the all-in-one and the 6 per-counter smoke tests). `check.ps1` 6/6 stable.
 - **Files changed (3)**: `backend/server/src/observability/mod.rs` (+24), `backend/server/src/http/actix_runtime.rs` (-150 / +5), `backend/server/src/http/actix_handlers.rs` (-185 / +6).
 
+## 2026-06-05 22:40 — Remove dead test from actix_runtime.rs; validate CI scraper step
+
+- **Dead test resolution**: `backend/server/src/http/actix_runtime.rs` is gated behind `#[cfg(not(test))] pub mod actix_runtime;` in `http/mod.rs:6` (the gate exists because the production `run()` needs `WalManager::from_env()` + `batch_channel` which require a real DB; the test build doesn't have one). The 38-line `request_counter_middleware_increments_per_request` test inside that module was never compiled or run. The 145-line `metrics_handler_body_includes_all_six_http_counters` test that the previous session's commit accidentally added to this file was already removed during the 098b5af refactor (it called the inlined format! body that the helper extraction replaced). This commit removes the remaining small dead test: its assertions (4 pings + 1 404 → requests_total=4, error_responses_total=1) are fully covered by the new all-in-one `metrics_handler_body_includes_all_six_http_counters` test in `actix_handlers.rs` (which drives 5 mixed requests and asserts all 6 counter values via the shared `render_http_counter_metrics` helper). The cfg gate stays — removing it would require either mocking `WalManager` and `batch_channel` (large refactor) or making the test build talk to a real DB (CI complexity). Both options are out of scope for this cleanup.
+- **MockCommitPayload split — skipped**: 9cc7a86 was pushed to origin/main this session, so the window for `git commit --amend` to split `MockCommitPayload` (4-line struct + handler) into a dedicated commit is closed. The only ways to do it now are (a) `git revert` + reapply in 2 new commits (heavy churn for a 4-line split, no net code change), or (b) force-push (forbidden by repo policy without explicit user ask). User confirmed: skip.
+- **CI scraper step validation**: the "Publish microbench trend to job summary" step in `.github/workflows/ci.yml:54` was hand-verified by running the same `python3` one-liner against the local `data/microbench/requests_overhead.log`. Two cases tested:
+  - Sub-noise sample (last line, `ns_per_req:null, sub_noise:true`) → output `sub-noise`. The PR check `::notice title=wrap_fn_overhead::sub-noise` will display "sub-noise" instead of a misleading 0ns/req.
+  - Normal sample (mock `ns_per_req:351, sub_noise:false`) → output `351ns/req`. Notice annotation: `::notice title=wrap_fn_overhead::351ns/req`.
+  - Missing-file case (handled by the `else` branch): emits `::warning title=wrap_fn_microbench::log file not found at $LOG` so a greenfield checkout without the log file doesn't silently no-op.
+  - JSON schema: the test writes `{timestamp, commit, ns_per_req, sub_noise, iters, platform}` (lines 2227-2238 of actix_handlers.rs). The CI parser reads the same fields. The MARKETPLACE_MICROBENCH_COMMIT env var ensures the `commit` field is `${{ github.sha }}` on CI (was `"local"` before the 9cc7a86 CI work).
+- **Validation**: 409 lib tests pass (unchanged — the removed test never counted). `check.ps1` 6/6 stable.
+- **Files changed (1)**: `backend/server/src/http/actix_runtime.rs` (-52).
+
 ## 2026-06-05 23:55 — SSE backoff reconnection, metrics panel, transaction inspection modal, and SSE load benchmark
 
 - **Goal**: Implement unauthenticated mock commit endpoint, robust EventSource reconnection backoff, interactive metrics dashboard, block inspection modal (with dialogue reconstruction), and a concurrent SSE streaming load tester.
@@ -1883,3 +1895,30 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `web/website/tests/components.spec.js`: Wrote four comprehensive E2E tests covering default metrics card states, online SSE status reflections, modal inspection elements, and overlay close clicks.
 - **Validation**: Playwright E2E tests run successfully (96/96 pass). Workspace compliance verification `./check.ps1` runs clean.
 - **Files changed**: `backend/server/Cargo.toml`, `backend/server/src/http/actix_handlers.rs`, `backend/server/src/http/actix_runtime.rs`, `web/website/playwright.config.js`, `web/website/src/lib/LedgerExplorer.svelte`, `web/website/src/lib/Simulator.svelte`, `web/website/src/lib/simulator.svelte.js`, `web/website/tests/a11y.spec.js`, `web/website/tests/components.spec.js`, `JOURNAL.md` (modified); `backend/server/src/bin/sse_bench.rs`, `web/website/src/lib/MetricsPanel.svelte`, `web/website/src/lib/BlockInspectionModal.svelte` (new).
+
+## 2026-06-06 00:35 — Nav expansion: FAQs, Status tabs + Sign In/Up
+
+- **Nav updated to 5 tabs**: Home, Getting Started, FAQs, Status, Docs — with URL routing for each (`/faqs`, `/status`).
+- **Sign In / Sign Up buttons**: Added to the right side of the header next to ThemeSwitcher, styled as ghost (Sign In) and filled primary (Sign Up).
+- **FAQTab.svelte**: New component with 5 mock FAQ items covering platform basics, getting started, status, contributing, and tech stack.
+- **StatusTab.svelte**: New component showing MetricsBar + system status cards (API Server, Database, Ledger Cache) all in offline state.
+- **Test updates**: Nav button count 3→5, button labels updated, keyboard tab sequence adjusted.
+- **Validation**: `npm run build` passes with zero warnings.
+
+## 2026-06-06 00:10 — Getting Started redesign + URL routing
+
+- **Redesigned GuideTab**: Replaced developer-oriented multi-device guide (Server/MCP/Mobile) with end-user platform guide (Website/AI Agent/Android/iPhone) with 3-4 step cards each.
+- **Brand icons**: Android tab now uses Font Awesome bugdroid SVG (#3DDC84), iPhone tab uses Apple silhouette SVG (#555).
+- **Icon layout**: Icon on the left of text, larger icons (32px/2rem), taller tabs (1.25rem padding), centered content.
+- **Android/iPhone steps**: Changed to 4-step flow: Download → Sign Up → Set Up Profile → Browse & Negotiate.
+- **URL routing**: Added pathname-based routing to App.svelte — `/getting-started`, `/getting-started/iphone`, etc. now work as shareable URLs via `history.pushState` + `popstate`. GuideTab converted from owning state to receiving props.
+- **Vite config**: Added `historyApiFallback: true` for SPA fallback + custom middleware to serve `/docs/*` from repo root `docs/` directory.
+- **Cleanup**: Removed unused `.mock-placeholder` CSS, fixed stale test refs (`guide-step` → `step-card`, step counts updated).
+- **Validation**: `npm run build` passes with zero warnings.
+
+## 2026-06-05 23:55 — Post-commit review fixes
+
+- **Hardcoded backend URL**: Replaced 3 occurrences of 'http://localhost:3000' in simulator.svelte.js with BACKEND_URL variable. Defaults to http://localhost:3000 but overridable via window.__BACKEND_URL.
+- **SSE benchmark race condition**: Moved connection_barrier.wait().await in sse_bench.rs to after bytes_stream() is called.
+- **Frontend CI gate**: Added website build + Playwright E2E step to check.ps1 (npm run build then npm run test:e2e).
+- **Validation**: cargo check, fmt, clippy all pass; frontend npm run build compiles clean.

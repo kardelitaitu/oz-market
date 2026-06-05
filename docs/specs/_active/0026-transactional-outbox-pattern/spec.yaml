@@ -1,0 +1,24 @@
+version: 1
+id: 0026-transactional-outbox-pattern
+title: Transactional Outbox Pattern
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - events
+files:
+  code:
+    - backend/server/src/repositories/outbox_events.rs
+    - backend/server/src/services/outbox_publisher.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - Outbox database table records audit and domain events inside the active Postgres transaction
+  - Background publisher polling task fetches unpublished events and dispatches them successfully
+  - Published events are marked complete, and stale records are swept regularly
+non_goals:
+  - Requiring a distributed message broker like Kafka (Postgres outbox table is sufficient)
+risks:
+  - High database table bloat on outbox events under high traffic (mitigated by clean sweeping after publication)

@@ -104,12 +104,48 @@
 
 <section class="hero" style="padding-top: 2rem;">
   <h2>Documentation Hub</h2>
-  <p>Detailed architecture maps, design decisions, and system specifications.</p>
+  <p>Everything you need — from end-user guides to developer architecture docs.</p>
 </section>
 
 <div class="card" style="margin-bottom: 2rem;">
-  <h3 style="color: var(--color-primary);">📚 Core Whitepapers & Architecture</h3>
-  <p>Essential reading for developers and architects new to the system.</p>
+  <h3 style="color: var(--color-secondary);">👤 Docs for End User</h3>
+  <p>Guides and references for using the oz-market platform.</p>
+
+  <div class="docs-list">
+    <a href="docs/GOALS.md" class="doc-item">
+      <div class="doc-info">
+        <span class="doc-title">Marketplace Overview & Goals</span>
+        <span class="doc-meta">docs/GOALS.md</span>
+      </div>
+      <span class="btn-arrow">→</span>
+    </a>
+    <a href="docs/CLI-README.md" class="doc-item">
+      <div class="doc-info">
+        <span class="doc-title">CLI Usage Guide</span>
+        <span class="doc-meta">docs/CLI-README.md</span>
+      </div>
+      <span class="btn-arrow">→</span>
+    </a>
+    <a href="docs/deploy.md" class="doc-item">
+      <div class="doc-info">
+        <span class="doc-title">Deployment Guide</span>
+        <span class="doc-meta">docs/deploy.md</span>
+      </div>
+      <span class="btn-arrow">→</span>
+    </a>
+    <a href="docs/TESTING.md" class="doc-item">
+      <div class="doc-info">
+        <span class="doc-title">Testing Guide</span>
+        <span class="doc-meta">docs/TESTING.md</span>
+      </div>
+      <span class="btn-arrow">→</span>
+    </a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom: 2rem;">
+  <h3 style="color: var(--color-primary);">⚙️ Docs for Developer</h3>
+  <p>Architecture, API contracts, and system design specifications.</p>
 
   <div class="docs-list">
     <a href="docs/01-whitepaper/README.md" class="doc-item">

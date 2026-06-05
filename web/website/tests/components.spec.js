@@ -1,185 +1,97 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('GuideTab Component', () => {
-  // Helper to navigate to the Guide tab from Home
+test.describe('Getting Started Guide', () => {
   async function goToGuide(page) {
     await page.goto('/');
-    await page.click('nav button:has-text("Device Guide")');
+    await page.click('nav button:has-text("Getting Started")');
     await page.waitForTimeout(200);
   }
 
-  test('defaults to Server tab with server guide steps visible', async ({ page }) => {
+  test('defaults to Website tab with 3 steps visible', async ({ page }) => {
     await goToGuide(page);
-    await expect(page.locator('h2:has-text("Multi-Device Setup Guide")')).toBeVisible();
-
-    // Server content should be visible
-    await expect(page.locator('h4:has-text("Spin up PostgreSQL Database")')).toBeVisible();
-    await expect(page.locator('h4:has-text("Run Schema Migrations & Seed Data")')).toBeVisible();
-    await expect(page.locator('h4:has-text("Fire Up the Server")')).toBeVisible();
-
-    // MCP and Mobile content should NOT be visible
-    await expect(page.locator('h4:has-text("Build the MCP Executable")')).not.toBeVisible();
-    await expect(page.locator('h4:has-text("Install Mobile Dependencies")')).not.toBeVisible();
+    await expect(page.locator('h2:has-text("Getting Started")')).toBeVisible();
+    await expect(page.locator('h4:has-text("Sign Up")')).toBeVisible();
+    await expect(page.locator('h4:has-text("Browse Listings")')).toBeVisible();
+    await expect(page.locator('h4:has-text("Start Negotiating")')).toBeVisible();
   });
 
-  test('three device tab buttons are present with correct labels and icons', async ({ page }) => {
+  test('four platform tabs are present with correct labels', async ({ page }) => {
     await goToGuide(page);
-    const tabs = page.locator('.device-tabs .device-tab');
-    await expect(tabs).toHaveCount(3);
-
-    await expect(tabs.nth(0)).toContainText('Marketplace Server');
-    await expect(tabs.nth(0)).toContainText('Rust API Core');
-    await expect(tabs.nth(0)).toContainText('🖥️');
-
-    await expect(tabs.nth(1)).toContainText('MCP Sidecar');
-    await expect(tabs.nth(1)).toContainText('Model Context Protocol');
-    await expect(tabs.nth(1)).toContainText('🔌');
-
-    await expect(tabs.nth(2)).toContainText('Mobile App');
-    await expect(tabs.nth(2)).toContainText('Tauri v2 + Svelte 5');
-    await expect(tabs.nth(2)).toContainText('📱');
+    const tabs = page.locator('.platform-tab');
+    await expect(tabs).toHaveCount(4);
+    await expect(tabs.nth(0)).toContainText('Website');
+    await expect(tabs.nth(1)).toContainText('AI Agent');
+    await expect(tabs.nth(2)).toContainText('Android');
+    await expect(tabs.nth(3)).toContainText('iPhone');
   });
 
-  test('Server tab has active class by default', async ({ page }) => {
+  test('Website tab has active class by default', async ({ page }) => {
     await goToGuide(page);
-    const serverTab = page.locator('.device-tab:has-text("Marketplace Server")');
-    await expect(serverTab).toHaveClass(/\bactive\b/);
-
-    // Other tabs should not be active
-    await expect(page.locator('.device-tab:has-text("MCP Sidecar")')).not.toHaveClass(/\bactive\b/);
-    await expect(page.locator('.device-tab:has-text("Mobile App")')).not.toHaveClass(/\bactive\b/);
+    await expect(page.locator('.platform-tab:has-text("Website")')).toHaveClass(/\bactive\b/);
   });
 
-  test('clicking MCP tab switches to MCP content and marks MCP as active', async ({ page }) => {
+  test('clicking AI Agent tab switches to agent content', async ({ page }) => {
     await goToGuide(page);
-
-    await page.click('.device-tab:has-text("MCP Sidecar")');
+    await page.click('.platform-tab:has-text("AI Agent")');
     await page.waitForTimeout(200);
-
-    // MCP content should now be visible
-    await expect(page.locator('h4:has-text("Build the MCP Executable")')).toBeVisible();
-    await expect(page.locator('h4:has-text("Configure Claude Desktop/Desktop Agent")')).toBeVisible();
-    await expect(page.locator('h4:has-text("Expose AI capabilities")')).toBeVisible();
-
-    // Server content should now be hidden
-    await expect(page.locator('h4:has-text("Spin up PostgreSQL Database")')).not.toBeVisible();
-    await expect(page.locator('h4:has-text("Install Mobile Dependencies")')).not.toBeVisible();
-
-    // MCP tab should be active
-    const mcpTab = page.locator('.device-tab:has-text("MCP Sidecar")');
-    await expect(mcpTab).toHaveClass(/\bactive\b/);
-    await expect(page.locator('.device-tab:has-text("Marketplace Server")')).not.toHaveClass(/\bactive\b/);
+    await expect(page.locator('h4:has-text("Connect Your Desktop Agent")')).toBeVisible();
+    await expect(page.locator('.platform-tab:has-text("AI Agent")')).toHaveClass(/\bactive\b/);
   });
 
-  test('clicking Mobile tab switches to Mobile content', async ({ page }) => {
+  test('each platform tab has correct step count', async ({ page }) => {
     await goToGuide(page);
+    await expect(page.locator('.step-card')).toHaveCount(3);
 
-    await page.click('.device-tab:has-text("Mobile App")');
-    await page.waitForTimeout(200);
+    await page.click('.platform-tab:has-text("AI Agent")');
+    await expect(page.locator('.step-card')).toHaveCount(3);
 
-    // Mobile content should be visible — all 3 steps
-    await expect(page.locator('h4:has-text("Install Mobile Dependencies")')).toBeVisible();
-    await expect(page.locator('h4:has-text("Run in Development Mode")')).toBeVisible();
-    await expect(page.locator('h4:has-text("Build Client Executables")')).toBeVisible();
+    await page.click('.platform-tab:has-text("Android")');
+    await expect(page.locator('.step-card')).toHaveCount(4);
 
-    // Server/MCP content should be hidden
-    await expect(page.locator('h4:has-text("Spin up PostgreSQL Database")')).not.toBeVisible();
-    await expect(page.locator('h4:has-text("Build the MCP Executable")')).not.toBeVisible();
-
-    // Mobile tab should be active
-    const mobileTab = page.locator('.device-tab:has-text("Mobile App")');
-    await expect(mobileTab).toHaveClass(/\bactive\b/);
+    await page.click('.platform-tab:has-text("iPhone")');
+    await expect(page.locator('.step-card')).toHaveCount(4);
   });
+});
 
-  test('each guide tab has exactly 3 guide steps', async ({ page }) => {
-    await goToGuide(page);
-
-    // Server: 3 steps
-    await expect(page.locator('.guide-step')).toHaveCount(3);
-
-    // MCP: 3 steps
-    await page.click('.device-tab:has-text("MCP Sidecar")');
-    await expect(page.locator('.guide-step')).toHaveCount(3);
-
-    // Mobile: 3 steps
-    await page.click('.device-tab:has-text("Mobile App")');
-    await expect(page.locator('.guide-step')).toHaveCount(3);
-  });
-
-  test('mobile tab guide steps contain pre blocks with backslash-n commands', async ({ page }) => {
-    await goToGuide(page);
-    await page.click('.device-tab:has-text("Mobile App")');
-    await page.waitForTimeout(200);
-
-    // Mobile pre blocks should contain \n (literal backslash-n in HTML)
-    const preBlocks = page.locator('.guide-step pre');
-    await expect(preBlocks).toHaveCount(3);
-
-    // Check first pre block: "cd mobile/marketplace\nnpm install"
-    const firstPre = preBlocks.nth(0);
-    await expect(firstPre).toContainText('cd mobile/marketplace');
-    await expect(firstPre).toContainText('npm install');
-
-    // Second pre block includes android/ios commands
-    const secondPre = preBlocks.nth(1);
-    await expect(secondPre).toContainText('android');
-    await expect(secondPre).toContainText('ios');
-
-    // Third pre block includes build commands
-    const thirdPre = preBlocks.nth(2);
-    await expect(thirdPre).toContainText('android build');
-    await expect(thirdPre).toContainText('ios build');
-  });
-
-  test('server guide steps show expected docker and cargo commands', async ({ page }) => {
-    await goToGuide(page);
-
-    const preBlocks = page.locator('.guide-step pre');
-    await expect(preBlocks.nth(0)).toContainText('docker compose');
-    await expect(preBlocks.nth(1)).toContainText('cargo run --bin bootstrap_schema');
-    await expect(preBlocks.nth(2)).toContainText('cargo run -p marketplace-server');
-  });
-
-  test('MCP guide steps show JSON config and cargo build command', async ({ page }) => {
-    await goToGuide(page);
-    await page.click('.device-tab:has-text("MCP Sidecar")');
-    await page.waitForTimeout(200);
-
-    const preBlocks = page.locator('.guide-step pre');
-    await expect(preBlocks.nth(0)).toContainText('cargo build -p marketplace-mcp');
-
-    // The JSON config pre block should contain mcpServers and marketplace key
-    const jsonPre = preBlocks.nth(1);
-    await expect(jsonPre).toContainText('mcpServers');
-    await expect(jsonPre).toContainText('MARKETPLACE_API_KEY');
-  });
 });
 
 test.describe('DocsTab Component', () => {
   // Helper to navigate to the Docs tab from Home
   async function goToDocs(page) {
     await page.goto('/');
-    await page.click('nav button:has-text("Documentation")');
+    await page.click('nav button:has-text("Docs")');
     await page.waitForTimeout(200);
   }
 
   test('displays Documentation Hub heading and subtitle', async ({ page }) => {
     await goToDocs(page);
     await expect(page.locator('h2:has-text("Documentation Hub")')).toBeVisible();
-    await expect(page.locator('p:has-text("Detailed architecture maps")')).toBeVisible();
+    await expect(page.locator('p:has-text("Everything you need")')).toBeVisible();
   });
 
-  test('renders Core Whitepapers card section with 4 doc-item links', async ({ page }) => {
+  test('renders Docs for End User card section with 4 doc-item links', async ({ page }) => {
     await goToDocs(page);
-    // Core Whitepapers card heading
-    const whitepapersCard = page.locator('.card:has-text("Core Whitepapers")');
-    await expect(whitepapersCard).toBeVisible();
+    const endUserCard = page.locator('.card:has-text("Docs for End User")');
+    await expect(endUserCard).toBeVisible();
 
-    // Should have 4 doc-items inside
-    const docItems = whitepapersCard.locator('.doc-item');
+    const docItems = endUserCard.locator('.doc-item');
     await expect(docItems).toHaveCount(4);
 
-    // Each doc-item should be a link
+    await expect(docItems.nth(0)).toHaveAttribute('href', /docs\/GOALS/);
+    await expect(docItems.nth(0)).toContainText('Marketplace Overview & Goals');
+    await expect(docItems.nth(1)).toContainText('CLI Usage Guide');
+    await expect(docItems.nth(2)).toContainText('Deployment Guide');
+    await expect(docItems.nth(3)).toContainText('Testing Guide');
+  });
+
+  test('renders Docs for Developer card section with 4 doc-item links', async ({ page }) => {
+    await goToDocs(page);
+    const devCard = page.locator('.card:has-text("Docs for Developer")');
+    await expect(devCard).toBeVisible();
+
+    const docItems = devCard.locator('.doc-item');
+    await expect(docItems).toHaveCount(4);
+
     await expect(docItems.nth(0)).toHaveAttribute('href', /docs\/01-whitepaper/);
     await expect(docItems.nth(0)).toContainText('Project Whitepaper Overview');
     await expect(docItems.nth(1)).toContainText('Frozen V1 API Contract');
@@ -187,38 +99,29 @@ test.describe('DocsTab Component', () => {
     await expect(docItems.nth(3)).toContainText('Server Crate Architecture');
   });
 
-  test('doc items show correct meta file paths and arrow indicators', async ({ page }) => {
+  test('doc items show correct meta and arrow indicators', async ({ page }) => {
     await goToDocs(page);
-    const docItem = page.locator('.card:has-text("Core Whitepapers") .doc-item').first();
+    const docItem = page.locator('.card:has-text("Docs for End User") .doc-item').first();
 
-    // Should show the file path as meta
-    await expect(docItem.locator('.doc-meta')).toContainText('docs/01-whitepaper/README.md');
-
-    // Should have an arrow indicator
+    await expect(docItem.locator('.doc-meta')).toContainText('docs/GOALS.md');
     await expect(docItem.locator('.btn-arrow')).toBeVisible();
     await expect(docItem.locator('.btn-arrow')).toHaveText('→');
   });
 
   test('renders Active Roadmaps card section with 4 spec doc-item links', async ({ page }) => {
     await goToDocs(page);
-    // Active Roadmaps card
     const roadmapsCard = page.locator('.card:has-text("Active Roadmaps")');
     await expect(roadmapsCard).toBeVisible();
 
-    // Should have 4 doc-items
     const docItems = roadmapsCard.locator('.doc-item');
     await expect(docItems).toHaveCount(4);
 
-    // Each spec link points to the correct _active path
     await expect(docItems.nth(0)).toHaveAttribute('href', /0024-distributed-ledger/);
     await expect(docItems.nth(0)).toContainText('Spec 0024');
-
     await expect(docItems.nth(1)).toHaveAttribute('href', /0025-zero-copy/);
     await expect(docItems.nth(1)).toContainText('Spec 0025');
-
     await expect(docItems.nth(2)).toHaveAttribute('href', /0026-transactional-outbox/);
     await expect(docItems.nth(2)).toContainText('Spec 0026');
-
     await expect(docItems.nth(3)).toHaveAttribute('href', /0027-refresh-token/);
     await expect(docItems.nth(3)).toContainText('Spec 0027');
   });
@@ -227,9 +130,8 @@ test.describe('DocsTab Component', () => {
     await goToDocs(page);
     const allDocItems = page.locator('.doc-item');
     const count = await allDocItems.count();
-    expect(count).toBe(8);
+    expect(count).toBe(12);
 
-    // All 8 doc-items should have href starting with docs/
     for (let i = 0; i < count; i++) {
       await expect(allDocItems.nth(i)).toHaveAttribute('href', /^docs\//);
     }
@@ -246,10 +148,10 @@ test.describe('DocsTab Component', () => {
     await expect(metaEls.nth(3)).toContainText('breach detection');
   });
 
-  test('two card sections are rendered side by side', async ({ page }) => {
+  test('three card sections are rendered', async ({ page }) => {
     await goToDocs(page);
-    // DocsTab renders two card sections: Core Whitepapers and Active Roadmaps.
-    await expect(page.locator('.card:has-text("Core Whitepapers")')).toBeVisible();
+    await expect(page.locator('.card:has-text("Docs for End User")')).toBeVisible();
+    await expect(page.locator('.card:has-text("Docs for Developer")')).toBeVisible();
     await expect(page.locator('.card:has-text("Active Roadmaps")')).toBeVisible();
   });
 });

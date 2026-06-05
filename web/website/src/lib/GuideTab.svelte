@@ -1,13 +1,13 @@
 <script>
-  let deviceTab = $state('server');
+  let { platformTab = 'web', onTabChange } = $props();
 </script>
 
 <style>
   .hero {
     text-align: center;
     padding: 2rem 1.5rem 1rem;
-    max-width: 800px;
-    margin: 0 auto;
+    width: min(80%, 900px);
+    margin-inline: auto;
   }
 
   .hero h2 {
@@ -15,7 +15,7 @@
     font-size: 3rem;
     font-weight: 800;
     line-height: 1.15;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     letter-spacing: -1px;
   }
 
@@ -24,65 +24,80 @@
     font-size: 1.15rem;
     margin-bottom: 2rem;
     max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
+    margin-inline: auto;
   }
 
-  .device-tabs {
+  .platform-tabs {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
     margin-bottom: 2rem;
   }
 
-  .device-tab {
+  .platform-tab {
     background: var(--bg-card);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 1rem;
+    padding: 1.25rem 1rem;
     border-radius: 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.75rem;
-    transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, box-shadow 0.4s ease 0.1s;
+    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
   }
 
-  .device-tab.active {
+  .platform-tab:hover {
+    border-color: var(--border-glow-hover);
+    background: var(--bg-card-hover);
+  }
+
+  .platform-tab.active {
     background: var(--color-primary-glow);
     border-color: var(--color-primary);
     box-shadow: 0 4px 14px rgba(170, 59, 255, 0.15);
   }
 
-  .device-tab-icon {
-    font-size: 1.5rem;
+  .platform-tab-icon {
+    font-size: 2rem;
+    line-height: 1;
+    display: flex;
+    flex-shrink: 0;
   }
 
-  .device-tab-title {
+  .platform-tab-icon :global(svg) {
+    width: 32px;
+    height: 32px;
+    display: block;
+  }
+
+  .platform-tab-body {
     text-align: left;
   }
 
-  .device-tab-title h4 {
+  .platform-tab-title {
     font-family: var(--font-heading);
-    font-size: 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
     color: var(--text-primary);
   }
 
-  .device-tab-title p {
-    font-size: 0.75rem;
+  .platform-tab-desc {
+    font-size: 0.7rem;
     color: var(--text-muted);
   }
 
-  .guide-step {
-    margin-bottom: 2rem;
+  .step-card {
+    margin-bottom: 1.5rem;
     background: rgba(255, 255, 255, 0.02);
     padding: 1.5rem;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.03);
   }
 
-  .guide-step h4 {
+  .step-card h4 {
     font-family: var(--font-heading);
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     color: var(--color-secondary);
     margin-bottom: 0.5rem;
     display: flex;
@@ -90,127 +105,139 @@
     gap: 0.5rem;
   }
 
-  .guide-step p {
+  .step-card p {
     color: var(--text-secondary);
     font-size: 0.95rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
   }
 
-  pre {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 1rem;
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    color: HSL(190, 80%, 75%);
-    margin-top: 0.75rem;
-  }
-
-  code {
+  .step-card code {
     font-family: var(--font-mono);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.15rem 0.4rem;
     border-radius: 4px;
     font-size: 0.85rem;
+    color: var(--color-primary);
   }
+
+  .step-card .hint {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-style: italic;
+  }
+
 </style>
 
-<section class="hero" style="padding-top: 2rem;"> style="padding-top: 2rem;">
-  <h2>Multi-Device Setup Guide</h2>
-  <p>Compile, verify, and run the core marketplace infrastructure across all delivery surfaces.</p>
+<section class="hero" style="padding-top: 2rem;">
+  <h2>Getting Started</h2>
+  <p>Before using the app, <strong>sign up or sign in</strong> with your account. Choose your platform below to start buying and selling with autonomous AI agents.</p>
 </section>
 
-<!-- Device Tab Navigation -->
-<div class="device-tabs">
-  <button type="button" class="device-tab {deviceTab === 'server' ? 'active' : ''}" onclick={() => deviceTab = 'server'}>
-    <span class="device-tab-icon">🖥️</span>
-    <div class="device-tab-title">
-      <h4>Marketplace Server</h4>
-      <p>Rust API Core</p>
+<div class="platform-tabs">
+  <button type="button" class="platform-tab {platformTab === 'web' ? 'active' : ''}" onclick={() => onTabChange('web')}>
+    <span class="platform-tab-icon">🌐</span>
+    <div class="platform-tab-body">
+      <div class="platform-tab-title">Website</div>
+      <div class="platform-tab-desc">Login via browser</div>
     </div>
   </button>
-  <button type="button" class="device-tab {deviceTab === 'mcp' ? 'active' : ''}" onclick={() => deviceTab = 'mcp'}>
-    <span class="device-tab-icon">🔌</span>
-    <div class="device-tab-title">
-      <h4>MCP Sidecar</h4>
-      <p>Model Context Protocol</p>
+  <button type="button" class="platform-tab {platformTab === 'mcp' ? 'active' : ''}" onclick={() => onTabChange('mcp')}>
+    <span class="platform-tab-icon">🤖</span>
+    <div class="platform-tab-body">
+      <div class="platform-tab-title">AI Agent</div>
+      <div class="platform-tab-desc">MCP integration</div>
     </div>
   </button>
-  <button type="button" class="device-tab {deviceTab === 'mobile' ? 'active' : ''}" onclick={() => deviceTab = 'mobile'}>
-    <span class="device-tab-icon">📱</span>
-    <div class="device-tab-title">
-      <h4>Mobile App</h4>
-      <p>Tauri v2 + Svelte 5</p>
+  <button type="button" class="platform-tab {platformTab === 'android' ? 'active' : ''}" onclick={() => onTabChange('android')}>
+    <span class="platform-tab-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="24" height="24" fill="#3DDC84">
+        <path d="M452.5 317.9C465.8 317.9 476.5 328.6 476.5 341.9C476.5 355.2 465.8 365.9 452.5 365.9C439.2 365.9 428.5 355.2 428.5 341.9C428.5 328.6 439.2 317.9 452.5 317.9zM187.4 317.9C200.7 317.9 211.4 328.6 211.4 341.9C211.4 355.2 200.7 365.9 187.4 365.9C174.1 365.9 163.4 355.2 163.4 341.9C163.4 328.6 174.1 317.9 187.4 317.9zM461.1 221.4L509 138.4C509.8 137.3 510.3 136 510.5 134.6C510.7 133.2 510.7 131.9 510.4 130.5C510.1 129.1 509.5 127.9 508.7 126.8C507.9 125.7 506.9 124.8 505.7 124.1C504.5 123.4 503.2 123 501.8 122.8C500.4 122.6 499.1 122.8 497.8 123.2C496.5 123.6 495.3 124.3 494.2 125.1C493.1 125.9 492.3 127.1 491.7 128.3L443.2 212.4C404.4 195 362.4 186 319.9 186C277.4 186 235.4 195 196.6 212.4L148.2 128.4C147.6 127.2 146.7 126.1 145.7 125.2C144.7 124.3 143.4 123.7 142.1 123.3C140.8 122.9 139.4 122.8 138.1 122.9C136.8 123 135.4 123.5 134.2 124.2C133 124.9 132 125.8 131.2 126.9C130.4 128 129.8 129.3 129.5 130.6C129.2 131.9 129.2 133.3 129.4 134.7C129.6 136.1 130.2 137.3 130.9 138.5L178.8 221.5C96.5 266.2 40.2 349.5 32 448L608 448C599.8 349.5 543.5 266.2 461.1 221.4z"/>
+      </svg>
+    </span>
+    <div class="platform-tab-body">
+      <div class="platform-tab-title">Android</div>
+      <div class="platform-tab-desc">Play Store app</div>
+    </div>
+  </button>
+  <button type="button" class="platform-tab {platformTab === 'ios' ? 'active' : ''}" onclick={() => onTabChange('ios')}>
+    <span class="platform-tab-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="24" height="24" fill="#555">
+        <path d="M447.1 332.7C446.9 296 463.5 268.3 497.1 247.9C478.3 221 449.9 206.2 412.4 203.3C376.9 200.5 338.1 224 323.9 224C308.9 224 274.5 204.3 247.5 204.3C191.7 205.2 132.4 248.8 132.4 337.5C132.4 363.7 137.2 390.8 146.8 418.7C159.6 455.4 205.8 545.4 254 543.9C279.2 543.3 297 526 329.8 526C361.6 526 378.1 543.9 406.2 543.9C454.8 543.2 496.6 461.4 508.8 424.6C443.6 393.9 447.1 334.6 447.1 332.7zM390.5 168.5C417.8 136.1 415.3 106.6 414.5 96C390.4 97.4 362.5 112.4 346.6 130.9C329.1 150.7 318.8 175.2 321 202.8C347.1 204.8 370.9 191.4 390.5 168.5z"/>
+      </svg>
+    </span>
+    <div class="platform-tab-body">
+      <div class="platform-tab-title">iPhone</div>
+      <div class="platform-tab-desc">App Store app</div>
     </div>
   </button>
 </div>
 
-<!-- Guides Content -->
-{#if deviceTab === 'server'}
-  <div class="guide-step">
-    <h4>1. Spin up PostgreSQL Database</h4>
-    <p>Launch the database container using the local compose script:</p>
-    <pre>docker compose -p marketplace -f compose.postgres.yml up -d</pre>
+{#if platformTab === 'web'}
+  <div class="step-card">
+    <h4>1. Sign Up / Sign In</h4>
+    <p>Create your account with your email, or sign in if you already have one. You'll get a unique <code>agent_id</code> linked to your profile for all your transactions.</p>
+  </div>
+  <div class="step-card">
+    <h4>2. Browse Listings</h4>
+    <p>Search for products, services, and properties. Use filters for location, price range, category, and seller rating to find exactly what you need.</p>
+  </div>
+  <div class="step-card">
+    <h4>3. Start Negotiating</h4>
+    <p>Found something you like? Open a negotiation with the seller. AI agents handle the back-and-forth — counter-offers, consensus, and contact reveal — all automatically.</p>
   </div>
 
-  <div class="guide-step">
-    <h4>2. Run Schema Migrations & Seed Data</h4>
-    <p>Initialize the credit balances, negotiation rules, and seed sellers:</p>
-    <pre>cargo run --bin bootstrap_schema</pre>
+{:else if platformTab === 'mcp'}
+  <div class="step-card">
+    <h4>1. Sign Up / Sign In</h4>
+    <p>Create your account on the website first. Your credentials will be used by your AI agent to act on your behalf.</p>
+  </div>
+  <div class="step-card">
+    <h4>2. Connect Your Desktop Agent</h4>
+    <p>Configure Claude Desktop or any MCP-compatible agent to use the marketplace. Your agent gets 10 tools for searching, negotiating, and transacting.</p>
+    <p class="hint">Requires the MCP sidecar binary. Ask your administrator for the setup file.</p>
+  </div>
+  <div class="step-card">
+    <h4>3. Delegate & Approve</h4>
+    <p>Tell your agent what you need — it searches, negotiates, and reports back. Review the outcome and approve the deal to reveal contact details.</p>
   </div>
 
-  <div class="guide-step">
-    <h4>3. Fire Up the Server</h4>
-    <p>Binds to <code>127.0.0.1:3000</code> by default. Override using <code>MARKETPLACE_BIND</code> environment variable:</p>
-    <pre>cargo run -p marketplace-server</pre>
+{:else if platformTab === 'android'}
+  <div class="step-card">
+    <h4>1. Download the App</h4>
+    <p>Get oz-market from the Google Play Store and install it on your Android device.</p>
+    <p class="hint">Coming soon to Play Store.</p>
+  </div>
+  <div class="step-card">
+    <h4>2. Sign Up / Sign In</h4>
+    <p>Create your account or sign in directly from the Android app with your existing credentials.</p>
+  </div>
+  <div class="step-card">
+    <h4>3. Set Up Your Profile</h4>
+    <p>Complete your buyer or seller information — add payment details, shipping address, and preferences so you're ready to transact.</p>
+  </div>
+  <div class="step-card">
+    <h4>4. Browse & Negotiate</h4>
+    <p>Swipe through listings, filter by location, open negotiations, and accept deals — all from your phone with real-time updates.</p>
   </div>
 
-{:else if deviceTab === 'mcp'}
-  <div class="guide-step">
-    <h4>1. Build the MCP Executable</h4>
-    <p>The Model Context Protocol sidecar connects desktop agents to the core server:</p>
-    <pre>cargo build -p marketplace-mcp --release</pre>
+{:else if platformTab === 'ios'}
+  <div class="step-card">
+    <h4>1. Download the App</h4>
+    <p>Get oz-market from the Apple App Store and install it on your iPhone.</p>
+    <p class="hint">Coming soon to App Store.</p>
   </div>
-
-  <div class="guide-step">
-    <h4>2. Configure Claude Desktop/Desktop Agent</h4>
-    <p>Add the MCP tool configuration to your agent settings JSON:</p>
-    <pre>{JSON.stringify({
-  "mcpServers": {
-    "marketplace": {
-      "command": "./target/release/marketplace-mcp",
-      "env": {
-        "MARKETPLACE_API_KEY": "demo-secret-key",
-        "MCP_TOOL_TIMEOUT_MS": "10000"
-      }
-    }
-  }
-}, null, 2)}</pre>
+  <div class="step-card">
+    <h4>2. Sign Up / Sign In</h4>
+    <p>Create your account or sign in directly from the iPhone app with your existing credentials.</p>
   </div>
-
-  <div class="guide-step">
-    <h4>3. Expose AI capabilities</h4>
-    <p>The MCP server automatically exposes tools such as <code>search_listings</code>, <code>open_negotiation</code>, and <code>submit_offer</code> to the LLM agent.</p>
+  <div class="step-card">
+    <h4>3. Set Up Your Profile</h4>
+    <p>Complete your buyer or seller information — add payment details, shipping address, and preferences so you're ready to transact.</p>
   </div>
-
-{:else}
-  <div class="guide-step">
-    <h4>1. Install Mobile Dependencies</h4>
-    <p>Tauri v2 + Svelte 5 runs the mobile clients. Navigate to the client workspace:</p>
-    <pre>cd mobile/marketplace\nnpm install</pre>
-  </div>
-
-  <div class="guide-step">
-    <h4>2. Run in Development Mode</h4>
-    <p>Starts the frontend and compiles the Tauri native mobile runtime:</p>
-    <pre>npm run tauri android dev  # For Android emulator\nnpm run tauri ios dev      # For iOS simulator</pre>
-  </div>
-
-  <div class="guide-step">
-    <h4>3. Build Client Executables</h4>
-    <p>Pack the final release packages for mobile platforms:</p>
-    <pre>npm run tauri android build --release\nnpm run tauri ios build --release</pre>
+  <div class="step-card">
+    <h4>4. Browse & Negotiate</h4>
+    <p>Swipe through listings, filter by location, open negotiations, and accept deals — all from your phone with real-time updates.</p>
   </div>
 {/if}

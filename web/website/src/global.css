@@ -152,6 +152,53 @@ body {
   background-attachment: fixed;
 }
 
+/* Background variants */
+body[data-bg="nebulae"] {
+  background-image:
+    radial-gradient(circle at 10% 20%, var(--bg-glow-1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, var(--bg-glow-2) 0%, transparent 40%);
+}
+
+body[data-bg="honeycomb"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 2 L54 16 L54 44 L28 58 L2 44 L2 16 Z' stroke='rgba(255,255,255,0.05)' stroke-width='1' fill='none'/%3E%3Cpath d='M28 40 L54 54 L54 82 L28 96 L2 82 L2 54 Z' stroke='rgba(255,255,255,0.05)' stroke-width='1' fill='none'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 50% 50%, var(--bg-glow-1) 0%, transparent 60%);
+}
+
+body[data-bg="network"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cline x1='0' y1='40' x2='80' y2='40' stroke='rgba(255,255,255,0.03)' stroke-width='0.5'/%3E%3Cline x1='40' y1='0' x2='40' y2='80' stroke='rgba(255,255,255,0.03)' stroke-width='0.5'/%3E%3Cline x1='0' y1='0' x2='80' y2='80' stroke='rgba(255,255,255,0.02)' stroke-width='0.5'/%3E%3Cline x1='80' y1='0' x2='0' y2='80' stroke='rgba(255,255,255,0.02)' stroke-width='0.5'/%3E%3Ccircle cx='40' cy='40' r='2.5' fill='rgba(255,255,255,0.08)'/%3E%3Ccircle cx='0' cy='40' r='1.5' fill='rgba(255,255,255,0.05)'/%3E%3Ccircle cx='80' cy='40' r='1.5' fill='rgba(255,255,255,0.05)'/%3E%3Ccircle cx='40' cy='0' r='1.5' fill='rgba(255,255,255,0.05)'/%3E%3Ccircle cx='40' cy='80' r='1.5' fill='rgba(255,255,255,0.05)'/%3E%3Ccircle cx='0' cy='0' r='1.5' fill='rgba(255,255,255,0.04)'/%3E%3Ccircle cx='80' cy='0' r='1.5' fill='rgba(255,255,255,0.04)'/%3E%3Ccircle cx='0' cy='80' r='1.5' fill='rgba(255,255,255,0.04)'/%3E%3Ccircle cx='80' cy='80' r='1.5' fill='rgba(255,255,255,0.04)'/%3E%3C/svg%3E");
+  background-size: 80px 80px;
+}
+
+body[data-bg="circuit"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cpath d='M0 20 H40 V60 H70' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3Cpath d='M30 0 V30 H70 V80 H100' stroke='rgba(255,255,255,0.04)' stroke-width='1' fill='none'/%3E%3Cpath d='M50 50 H80 V20 H100' stroke='rgba(255,255,255,0.03)' stroke-width='1' fill='none'/%3E%3Ccircle cx='0' cy='20' r='2' fill='rgba(255,255,255,0.06)'/%3E%3Ccircle cx='40' cy='60' r='2' fill='rgba(255,255,255,0.06)'/%3E%3Ccircle cx='70' cy='20' r='2' fill='rgba(255,255,255,0.05)'/%3E%3Ccircle cx='70' cy='80' r='2' fill='rgba(255,255,255,0.05)'/%3E%3Ccircle cx='30' cy='30' r='2' fill='rgba(255,255,255,0.05)'/%3E%3C/svg%3E");
+  background-size: 100px 100px;
+}
+
+body[data-bg="grid"] {
+  background-image:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(255,255,255,0.05) 0%, transparent 40%),
+    radial-gradient(circle, rgba(255,255,255,0.05) 1.5px, transparent 1.5px);
+  background-size: 100% 100%, 100% 100%, 28px 28px;
+  background-blend-mode: normal, normal, normal;
+}
+
+body[data-bg="cosmic"] {
+  background-image:
+    radial-gradient(circle at 25% 20%, HSL(280, 100%, 60%, 0.1) 0%, transparent 45%),
+    radial-gradient(circle at 75% 30%, HSL(220, 100%, 55%, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 50% 70%, HSL(320, 90%, 55%, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 10% 80%, HSL(180, 100%, 50%, 0.04) 0%, transparent 40%);
+  background-attachment: fixed;
+}
+
+body[data-bg="honeycomb"],
+body[data-bg="network"],
+body[data-bg="circuit"],
+body[data-bg="grid"] {
+  background-attachment: fixed;
+}
+
 /* Link base */
 a {
   color: var(--color-primary);

@@ -1,0 +1,23 @@
+version: 1
+id: 0025-zero-copy-ffi-serialization
+title: Zero-Copy FFI Serialization
+status: active
+owner: mobile-team
+implementer: agent
+priority: P2
+area:
+  - mobile
+  - tauri
+files:
+  code:
+    - mobile/marketplace/src-tauri/src/main.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - Tauri commands utilize MsgPack binary buffers for FFI communication instead of standard JSON strings
+  - The Svelte 5 frontend deserializes MsgPack payloads successfully in webview context
+  - FFI bridge latency benchmark remains strictly below 1ms under large payloads
+non_goals:
+  - Replacing all HTTP API server payloads with MsgPack (applies strictly to local Tauri-Svelte FFI boundary)
+risks:
+  - Compatibility differences across old mobile webviews (mitigated by compiling standard JS polyfill for MsgPack decoder)

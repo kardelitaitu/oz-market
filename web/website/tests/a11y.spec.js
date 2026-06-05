@@ -35,12 +35,14 @@ test.describe('Accessibility: Semantic Landmarks', () => {
     await page.goto('/');
     const nav = page.locator('nav');
     await expect(nav).toBeVisible();
-    // Nav should have 3 tab buttons
+    // Nav should have 5 tab buttons
     const buttons = nav.locator('button');
-    await expect(buttons).toHaveCount(3);
+    await expect(buttons).toHaveCount(5);
     await expect(buttons.nth(0)).toHaveText('Home');
-    await expect(buttons.nth(1)).toHaveText('Device Guide');
-    await expect(buttons.nth(2)).toHaveText('Documentation');
+    await expect(buttons.nth(1)).toHaveText('Getting Started');
+    await expect(buttons.nth(2)).toHaveText('FAQs');
+    await expect(buttons.nth(3)).toHaveText('Status');
+    await expect(buttons.nth(4)).toHaveText('Docs');
   });
 
   test('page has a semantic <footer> landmark', async ({ page }) => {
@@ -155,10 +157,12 @@ test.describe('Accessibility: Navigation & Tab System', () => {
   test('nav tab buttons are focusable via keyboard', async ({ page }) => {
     await page.goto('/');
     const homeBtn = page.locator('nav button:has-text("Home")');
-    const guideBtn = page.locator('nav button:has-text("Device Guide")');
-    const docsBtn = page.locator('nav button:has-text("Documentation")');
+    const guideBtn = page.locator('nav button:has-text("Getting Started")');
+    const faqsBtn = page.locator('nav button:has-text("FAQs")');
+    const statusBtn = page.locator('nav button:has-text("Status")');
+    const docsBtn = page.locator('nav button:has-text("Docs")');
 
-    // Tab to nav buttons (they are the first focusable elements after page load)
+    // Home is first focusable nav element
     await page.keyboard.press('Tab');
     await expect(homeBtn).toBeFocused();
 
@@ -166,24 +170,34 @@ test.describe('Accessibility: Navigation & Tab System', () => {
     await expect(guideBtn).toBeFocused();
 
     await page.keyboard.press('Tab');
+    await expect(faqsBtn).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(statusBtn).toBeFocused();
+
+    await page.keyboard.press('Tab');
     await expect(docsBtn).toBeFocused();
   });
 
   test('pressing Enter on a nav button navigates to that tab', async ({ page }) => {
     await page.goto('/');
-    const guideBtn = page.locator('nav button:has-text("Device Guide")');
+    const guideBtn = page.locator('nav button:has-text("Getting Started")');
+    const docsBtn = page.locator('nav button:has-text("Docs")');
 
-    // Tab to Device Guide button
+    // Tab to Getting Started button
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(guideBtn).toBeFocused();
 
     // Activate with Enter
     await page.keyboard.press('Enter');
-    await expect(page.locator('h2:has-text("Multi-Device Setup Guide")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Getting Started")')).toBeVisible();
 
-    // Tab to Documentation and activate
+    // Tab through FAQs, Status to Docs and activate
     await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(docsBtn).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.locator('h2:has-text("Documentation Hub")')).toBeVisible();
   });
@@ -194,8 +208,8 @@ test.describe('Accessibility: Navigation & Tab System', () => {
     await expect(homeBtn).toHaveClass(/active/);
 
     // Navigate to guide
-    await page.locator('nav button:has-text("Device Guide")').click();
-    await expect(page.locator('nav button:has-text("Device Guide")')).toHaveClass(/active/);
+    await page.locator('nav button:has-text("Getting Started")').click();
+    await expect(page.locator('nav button:has-text("Getting Started")')).toHaveClass(/active/);
     await expect(homeBtn).not.toHaveClass(/active/);
   });
 });
@@ -236,55 +250,49 @@ test.describe('Accessibility: Simulator Controls', () => {
   });
 });
 
-test.describe('Accessibility: GuideTab Device Tabs', () => {
-  test('device tab buttons have type="button" and are focusable', async ({ page }) => {
+test.describe('Accessibility: GuideTab Platform Tabs', () => {
+  test('platform tab buttons have type="button" and are focusable', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav button:has-text("Device Guide")').click();
+    await page.locator('nav button:has-text("Getting Started")').click();
 
-    const tabs = page.locator('.device-tab');
-    await expect(tabs).toHaveCount(3);
+    const tabs = page.locator('.platform-tab');
+    await expect(tabs).toHaveCount(4);
 
-    // Each should be a button with type="button"
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       await expect(tabs.nth(i)).toHaveAttribute('type', 'button');
     }
   });
 
-  test('device tabs are keyboard-focusable', async ({ page }) => {
+  test('platform tabs are keyboard-focusable', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav button:has-text("Device Guide")').click();
+    await page.locator('nav button:has-text("Getting Started")').click();
 
-    const serverTab = page.locator('.device-tab').first();
-
-    // Tab until the first device tab (Server) is focused
-    const found = await tabUntilFocused(page, serverTab);
+    const firstTab = page.locator('.platform-tab').first();
+    const found = await tabUntilFocused(page, firstTab);
     expect(found).toBe(true);
-    await expect(serverTab).toBeFocused();
-    await expect(serverTab).toContainText('Marketplace Server');
+    await expect(firstTab).toBeFocused();
+    await expect(firstTab).toContainText('Website');
   });
 
-  test('pressing Enter on MCP device tab switches content', async ({ page }) => {
+  test('pressing Enter on AI Agent tab switches content', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav button:has-text("Device Guide")').click();
+    await page.locator('nav button:has-text("Getting Started")').click();
 
-    const mcpTab = page.locator('.device-tab:has-text("MCP Sidecar")');
-
-    // Tab until MCP tab is focused
-    const found = await tabUntilFocused(page, mcpTab);
+    const agentTab = page.locator('.platform-tab:has-text("AI Agent")');
+    const found = await tabUntilFocused(page, agentTab);
     expect(found).toBe(true);
-    await expect(mcpTab).toBeFocused();
+    await expect(agentTab).toBeFocused();
 
-    // Activate with Enter
     await page.keyboard.press('Enter');
-    await expect(mcpTab).toHaveClass(/active/);
-    await expect(page.locator('h4:has-text("Build the MCP Executable")')).toBeVisible();
+    await expect(agentTab).toHaveClass(/active/);
+    await expect(page.locator('h4:has-text("Connect Your Desktop Agent")')).toBeVisible();
   });
 });
 
 test.describe('Accessibility: DocsTab Links', () => {
   test('doc-item elements are <a> links with href attributes', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav button:has-text("Documentation")').click();
+    await page.locator('nav button:has-text("Docs")').click();
 
     const links = page.locator('a.doc-item');
     const count = await links.count();
@@ -301,7 +309,7 @@ test.describe('Accessibility: DocsTab Links', () => {
 
   test('docs links are keyboard-focusable', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav button:has-text("Documentation")').click();
+    await page.locator('nav button:has-text("Docs")').click();
 
     // Tab until a .doc-item link receives focus
     const firstDocLink = page.locator('a.doc-item').first();
@@ -345,7 +353,7 @@ test.describe('Accessibility: Interactive Element Roles', () => {
 
     // Verify they respond to clicks
     await navButtons.nth(1).click();
-    await expect(page.locator('h2:has-text("Multi-Device Setup Guide")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Getting Started")')).toBeVisible();
   });
 
   test('all theme swatches are <button> elements', async ({ page }) => {

@@ -1,0 +1,24 @@
+version: 1
+id: 0027-refresh-token-rotation-jwt-blacklist
+title: Refresh Token Rotation and JWT Blacklist
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - auth
+files:
+  code:
+    - backend/crates/auth-core/src/token_rotation.rs
+    - backend/crates/auth-core/src/blacklist.rs
+  docs:
+    - docs/TODO.md
+acceptance:
+  - JWT blacklist lookup intercepts auth checks and rejects blacklisted tokens
+  - Token refresh endpoint executes single-use refresh token validation and returns new rotated credentials
+  - Expired tokens and used refresh tokens are evicted or blacklisted automatically
+non_goals:
+  - Storing blacklist permanently in SQL database (Redis transient keys are sufficient)
+risks:
+  - High memory usage on Redis if token lifetimes are set too long (mitigated by setting blacklist TTL strictly to token remaining validity duration)

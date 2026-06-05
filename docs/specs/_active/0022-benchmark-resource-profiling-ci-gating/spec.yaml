@@ -1,0 +1,25 @@
+version: 1
+id: 0022-benchmark-resource-profiling-ci-gating
+title: Benchmark Resource Profiling and CI Gating
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - telemetry
+files:
+  code:
+    - backend/server/src/bin/bench_suite.rs
+    - check.ps1
+  docs:
+    - docs/server/benchmark-suite.md
+acceptance:
+  - Background collector utilizing sysinfo records CPU, Memory, and Disk metrics during runs
+  - Performance thresholds evaluate metrics correctly, exiting with non-zero code on failures
+  - JSON reports are outputted matching the designated telemetry schema
+  - Gating checks are integrated and executed successfully in local check workflows
+non_goals:
+  - Exporting real-time metrics to third-party dashboards like Datadog or Prometheus (in-memory JSON reporting is sufficient)
+risks:
+  - High resource usage by the telemetry background thread itself (mitigated by using a slow sampling rate of 500ms)

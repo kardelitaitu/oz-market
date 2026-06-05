@@ -51,10 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
-            // Signal connection is established
+            let mut stream = res.bytes_stream();
+            // Signal connection is established — stream is now actively listening
             connection_barrier.wait().await;
 
-            let mut stream = res.bytes_stream();
             let start_wait = Instant::now();
 
             while let Some(chunk) = stream.next().await {

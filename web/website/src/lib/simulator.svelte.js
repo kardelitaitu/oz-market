@@ -2,6 +2,9 @@
 // Shared reactive store for the AI negotiation simulator
 // Uses Svelte 5 module-level $state — shared across all importing components
 
+// ─── Backend URL (configurable via env or default to localhost:3000) ───
+const BACKEND_URL = (typeof window !== 'undefined' && window.__BACKEND_URL) || 'http://localhost:3000';
+
 // ─── Catalog (constant) ───
 export const catalog = [
   { name: 'iPhone 15 Pro',          basePrice: 700, deal: 500 },
@@ -127,7 +130,7 @@ function connectSSE() {
   if (eventSource) return;
   if (typeof window === 'undefined' || !window.EventSource) return;
 
-  eventSource = new EventSource('http://localhost:3000/v1/events/commits');
+  eventSource = new EventSource(`${BACKEND_URL}/v1/events/commits`);
 
   eventSource.onopen = () => {
     reconnectDelay = 1000; // Reset backoff delay on successful connection
@@ -185,7 +188,7 @@ function disconnectSSE() {
 // ─── Fetch live server metrics ───
 export async function fetchLiveMetrics() {
   try {
-    let healthResp = await fetch('http://localhost:3000/v1/health/agents');
+    let healthResp = await fetch(`${BACKEND_URL}/v1/health/agents`);
     if (healthResp.ok) {
       sim.liveAgents = await healthResp.json();
       sim.serverStatus = 'connected';
@@ -200,7 +203,7 @@ export async function fetchLiveMetrics() {
   }
 
   try {
-    let metricsResp = await fetch('http://localhost:3000/metrics');
+    let metricsResp = await fetch(`${BACKEND_URL}/metrics`);
     if (metricsResp.ok) {
       let text = await metricsResp.text();
       let match = text.match(/requests_total\s+(\d+)/);

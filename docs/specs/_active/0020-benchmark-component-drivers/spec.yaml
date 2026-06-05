@@ -1,0 +1,23 @@
+version: 1
+id: 0020-benchmark-component-drivers
+title: Benchmark Component Drivers
+status: active
+owner: backend-team
+implementer: agent
+priority: P2
+area:
+  - backend
+  - drivers
+files:
+  code:
+    - backend/server/src/bin/bench_suite.rs
+  docs:
+    - docs/server/benchmark-suite.md
+acceptance:
+  - BenchmarkDriver asynchronous trait is defined with setup, run_operation, and teardown interfaces
+  - PostgresDriver, CacheDriver, and WalDriver structs are fully implemented and execute operations successfully
+  - SSE and HTTP drivers mock request flows and collect metrics properly
+non_goals:
+  - Implementing coordinator-worker distributed protocols (deferred to Spec 0021)
+risks:
+  - Disk space exhaustion during intensive WAL sync writing (mitigated by using bounded files or cleaning up on teardown)

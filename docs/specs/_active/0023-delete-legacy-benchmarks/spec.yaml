@@ -1,0 +1,29 @@
+version: 1
+id: 0023-delete-legacy-benchmarks
+title: Delete Legacy Benchmarks
+status: active
+owner: backend-team
+implementer: agent
+priority: P3
+area:
+  - backend
+  - cleanup
+files:
+  code:
+    - backend/scripts/bench-http.ps1
+    - backend/server/benches/search_bench.rs
+    - backend/server/scripts/run-phase5-bench-local.ps1
+    - backend/server/scripts/run-phase5-bench.ps1
+    - backend/server/src/bin/bench_concurrent.rs
+    - backend/server/src/bin/http_bench.rs
+    - backend/server/src/bin/pg_search_bench.rs
+    - backend/server/src/bin/phase5_bench.rs
+ acceptance:
+  - Fragmented and legacy benchmarking binaries are deleted from server bin paths
+  - Legacy benchmarking scripts and criterion targets are deleted
+  - Cargo.toml configurations for deleted binaries are removed
+  - Server builds and test checks compile successfully
+non_goals:
+  - Removing database seeders or data populating utilities (such as populate_db.rs)
+risks:
+  - Mismatches in Cargo.toml configuration causing compile errors on build (mitigated by dry-running cargo check)

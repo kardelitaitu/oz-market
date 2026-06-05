@@ -202,6 +202,40 @@ if (-not $SkipTests -and -not $failed) {
     $stepNum++
 }
 
+# ---- FRONTEND BUILD (Playwright E2E) ----------------------------------
+if (-not $SkipTests -and -not $failed) {
+    $websiteDir = Join-Path $repoRoot "web/website"
+    if (Test-Path (Join-Path $websiteDir "package.json")) {
+        $cmd = "npm run build (website)"
+        Write-StepHeader $stepNum "$cmd"
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            Push-Location $websiteDir
+            npm run build
+            $elapsed = $sw.Elapsed.TotalSeconds
+            $passed = $LASTEXITCODE -eq 0
+            if ($passed) {
+                # Run Playwright E2E tests (headless chromium)
+                npx playwright install chromium --with-deps 2>$null
+                npm run test:e2e
+                $passed = $LASTEXITCODE -eq 0
+            }
+            Pop-Location
+            $elapsed = $sw.Elapsed.TotalSeconds
+            $results.Website = @{ Passed = $passed; Duration = $elapsed }
+            Write-StepResult $passed
+            if (-not $passed) { $failed = $true }
+        } catch {
+            Pop-Location
+            $elapsed = $sw.Elapsed.TotalSeconds
+            $results.Website = @{ Passed = $false; Duration = $elapsed }
+            Write-StepResult $false
+            $failed = $true
+        }
+        $stepNum++
+    }
+}
+
 # Return to original directory
 Set-Location $originalLocation
 
@@ -209,7 +243,7 @@ Set-Location $originalLocation
 $total = ((Get-Date) - $startTime).TotalSeconds
 Write-Status "CI CHECKER REPORT:" "Yellow"
 $p = 0; $f = 0
-$runOrder = @("Journal", "ActiveSpecs", "Build", "Format", "Clippy", "Tests")
+$runOrder = @("Journal", "ActiveSpecs", "Build", "Format", "Clippy", "Tests", "Website")
 foreach ($name in $runOrder) {
     $r = $results.$name
     if ($r.Duration -gt 0 -or $r.Passed) {

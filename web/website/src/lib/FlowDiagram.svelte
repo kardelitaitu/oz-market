@@ -42,33 +42,7 @@
     opacity: 0.8;
   }
 
-  .flow-laser {
-    r: 3;
-    fill: var(--color-secondary);
-    opacity: 0;
-  }
 
-  .flow-laser.active {
-    opacity: 1;
-    animation: laserTravel 1.6s ease-in-out infinite;
-  }
-
-  @keyframes laserTravel {
-    0%   { offset-distance: 0%;   opacity: 0; }
-    10%  { opacity: 1; }
-    90%  { opacity: 1; }
-    100% { offset-distance: 100%; opacity: 0; }
-  }
-
-  @keyframes nodePulse {
-    0%, 100% { r: 20; opacity: 1; }
-    50%       { r: 23; opacity: 0.75; }
-  }
-
-  .flow-node-active .flow-node-circle {
-    stroke: var(--color-secondary);
-    animation: nodePulse 1.2s ease-in-out infinite;
-  }
 </style>
 
 <svg
