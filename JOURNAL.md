@@ -1394,3 +1394,10 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Validation**: `check.ps1` 6/6 pass. `cargo test --lib -p marketplace-server` 400/400 pass (+1 new test). Redocly 12 warnings unchanged.
 - **Files changed (1)**: `backend/server/src/http/actix_handlers.rs` (+221 / -28 lines: added helper + test, replaced cache-key construction).
 - **Next**: After this, the remaining audit items are MINOR m5 (typed `CreateReviewRequest` bind) and ENV e1-e8. The deprecated redirects flagged during M2 are still pending removal (`Sunset: 2026-06-01` is past). Spec drift remaining: `seller_id` vs `agent_id` path-variable name; `requests_total 0` hardcode on metrics handler.
+
+## 2026-06-05 15:15 - Remove 6 deprecated listing-type redirect paths (Sunset 2026-06-01)
+- **Problem**: Spec 0001 Step 4 timeline says "Month 2: Remove old endpoint handlers" and the Sunset date was 2026-06-01. M2 documented the 6 paths as `deprecated: true`; today (2026-06-05) the sunset is 4 days past.
+- **Fix**: Removed 6 path blocks from `openapi.yaml` (`/product/{listing_id}`, `/product/search`, `/service/{listing_id}`, `/service/search`, `/property/{listing_id}`, `/property/search`), the `name: deprecated` tag (only used by these paths), the 2 handler functions (`deprecated_listing_redirect`, `deprecated_search_redirect`) and the 6 route registrations in `actix_handlers.rs:1386-1410`.
+- **Spec drift found while doing this**: the spec path entries say `/product/{listing_id}` (no `/v1` prefix) but the code registered `/v1/product/{listing_id}`. Resolved by removal — both versions are now gone. Worth a followup note for similar path-name mismatches elsewhere.
+- **Validation**: `check.ps1` 6/6 pass. `cargo test --lib -p marketplace-server` 400/400 pass. Redocly 12 -> 0 warnings (all 12 were missing-4xx-response warnings on the removed paths). Path count 31 -> 25. Tag count 8 -> 7.
+- **Files changed (2)**: `docs/specs/openapi.yaml` (-173 / +0), `backend/server/src/http/actix_handlers.rs` (-52 / +1).

@@ -20,9 +20,9 @@ use crate::services::rate_limiter::{
 };
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use marketplace_api_contract::{
-    AcceptNegotiationRequest, AgentQueryRequest, CreateListingRequest, NegotiationResponse,
-    OpenNegotiationRequest, RejectNegotiationRequest, RequestContactRevealRequest, SearchRequest,
-    SubmitOfferRequest,
+    AcceptNegotiationRequest, AgentQueryRequest, CreateListingRequest, CreateReviewRequest,
+    NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
+    RequestContactRevealRequest, SearchRequest, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role};
 use moka::future::Cache;
@@ -855,28 +855,6 @@ pub async fn approve_contact_reveal(
     }
 }
 
-// --- Deprecated listing-type redirects (Spec 0001) ---
-// Old category-specific endpoints redirect to unified /v1/listings/{id}
-
-pub async fn deprecated_listing_redirect(listing_id: web::Path<String>) -> impl Responder {
-    let target = format!("/v1/listings/{}", listing_id.into_inner());
-    HttpResponse::MovedPermanently()
-        .insert_header(("Location", target.as_str()))
-        .insert_header(("Deprecation", "true"))
-        .insert_header(("Sunset", "Sat, 01 Jun 2026 00:00:00 GMT"))
-        .insert_header(("Link", format!("<{}>; rel=\"successor-version\"", target)))
-        .finish()
-}
-
-pub async fn deprecated_search_redirect() -> impl Responder {
-    HttpResponse::MovedPermanently()
-        .insert_header(("Location", "/v1/listings/search"))
-        .insert_header(("Deprecation", "true"))
-        .insert_header(("Sunset", "Sat, 01 Jun 2026 00:00:00 GMT"))
-        .insert_header(("Link", "</v1/listings/search>; rel=\"successor-version\""))
-        .finish()
-}
-
 // --- Internal admin handlers ---
 
 pub async fn archive_listing(
@@ -1015,7 +993,7 @@ pub async fn recalculate_seller_rating(
 pub async fn create_review(
     pool: web::Data<sqlx::postgres::PgPool>,
     listing_id: web::Path<String>,
-    review: web::Json<serde_json::Value>,
+    review: web::Json<CreateReviewRequest>,
     req: HttpRequest,
 ) -> impl Responder {
     let claims = match extract_claims(&req) {
@@ -1032,12 +1010,12 @@ pub async fn create_review(
         return error_json(403, "forbidden", "Buyer access required");
     }
 
-    let rating = review.get("rating").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let rating = review.rating;
     if !(1..=5).contains(&rating) {
         return error_json(400, "invalid_field", "Rating must be between 1 and 5");
     }
 
-    let title = review.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let title = &review.title;
     if title.len() < 3 || title.len() > 200 {
         return error_json(
             400,
@@ -1046,7 +1024,7 @@ pub async fn create_review(
         );
     }
 
-    let body = review.get("body").and_then(|v| v.as_str());
+    let body = review.body.as_deref();
     let review_id = format!("rev_{}", uuid::Uuid::new_v4());
 
     let pool = pool.get_ref();
@@ -1382,31 +1360,6 @@ pub fn register_api_routes(cfg: &mut web::ServiceConfig) {
         .route(
             "/v1/health/agents/{agent_id}/reset",
             web::post().to(reset_agent_breaker),
-        )
-        // Deprecated listing-type redirects (Spec 0001)
-        .route(
-            "/v1/product/{listing_id}",
-            web::get().to(deprecated_listing_redirect),
-        )
-        .route(
-            "/v1/product/search",
-            web::get().to(deprecated_search_redirect),
-        )
-        .route(
-            "/v1/service/{listing_id}",
-            web::get().to(deprecated_listing_redirect),
-        )
-        .route(
-            "/v1/service/search",
-            web::get().to(deprecated_search_redirect),
-        )
-        .route(
-            "/v1/property/{listing_id}",
-            web::get().to(deprecated_listing_redirect),
-        )
-        .route(
-            "/v1/property/search",
-            web::get().to(deprecated_search_redirect),
         )
         // Listings
         .service(
