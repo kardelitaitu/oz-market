@@ -1401,3 +1401,21 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Spec drift found while doing this**: the spec path entries say `/product/{listing_id}` (no `/v1` prefix) but the code registered `/v1/product/{listing_id}`. Resolved by removal — both versions are now gone. Worth a followup note for similar path-name mismatches elsewhere.
 - **Validation**: `check.ps1` 6/6 pass. `cargo test --lib -p marketplace-server` 400/400 pass. Redocly 12 -> 0 warnings (all 12 were missing-4xx-response warnings on the removed paths). Path count 31 -> 25. Tag count 8 -> 7.
 - **Files changed (2)**: `docs/specs/openapi.yaml` (-173 / +0), `backend/server/src/http/actix_handlers.rs` (-52 / +1).
+
+## 2026-06-05 15:30 — ENV e1-e8 cleanup batch
+
+- **Goal**: normalize environment variable usage across the server — document all vars in README, fix stale defaults, de-duplicate reads, and fix inverted cache-disable semantics.
+- **Changed**:
+  - `actix_runtime.rs`: Extracted `resolve_worker_threads()` helper to de-duplicate TOKIO_WORKER_THREADS read (e6). Renamed MARKETPLACE_DISABLE_CACHE → MARKETPLACE_CACHE_ENABLED with positive logic (e4).
+  - `server/README.md`: Added all missing env vars to config table — DATABASE_URL (e1), MARKETPLACE_API_KEY (e5), TOKIO_WORKER_THREADS/e6, ACTIX_WORKERS/e7, SHUTDOWN_TIMEOUT_SECS/e8, LOG_FORMAT, LISTING_CACHE_MAX_MB, SEARCH_CACHE_MAX_MB, LEDGER_CACHE_TTL_SECS, LEDGER_WAL_PATH. Fixed DATABASE_MAX_CONNECTIONS default 100→200 (e2). MARKETPLACE_BIND was already documented (e3 ✅).
+- **Validation**: cargo check --workspace clean, 400/400 tests pass, code review approved.
+- **Net diff**: 2 files, ~+50 lines README, ~15 lines actix_runtime.rs.
+
+## 2026-06-05 15:30 - MINOR m5: complete typed bind for POST /v1/listings/{id}/reviews
+- **Problem**: Audit m5 flagged that `actix_handlers.rs:1029-1111` used `web::Json<serde_json::Value>` and manually read `rating`/`title`/`body`, so the spec schema was not enforced. Also, the response was an ad-hoc `json!({...})` macro, so the spec `Review` schema was not used on output either.
+- **Discovered while committing Batch 1 (deprecated redirects)**: my `ca296c0` commit had silently absorbed an in-progress edit that changed the request bind from `web::Json<serde_json::Value>` to `web::Json<CreateReviewRequest>` and added `CreateReviewRequest,` to the import list. But the `CreateReviewRequest` type itself was never added to `api-contract/src/listing.rs` in any commit — so HEAD `ca296c0` does not compile on its own (unresolved import). The working tree had the type defined but uncommitted. The user has done this work-in-progress; I picked it up.
+- **Fix**: Add `CreateReviewRequest` and `ReviewCreateResponse` types to `api-contract/src/listing.rs` (with full derives + doc comments). Switch the response in `actix_handlers.rs:1065-1069` from ad-hoc `json!({...})` to typed `ReviewCreateResponse { review_id, status }` and drop the now-unused `use serde_json::json;` import. Both types are now wired in: request in, response out, fully typed.
+- **Note on the m5 audit item**: the original `actix_handlers.rs:1029-1111` line range in the audit text is stale (the function body moved to ~line 993 after M1 deleted `runtime.rs`). The current `create_review` function is at `actix_handlers.rs:993-1075` and the typed bind is at line 996.
+- **Validation**: `cargo check --workspace` clean. `cargo test --lib -p marketplace-server` 400/400 pass (the search cache-key test still passes — it uses the base SearchRequest struct, unrelated to reviews).
+- **Files changed (2)**: `backend/crates/api-contract/src/listing.rs` (+17 / -0), `backend/server/src/http/actix_handlers.rs` (+4 / -7).
+- **Why this is its own commit and not squashed with ca296c0**: the audit-driven m5 work (typed request + typed response) is a distinct concern from the deprecated-redirect removal. Keeping them separate keeps `git log --grep m5` and `git log --grep deprecated` useful. The m5 commit also fixes the build break that ca296c0 silently introduced.

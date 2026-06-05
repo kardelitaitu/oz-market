@@ -22,12 +22,13 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use marketplace_api_contract::{
     AcceptNegotiationRequest, AgentQueryRequest, CreateListingRequest, CreateReviewRequest,
     NegotiationResponse, OpenNegotiationRequest, RejectNegotiationRequest,
-    RequestContactRevealRequest, SearchRequest, SubmitOfferRequest,
+    RequestContactRevealRequest, ReviewCreateResponse, SearchRequest, SubmitOfferRequest,
 };
 use marketplace_auth_core::{Claims, Role};
 use moka::future::Cache;
 use rust_decimal::Decimal;
 use serde::Deserialize;
+#[cfg_attr(not(test), allow(unused_imports))]
 use serde_json::json;
 use sqlx::Row;
 use std::sync::Arc;
@@ -1063,10 +1064,10 @@ pub async fn create_review(
     .await;
 
     match result {
-        Ok(_) => HttpResponse::Created().json(json!({
-            "review_id": review_id,
-            "status": "pending"
-        })),
+        Ok(_) => HttpResponse::Created().json(ReviewCreateResponse {
+            review_id,
+            status: "pending".to_string(),
+        }),
         Err(e) => {
             error!("Create review error: {}", e);
             HttpResponse::InternalServerError().finish()

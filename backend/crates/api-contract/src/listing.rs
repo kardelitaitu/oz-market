@@ -344,3 +344,20 @@ pub struct SearchResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
+pub struct CreateReviewRequest {
+    /// Rating from 1 to 5
+    pub rating: i32,
+    /// Review title (3-200 characters)
+    pub title: String,
+    /// Optional review body text
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, schemars::JsonSchema)]
+pub struct ReviewCreateResponse {
+    pub review_id: String,
+    pub status: String,
+}
