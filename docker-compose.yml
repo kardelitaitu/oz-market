@@ -28,6 +28,8 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
+      # MARKETPLACE_PORT is for the docker port mapping only; the server
+      # itself reads MARKETPLACE_BIND to know which address to listen on.
       - "${MARKETPLACE_PORT:-3000}:3000"
     environment:
       DATABASE_URL: postgres://marketplace:${POSTGRES_PASSWORD:-marketplace}@postgres:5432/marketplace

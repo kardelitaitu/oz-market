@@ -233,7 +233,7 @@ After step 8, the negotiation status should be `accepted` with a `contact_phone`
 
 - The server runs the Actix-web HTTP runtime (not the TCP runtime).
 - Migrations apply automatically on startup — no manual step needed.
-- API key auth (`MARKETPLACE_API_KEY`) maps to full-access demo Claims for both HTTP and MCP.
+- API key auth (`MARKETPLACE_API_KEY`) maps to full-access demo Claims for HTTP. (The MCP server reads its own `MARKETPLACE_MCP_CLAIMS_JSON` / `MARKETPLACE_MCP_ALLOW_DEV_CLAIMS` env vars; the API key is not consulted there.)
 - Caches are sized for a 4GB VPS (200MB listing, 100MB search).
 
 ## MCP Server (Desktop Agent Integration)
