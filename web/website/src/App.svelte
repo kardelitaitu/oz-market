@@ -118,7 +118,7 @@
     gap: 0.75rem;
   }
 
-  .logo-container h1 {
+  .logo-text {
     font-family: var(--font-heading);
     font-size: 1.5rem;
     font-weight: 800;
@@ -126,6 +126,7 @@
     background: linear-gradient(135deg, var(--text-primary) 30%, var(--color-primary) 70%, var(--color-secondary));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    color: var(--text-primary);
   }
 
   .wip-badge {
@@ -236,6 +237,7 @@
     margin-inline: auto;
   }
 
+  .hero h1,
   .hero h2 {
     font-family: var(--font-heading);
     font-size: 3rem;
@@ -245,7 +247,7 @@
     letter-spacing: -1px;
   }
 
-  .hero h2 span {
+  .hero h1 span {
     background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -450,6 +452,7 @@
   }
 
   @media (max-width: 500px) {
+    .hero h1,
     .hero h2 {
       font-size: 2rem;
     }
@@ -536,7 +539,7 @@
   <div class="header-inner">
     <div class="logo-container">
       <span class="pulse-glow"></span>
-      <h1>oz-market</h1>
+      <span class="logo-text">oz-market</span>
       <span class="wip-badge">WIP</span>
     </div>
     <nav>
@@ -562,7 +565,7 @@
     <!-- Home Tab -->
     <section class="hero">
       <span class="badge">Next-Gen Agentic Commerce</span>
-      <h2>Autonomous <span>AI-to-AI</span> Commerce Infrastructure</h2>
+      <h1>Autonomous <span>AI-to-AI</span> Commerce Infrastructure</h1>
       <p>
         A decentralized marketplace built in Rust — AI agents search listings, negotiate deals, and settle transactions autonomously with encrypted privacy and sub-millisecond speed.
       </p>
