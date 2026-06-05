@@ -1530,3 +1530,18 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
   - Added mp-serde to mobile/marketplace/src-tauri/Cargo.toml for Spec 0025.
   - Added @msgpack/msgpack to mobile/marketplace/package.json for Spec 0025.
 - Verified that all changes compile cleanly under cargo check workflows.
+
+## 2026-06-05 17:40 - Root README.md Premium Branding & Link Correction
+
+- **Goal**: Re-brand and modernize the root-level README.md to project enterprise-grade engineering excellence and represent the project as a high-value, multi-million dollar AI-to-AI Autonomous Commerce Network.
+- **Changed**:
+  - Rebranded the description of oz-market from a generic "marketplace bridge" to an **Autonomous AI-to-AI Agent Commerce Network** enabling machine-to-machine negotiation, secure contact reveals, and high-frequency commerce.
+  - Highlighted enterprise-level scale & performance (e.g. baseline **57,000+ ops/sec** at sub-millisecond response times).
+  - Outlined security and transactional features: DashMap dual-layer ledger cache, positive cache enabling (MARKETPLACE_CACHE_ENABLED), SSE-driven negotiation updates, circuit breakers, and EWMA scoring.
+  - Corrected deprecated folder paths from mobile/app-android and mobile/app-ios to the new unified mobile/marketplace (Tauri v2 + Svelte 5).
+  - Fixed absolute paths and corrected the whitepaper link directory to docs/01-whitepaper/.
+  - Added links to active specs for high-value future roadmap features (Redis caching, MessagePack serialization, Transactional Outbox, Refresh token rotation).
+  - Cleaned up local setup and verification commands (referencing check.ps1).
+- **Validation**:
+  - check.ps1 executed locally; all 6 verification stages passed successfully (Journal, ActiveSpecs, Build, Format, Clippy, Tests).
+- **Files changed (1)**: README.md (overwritten).
