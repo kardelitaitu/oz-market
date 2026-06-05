@@ -1791,3 +1791,13 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `web/website/src/App.svelte`: Added `logColor(log)` helper returning `--color-primary` for Buyer, `--color-secondary` for Seller, `--color-success` for System. Added `logParts(log)` regex to split each line into `[Tag]` + message body. Log renderer now shows the `[Tag]` in bold with speaker's theme color, and message body in `--text-secondary`.
 - **Validation**: `npm run build` compiles clean.
 - **Files changed (1)**: web/website/src/App.svelte.
+## 2026-06-05 21:27
+
+- **Goal**: Refactor web app structure by extracting sub-components and implement premium ledger/simulation improvements.
+- **Changed**:
+  - `web/website/src/App.svelte`: Reduced to a shell layout. Extracted sub-components into `src/lib/`: `GuideTab.svelte`, `DocsTab.svelte`, `Simulator.svelte`, `FlowDiagram.svelte`, `LedgerExplorer.svelte`, `AgentCard.svelte`, `MetricsBar.svelte`, `ThemeSwitcher.svelte`, and the reactive simulation store `simulator.svelte.js`.
+  - `web/website/src/lib/simulator.svelte.js`: Created shared store. Implemented item catalog with 12 items. Randomizes negotiated item per cycle and dynamically scales negotiation price steps.
+  - `web/website/src/lib/LedgerExplorer.svelte` & `global.css`: Added block count badge `(N blocks)` to Ledger title and a derived Total Traded Volume sum row.
+  - `web/website/tests/`: Added new integration and accessibility test suites `a11y.spec.js` and `components.spec.js`.
+- **Validation**: All 89 Playwright tests passed successfully (1.8m). Workspace verification `check.ps1` runs clean.
+- **Files changed**: `web/website/src/App.svelte`, `web/website/src/global.css`, `JOURNAL.md` (modified); `web/website/src/lib/*`, `web/website/tests/a11y.spec.js`, `web/website/tests/components.spec.js` (new).
