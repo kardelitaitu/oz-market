@@ -10,13 +10,47 @@
   const shadow     = $derived(isActive ? `0 0 14px ${glowVar}` : 'none');
 </script>
 
+<style>
+  .agent-card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1.5rem;
+    min-width: 160px;
+    max-width: 220px;
+    text-align: center;
+    overflow: hidden;
+    transition: border-color 0.4s ease;
+  }
+
+  .agent-card .avatar {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .agent-card h4 {
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    word-wrap: break-word;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .agent-card p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0;
+  }
+</style>
+
 <div
-  style="background: var(--bg-card); border: 1px solid {borderClr}; padding: 1.5rem; border-radius: 12px; min-width: 160px; text-align: center; max-width: 220px; overflow: hidden; transition: border-color 0.4s ease; box-shadow: {shadow};"
+  class="agent-card"
+  style="border: 1px solid {borderClr}; box-shadow: {shadow};"
 >
-  <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤖</div>
+  <div class="avatar">🤖</div>
   <h4
-    style="font-family: var(--font-heading); font-size: 1rem; color: {accentColor}; word-wrap: break-word; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;"
+    style="color: {accentColor};"
     title={name}
   >{name}</h4>
-  <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">{title}</p>
+  <p>{title}</p>
 </div>

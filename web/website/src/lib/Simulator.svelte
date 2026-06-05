@@ -36,40 +36,26 @@
 </script>
 
 <style>
-  .card {
-    background: var(--bg-card);
-    backdrop-filter: var(--glass-backdrop);
-    border: 1px solid var(--border-glow);
-    border-radius: 16px;
-    padding: 2rem;
-    box-shadow: var(--glass-shadow);
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, transform 0.2s ease, box-shadow 0.4s ease 0.1s;
+  .counter {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.6rem 1.25rem;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid var(--color-primary);
+    background: var(--color-primary);
+    color: var(--text-primary);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
   }
 
-  .card:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--border-glow-hover);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 15px var(--border-glow);
+  .counter:hover:not(:disabled) {
+    box-shadow: 0 4px 14px var(--color-primary-glow);
   }
 
-  .card h3 {
-    font-family: var(--font-heading);
-    font-size: 1.35rem;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .card p {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    margin-bottom: 1.5rem;
-    flex-grow: 1;
+  .counter:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   .sim-split {

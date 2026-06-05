@@ -110,6 +110,10 @@
     scrollbar-color: var(--border-glow) transparent;
   }
 
+  .ledger-blocks::-webkit-scrollbar { width: 6px; }
+  .ledger-blocks::-webkit-scrollbar-track { background: transparent; }
+  .ledger-blocks::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 3px; }
+
   .ledger-block {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border-glow);

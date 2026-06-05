@@ -76,6 +76,7 @@ export const sim = $state({
   isPaused: false,
   committedBlocks: initialBlocks,
   serverStatus: 'disconnected',
+  reconnectAttempts: 0,
   liveAgents: [],
   totalServerRequests: null,
   successCount: initialSuccess,
@@ -134,6 +135,7 @@ function connectSSE() {
 
   eventSource.onopen = () => {
     reconnectDelay = 1000; // Reset backoff delay on successful connection
+    sim.reconnectAttempts = 0;
   };
 
   eventSource.addEventListener('commit_block', (event) => {
@@ -166,6 +168,7 @@ function connectSSE() {
 
   eventSource.onerror = () => {
     disconnectSSE();
+    sim.reconnectAttempts++;
     // Reconnect with exponential backoff
     reconnectTimeoutId = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);

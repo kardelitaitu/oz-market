@@ -69,10 +69,7 @@
 <div 
   class="modal-overlay" 
   onclick={handleOverlayClick} 
-  onkeydown={e => { if (e.key === 'Enter' || e.key === ' ') { onclose(); e.preventDefault(); } }}
-  role="button" 
-  tabindex="0"
-  aria-label="Close modal overlay"
+  role="presentation"
 >
   <!-- Modal Content Container -->
   <div class="modal-card" role="document" tabindex="-1">
@@ -372,13 +369,13 @@
   }
 
   .dialogue-bubble.buyer {
-    background: rgba(var(--color-primary-rgb, 0, 242, 254), 0.05);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
     border-left: 3px solid var(--color-primary);
     align-self: flex-start;
   }
 
   .dialogue-bubble.seller {
-    background: rgba(var(--color-secondary-rgb, 217, 70, 239), 0.05);
+    background: color-mix(in srgb, var(--color-secondary) 8%, transparent);
     border-left: 3px solid var(--color-secondary);
     align-self: flex-end;
   }

@@ -197,6 +197,74 @@ body[data-bg="grid"] {
   background-attachment: fixed;
 }
 
+/* ── Shared hero section ── */
+.hero {
+  text-align: center;
+  padding: 2rem 1.5rem 1rem;
+  max-width: 900px;
+  margin-inline: auto;
+}
+
+.hero h2 {
+  font-family: var(--font-heading);
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 1rem;
+  letter-spacing: -1px;
+}
+
+.hero p {
+  color: var(--text-secondary);
+  font-size: 1.15rem;
+  margin-bottom: 2rem;
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+@media (max-width: 500px) {
+  .hero h2 { font-size: 2rem; }
+  .hero p { font-size: 1rem; }
+}
+
+/* ── Shared card component ── */
+.card {
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--border-glow);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, transform 0.2s ease, box-shadow 0.4s ease 0.1s;
+}
+
+.card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-glow-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 15px var(--border-glow);
+  will-change: transform;
+}
+
+.card h3 {
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+}
+
 /* Link base */
 a {
   color: var(--color-primary);

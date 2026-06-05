@@ -3,30 +3,6 @@
 </script>
 
 <style>
-  .hero {
-    text-align: center;
-    padding: 2rem 1.5rem 1rem;
-    width: min(80%, 900px);
-    margin-inline: auto;
-  }
-
-  .hero h2 {
-    font-family: var(--font-heading);
-    font-size: 3rem;
-    font-weight: 800;
-    line-height: 1.15;
-    margin-bottom: 1rem;
-    letter-spacing: -1px;
-  }
-
-  .hero p {
-    color: var(--text-secondary);
-    font-size: 1.15rem;
-    margin-bottom: 2rem;
-    max-width: 600px;
-    margin-inline: auto;
-  }
-
   .faq-item {
     margin-bottom: 1rem;
     background: var(--bg-card);
