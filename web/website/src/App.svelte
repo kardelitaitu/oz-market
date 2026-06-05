@@ -10,6 +10,7 @@
   let simState = $state('idle'); // idle, negotiating, consensus, revealing, completed
   let simLogs = $state([]);
   let currentPrice = $state(200);
+  let logContainer = $state();
   
   let timeouts = [];
   
@@ -142,6 +143,14 @@
     localStorage.setItem('oz-market-theme', currentTheme);
   });
 
+  // Svelte 5 $effect to auto-scroll simulation logs container to bottom on update
+  $effect(() => {
+    const _ = simLogs.length;
+    if (logContainer) {
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+  });
+
   // Svelte 5 $effect to trigger autoplay and metrics polling
   $effect(() => {
     if (!isPaused) {
@@ -258,7 +267,7 @@
         </div>
         
         <!-- Simulation Logs -->
-        <div style="text-align: left; height: 160px; overflow-y: auto;">
+        <div bind:this={logContainer} style="text-align: left; height: 160px; overflow-y: auto;">
           <h5 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h5>
           {#if simLogs.length === 0}
             <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>

@@ -1670,3 +1670,17 @@ pm run build compiles clean.
 pm run test:e2e E2E tests pass successfully (7.3s duration).
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
+
+## 2026-06-05 18:55 - Auto-scroll simulation logs
+
+- **Goal**: Automatically scroll the simulation log container to the bottom as new negotiation updates are added.
+- **Changed**:
+  - Bound the simulation logs container using ind:this={logContainer} inside web/website/src/App.svelte.
+  - Added a Svelte 5 $effect block that tracks simLogs changes and updates the scrollTop offset of the logContainer to match its scrollHeight.
+- **Validation**:
+  - 
+pm run build compiles clean.
+  - 
+pm run test:e2e tests pass successfully (7.7s duration).
+  - check.ps1 runs pass successfully.
+- **Files changed (1)**: web/website/src/App.svelte (modified).
