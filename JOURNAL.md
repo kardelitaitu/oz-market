@@ -1522,3 +1522,11 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
   - 0026-transactional-outbox-pattern: Details transactional event commits (outbox table) and background polling worker events publishing.
   - 0027-refresh-token-rotation-jwt-blacklist: Establishes Redis-backed JWT blacklisting, refresh token rotation single-use rules, and session-reuse breach detection.
 - Verified that all active spec structures conform to repo governance rules and check.ps1 runs clean.
+
+## 2026-06-05 16:50
+
+- **Integrated Dependencies for Caching & Mobile Optimizations**: 
+  - Added edis (with features 	okio-comp and connection-manager) to backend/server/Cargo.toml for Spec 0024.
+  - Added mp-serde to mobile/marketplace/src-tauri/Cargo.toml for Spec 0025.
+  - Added @msgpack/msgpack to mobile/marketplace/package.json for Spec 0025.
+- Verified that all changes compile cleanly under cargo check workflows.

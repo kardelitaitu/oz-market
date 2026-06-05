@@ -30,6 +30,8 @@ rust_decimal = { version = "1", features = ["serde"] }
 serde_yaml = "0.9"
 num_cpus = "1.16"
 futures = "0.3"
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
 
 # OpenAPI generation
 utoipa = "5"
