@@ -21,8 +21,8 @@ test.describe('Accessibility: Semantic Landmarks', () => {
     await page.goto('/');
     const header = page.locator('header');
     await expect(header).toBeVisible();
-    // Header contains the logo and nav
-    await expect(header.locator('h1')).toBeVisible();
+    // Header contains the logo text and nav
+    await expect(header.locator('.logo-text')).toBeVisible();
     await expect(header.locator('nav')).toBeVisible();
   });
 
@@ -48,20 +48,20 @@ test.describe('Accessibility: Semantic Landmarks', () => {
   test('page has a semantic <footer> landmark', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('footer')).toBeVisible();
-    await expect(page.locator('footer p')).toContainText('oz-market');
+    await expect(page.locator('.footer-copy-bar')).toContainText('oz-market');
   });
 
-  test('page has exactly one <h1> for the site identity', async ({ page }) => {
+  test('page has exactly one <h1> for the hero heading', async ({ page }) => {
     await page.goto('/');
     const h1s = page.locator('h1');
-    // Some views may render additional h1s (guide tab), but the root <header> should have one
-    await expect(h1s.first()).toHaveText('oz-market');
+    await expect(h1s).toHaveCount(1);
+    await expect(h1s).toContainText('Commerce Infrastructure');
   });
 
-  test('Home tab hero section has an <h2> and descriptive <p>', async ({ page }) => {
+  test('Home tab hero section has an <h1> and descriptive <p>', async ({ page }) => {
     await page.goto('/');
     const hero = page.locator('section.hero');
-    await expect(hero.locator('h2')).toBeVisible();
+    await expect(hero.locator('h1')).toBeVisible();
     await expect(hero.locator('p')).toBeVisible();
   });
 });
@@ -69,9 +69,8 @@ test.describe('Accessibility: Semantic Landmarks', () => {
 test.describe('Accessibility: ThemeSwitcher', () => {
   test('theme switcher group has role="group" with aria-label', async ({ page }) => {
     await page.goto('/');
-    const group = page.locator('[role="group"]');
+    const group = page.locator('[role="group"][aria-label="Select Theme"]');
     await expect(group).toBeVisible();
-    await expect(group).toHaveAttribute('aria-label', 'Select Theme');
   });
 
   test('all 5 theme swatch buttons have aria-label and aria-pressed', async ({ page }) => {
@@ -296,12 +295,11 @@ test.describe('Accessibility: DocsTab Links', () => {
 
     const links = page.locator('a.doc-item');
     const count = await links.count();
-    expect(count).toBe(8);
+    expect(count).toBe(12);
 
     for (let i = 0; i < count; i++) {
       const link = links.nth(i);
       await expect(link).toHaveAttribute('href');
-      // All links should start with docs/
       const href = await link.getAttribute('href');
       expect(href).toMatch(/^docs\//);
     }
@@ -345,11 +343,11 @@ test.describe('Accessibility: Benchmark Table', () => {
 });
 
 test.describe('Accessibility: Interactive Element Roles', () => {
-  test('all nav buttons are interactive <button> elements', async ({ page }) => {
+  test('all 5 nav buttons are interactive <button> elements', async ({ page }) => {
     await page.goto('/');
     const navButtons = page.locator('nav button');
     const count = await navButtons.count();
-    expect(count).toBe(3);
+    expect(count).toBe(5);
 
     // Verify they respond to clicks
     await navButtons.nth(1).click();
@@ -379,10 +377,10 @@ test.describe('Accessibility: Interactive Element Roles', () => {
     await expect(simulator.locator('h5')).toContainText('Simulation logs');
   });
 
-  test('footer uses <p> for copyright text', async ({ page }) => {
+  test('footer uses .footer-copy-bar for copyright text', async ({ page }) => {
     await page.goto('/');
     const footer = page.locator('footer');
-    await expect(footer.locator('p')).toContainText('©');
+    await expect(footer.locator('.footer-copy-bar')).toContainText('©');
   });
 });
 
@@ -397,13 +395,10 @@ test.describe('Accessibility: Color & Visual Indicators (Non-Color Dependent)', 
 
   test('backend status uses both text and dot indicator for redundancy', async ({ page }) => {
     await page.goto('/');
-    // The backend pill shows both a colored dot AND text "Backend: Offline (Demo Mode)"
-    // This provides redundant coding (text + icon) for accessibility
     const backendText = page.getByText('Backend: Offline (Demo Mode)');
     await expect(backendText).toBeVisible();
 
-    // The dot exists as a visual indicator alongside the text
-    const dot = page.locator('span[style*="border-radius: 50%"]').first();
+    const dot = page.locator('.pill-dot').first();
     await expect(dot).toBeVisible();
   });
 

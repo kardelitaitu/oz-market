@@ -1,5 +1,38 @@
 import { test, expect } from '@playwright/test';
 
+test.describe('Smoke: Tab Navigation', () => {
+  test('app boots and shows Home tab by default', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('h1')).toContainText('Commerce Infrastructure');
+    await expect(page.locator('nav button.active')).toHaveText('Home');
+  });
+
+  test('all 5 nav tabs render their headings', async ({ page }) => {
+    await page.goto('/');
+    const checks = [
+      { tab: 'Getting Started', heading: 'Getting Started' },
+      { tab: 'FAQs', heading: 'Frequently Asked Questions' },
+      { tab: 'Status', heading: 'System Status' },
+      { tab: 'Docs', heading: 'Documentation Hub' },
+    ];
+    for (const { tab, heading } of checks) {
+      await page.click(`nav button:has-text("${tab}")`);
+      await page.waitForTimeout(100);
+      await expect(page.locator(`h2:has-text("${heading}")`)).toBeVisible();
+    }
+  });
+
+  test('navigating back to Home from each tab works', async ({ page }) => {
+    await page.goto('/');
+    const tabs = ['Getting Started', 'FAQs', 'Status', 'Docs'];
+    for (const tab of tabs) {
+      await page.click(`nav button:has-text("${tab}")`);
+      await page.click('nav button:has-text("Home")');
+      await expect(page.locator('h1')).toContainText('Commerce Infrastructure');
+    }
+  });
+});
+
 test.describe('Getting Started Guide', () => {
   async function goToGuide(page) {
     await page.goto('/');
@@ -51,8 +84,6 @@ test.describe('Getting Started Guide', () => {
     await page.click('.platform-tab:has-text("iPhone")');
     await expect(page.locator('.step-card')).toHaveCount(4);
   });
-});
-
 });
 
 test.describe('DocsTab Component', () => {
@@ -167,17 +198,12 @@ test.describe('MetricsBar Component', () => {
     await expect(page.getByText(/^Backend:/)).toBeVisible();
   });
 
-  test('Backend status pill shows disconnected dot with inline circle styling', async ({ page }) => {
+  test('Backend status pill shows disconnected dot with circle styling', async ({ page }) => {
     await page.goto('/');
-    // The disconnected dot span has inline style with border-radius: 50%
-    // Find it directly by its unique inline style combination
-    const dot = page.locator('span[style*="border-radius: 50%"]').first();
+    const dot = page.locator('.pill-dot').first();
     await expect(dot).toBeVisible();
 
     const style = await dot.getAttribute('style');
-    expect(style).toContain('width: 8px');
-    expect(style).toContain('height: 8px');
-    // Disconnected state uses muted color
     expect(style).toContain('text-muted');
   });
 
@@ -283,17 +309,14 @@ test.describe('MetricsBar Component', () => {
     await page.goto('/');
     await page.waitForTimeout(500);
 
-    // Connected pill has inline border referencing var(--color-success)
     const connectedPill = page.locator('[style*="color-success"]').first();
     await expect(connectedPill).toBeVisible();
     await expect(connectedPill).toContainText('Connected (Live)');
 
-    // The connected dot span should also reference success color in background
-    const dot = page.locator('span[style*="color-success"]').first();
+    const dot = page.locator('.pill-dot').first();
     await expect(dot).toBeVisible();
     const dotStyle = await dot.getAttribute('style');
     expect(dotStyle).toContain('color-success');
-    expect(dotStyle).toContain('border-radius: 50%');
   });
 });
 

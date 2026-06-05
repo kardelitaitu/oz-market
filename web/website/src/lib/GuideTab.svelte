@@ -28,6 +28,11 @@
     background: var(--bg-card-hover);
   }
 
+  .platform-tab:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-primary), 0 0 12px var(--color-primary-glow);
+  }
+
   .platform-tab.active {
     background: var(--color-primary-glow);
     border-color: var(--color-primary);
