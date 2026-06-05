@@ -62,7 +62,7 @@ export MARKETPLACE_BIND=0.0.0.0:3000
 | `DATABASE_URL` | (required) | PostgreSQL connection string |
 | `MARKETPLACE_BIND` | `127.0.0.1:3000` | Server listen address |
 | `MARKETPLACE_API_KEY` | (none) | If set, enables API key auth via `x-marketplace-api-key` header |
-| `MARKETPLACE_DISABLE_CACHE` | `false` | Set to `1` to disable in-memory caching |
+| `MARKETPLACE_CACHE_ENABLED` | `true` | Enable in-memory caching (`1`/`true` = enabled) |
 | `LISTING_CACHE_MAX_MB` | `200` | Listing cache memory limit |
 | `SEARCH_CACHE_MAX_MB` | `100` | Search cache memory limit |
 | `RUST_LOG` | `info` | Log level (debug, info, warn, error) |
@@ -227,7 +227,7 @@ curl -s "$BASE/v1/negotiations/$NEG_ID" $AUTH | jq .
 
 ### Expected outcome
 
-After step 8, the negotiation status should be `accepted` with a `contact_phone` field containing the seller's revealed phone number. This proves the full agent-to-agent transaction lifecycle.
+After step 8, the negotiation status should be `contact_revealed` with a `revealed_phone_reference` field. This proves the full agent-to-agent transaction lifecycle.
 
 ## Architecture Notes
 
@@ -302,4 +302,4 @@ cd backend
 MARKETPLACE_MCP_ALLOW_DEV_CLAIMS=1 cargo run --release --package marketplace-mcp --bin mcp_tester
 ```
 
-Expected output: all 6 tests pass (initialize, list tools, create listing, search, get listing, get non-existent).
+Expected output: all 15 tests pass covering the full agent transaction lifecycle (initialize, list tools, create listing, search, get listing, open negotiation, submit offer, accept/reject negotiation, request/approve contact reveal, etc.).

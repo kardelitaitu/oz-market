@@ -22,9 +22,9 @@ This folder is for implementation-ready specifications.
 
 | Item | Status | Details |
 |------|--------|---------|
-| **OpenAPI Spec** | ✅ **COMPLETE** | 20+ endpoints, all request/response schemas |
-| **Interactive Docs** | ✅ **LIVE** | Swagger Editor at `http://localhost:3003/docs` |
-| **JSON Endpoint** | ✅ **LIVE** | `http://localhost:3003/api-docs/openapi.json` |
+| **OpenAPI Spec** | ✅ **COMPLETE** | 30+ endpoints, all request/response schemas |
+| **Interactive Docs** | ✅ **LIVE** | Swagger Editor at `http://localhost:3000/docs` |
+| **JSON Endpoint** | ✅ **LIVE** | `http://localhost:3000/api-docs/openapi.json` |
 | **Internal API Spec** | ✅ **EXISTS** | `internal-api-spec.md` (comprehensive) |
 | **Generated Contract Notes** | ✅ **EXISTS** | `generated-contract-notes.md` |
 | **CI Commands** | ✅ **EXISTS** | `ci-commands.md` |
@@ -34,37 +34,43 @@ This folder is for implementation-ready specifications.
 
 **File**: `openapi.yaml`
 
-**Endpoints Documented** (20+ total):
+**Endpoints Documented** (30+ total):
 
-### Listings (3 endpoints)
-- `POST /api/listings` - Create listing
-- `GET /api/listings/{listing_id}` - Get listing
-- `POST /api/listings/search` - Search listings
+### Listings & Reviews (5 endpoints)
+- `POST /v1/listings` - Create listing
+- `GET /v1/listings/{listing_id}` - Get listing
+- `GET /v1/listings/search` - Search listings
+- `POST /v1/listings/{listing_id}/reviews` - Create review
+- `GET /v1/listings/{listing_id}/reviews` - List reviews
 
-### Reviews (4 endpoints)
-- `POST /api/reviews` - Create review
-- `GET /api/listings/{listing_id}/reviews` - List reviews
-- `POST /api/reviews/{review_id}/approve` - Approve review
-- `POST /api/reviews/{review_id}/reject` - Reject review
+### Negotiations & Events (7 endpoints)
+- `POST /v1/negotiations` - Open negotiation
+- `GET /v1/negotiations/{negotiation_id}` - Get status
+- `POST /v1/negotiations/{negotiation_id}/offers` - Submit offer
+- `POST /v1/negotiations/{negotiation_id}/accept` - Accept negotiation
+- `POST /v1/negotiations/{negotiation_id}/reject` - Reject negotiation
+- `POST /v1/negotiations/{negotiation_id}/request-contact-reveal` - Request reveal
+- `GET /v1/events/negotiations/{negotiation_id}` - SSE stream
 
-### Negotiations (5 endpoints)
-- `POST /api/negotiations` - Open negotiation
-- `POST /api/negotiations/{negotiation_id}/offers` - Submit offer
-- `POST /api/negotiations/{negotiation_id}/accept` - Accept offer
-- `POST /api/negotiations/{negotiation_id}/counter` - Counter offer
-- `GET /api/negotiations/{negotiation_id}` - Get status
+### Contact Reveals (1 endpoint)
+- `POST /v1/contact-reveals/{reveal_id}/approve` - Approve
 
-### Contact Reveals (3 endpoints)
-- `POST /api/contact-reveals` - Request reveal
-- `POST /api/contact-reveals/{reveal_id}/approve` - Approve
-- `POST /api/contact-reveals/{reveal_id}/reject` - Reject
+### Agent & Health (5 endpoints)
+- `POST /v1/agent/query` - Dispatch agent query
+- `GET /v1/health/agents` - List agent health
+- `GET /v1/health/agents/{agent_id}` - Get agent health detail
+- `POST /v1/health/agents/{agent_id}/reset` - Reset circuit breaker
+- `GET /internal/v1/rate-limits` - Rate limiter snapshot
 
-### Admin (5+ endpoints)
-- `POST /api/admin/listings/{listing_id}/archive` - Archive listing
-- `POST /api/admin/negotiations/{negotiation_id}/release` - Release negotiation
-- `POST /api/admin/sellers/{seller_id}/trust-level` - Set trust level
-- `POST /api/admin/sellers/{seller_id}/quota` - Set quota
-- `POST /api/admin/sellers/{seller_id}/recalc-rating` - Recalculate rating
+### Admin (8 endpoints)
+- `POST /internal/v1/listings/{listing_id}/archive` - Archive listing
+- `POST /internal/v1/reservations/{lease_id}/release` - Release reservation
+- `PUT /internal/v1/sellers/{seller_id}/trust-level` - Set trust level
+- `PUT /internal/v1/sellers/{seller_id}/quota-override` - Set quota override
+- `POST /internal/v1/sellers/{seller_id}/recalculate-rating` - Recalculate rating
+- `POST /internal/v1/sellers/{seller_id}/credits` - Adjust credits
+- `POST /internal/v1/reviews/{review_id}/approve` - Approve review
+- `POST /internal/v1/reviews/{review_id}/reject` - Reject review
 
 ## How to Use the OpenAPI Spec
 
@@ -74,12 +80,12 @@ This folder is for implementation-ready specifications.
 cd backend && cargo run --release --package marketplace-server
 
 # Open in browser
-http://localhost:3003/docs
+http://localhost:3000/docs
 ```
 
 ### 2. Get Raw JSON
 ```bash
-curl http://localhost:3003/api-docs/openapi.json
+curl http://localhost:3000/api-docs/openapi.json
 ```
 
 ### 3. Validate Spec

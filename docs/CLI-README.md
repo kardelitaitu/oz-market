@@ -135,8 +135,7 @@ cargo run --release --bin bench_concurrent -- "http://127.0.0.1:3000" 1000 "1,10
 - Current baseline (after performance fixes):
   - Health check: ~2,000 ops/s
   - Cold search: ~16ms
-  - Warm search (100): 52,641 ops/s
-  - Warm search (200): 57,976 ops/s
-  - Warm search (500): 40,351 ops/s
-  - Get listing (cached): ~25,000 ops/s (standalone)
-  - All benchmarks achieve 100% success rate
+  - Warm search — public mode: 57,733 ops/s (100), 57,350 ops/s (200), 51,569 ops/s (500)
+  - Warm search — rotating claims: 57,418 ops/s (100), 59,140 ops/s (200), 47,946 ops/s (500)
+  - Get listing (cached): ~48,000 ops/s (standalone)
+  - All benchmarks achieve 100% success rate (0% 429 in public/rotating modes)

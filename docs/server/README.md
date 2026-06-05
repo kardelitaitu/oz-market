@@ -9,7 +9,6 @@ This folder contains server-specific documentation.
 - caching strategy
 - deployment and scaling notes
 - observability and operational runbooks
-- **NEW**: AI prompt caching
 - **NEW**: OpenAPI documentation
 - **NEW**: MCP server integration
 
@@ -22,7 +21,7 @@ The server is **production-ready** with:
 | **Performance** | **57,000+ ops/s** | 11.4× target (5,000 ops/s) in benchmark-safe modes |
 | **Tracing + Metrics** | ✅ | tracing-actix-web, metrics-exporter-prometheus |
 | **Health Checks** | ✅ | Deep DB connectivity check |
-| **AI Prompt Cache** | ✅ | Moka-based (docs/server/ai-cache.md) |
+
 | **OpenAPI Spec** | ✅ **COMPLETE** | 20+ endpoints documented |
 | **Interactive Docs** | ✅ | Swagger Editor at `/docs` |
 | **MCP Server** | ✅ **SMOKE-TESTED** | marketplace-mcp sidecar built |
@@ -34,36 +33,7 @@ The server is **production-ready** with:
 
 See `module-layout.md` for the detailed backend module structure.
 
-## AI Prompt Caching
 
-We've implemented AI prompt caching using Moka (same cache engine as listing cache).
-
-**Key Files**:
-- `backend/server/src/services/ai_cache.rs` - Cache implementation
-- `docs/server/ai-cache.md` - Detailed documentation
-
-**Features**:
-- SHA-256 hash of (system_prompt + user_prompt + model) as cache key
-- TTL-based expiration (1 hour default)
-- In-memory caching (uses existing Moka infrastructure)
-- Cost reduction for AI/LLM calls
-
-**Usage**:
-```rust
-let cache = AiPromptCache::new(true, 1000);  // enabled, 1000 entries
-
-// Check cache
-if let Some(cached) = cache.get_cached(system, user, "gpt-4") {
-    return cached.content;
-}
-
-// Cache response
-cache.cache_response(system, user, "gpt-4", &ai_response);
-```
-
-See `docs/server/ai-cache.md` for full documentation.
-
----
 
 ## OpenAPI Documentation
 
@@ -84,8 +54,8 @@ The API is **fully documented** with OpenAPI 3.0 spec!
 | Admin | archive, release, trust-level, quota, recalc-rating |
 
 **How to Access Docs**:
-1. **JSON endpoint**: `http://localhost:3003/api-docs/openapi.json`
-2. **Interactive docs**: `http://localhost:3003/docs` → redirects to Swagger Editor
+1. **JSON endpoint**: `http://localhost:3000/api-docs/openapi.json`
+2. **Interactive docs**: `http://localhost:3000/docs` → redirects to Swagger Editor
 3. **Raw YAML**: `docs/specs/openapi.yaml`
 
 **Spec Includes**:
@@ -113,7 +83,7 @@ We've built an **MCP (Model Context Protocol)** server for AI agent integration!
 - The nightly smoke workflow uses the shared Rust schema bootstrap helper before the current listing create/search/get smoke path.
 - The `Server Postgres` workflow runs the live Postgres integration tests against the shared schema bootstrap helper and can be rerun manually in GitHub Actions.
 
-**MCP Tools Exposed** (10 tools):
+**MCP Tools Exposed** (11 tools — includes `agent_query`):
 | Tool | Purpose | Required Role |
 |------|---------|---------------|
 | `create_listing` | Create seller listing | `seller_listing_writer` |
@@ -295,17 +265,16 @@ The server includes:
 | Build server | `cd backend && cargo build --release --package marketplace-server` |
 | Build MCP | `cd backend && cargo build --package marketplace-mcp` |
 | Run server | `./target/release/marketplace-server` |
-| View API docs | `http://localhost:3003/docs` |
-| Get OpenAPI JSON | `curl http://localhost:3003/api-docs/openapi.json` |
+| View API docs | `http://localhost:3000/docs` |
+| Get OpenAPI JSON | `curl http://localhost:3000/api-docs/openapi.json` |
 | Run benchmarks | `./target/release/bench_concurrent "http://..." 5000 "100,200,500" "rotating"` |
-| Check health | `curl http://localhost:3003/health` |
-| View metrics | `curl http://localhost:3003/metrics` |
+| Check health | `curl http://localhost:3000/health` |
+| View metrics | `curl http://localhost:3000/metrics` |
 
 ---
 
 **The server is production-ready!** 🚀
 
 See `module-layout.md` for detailed module structure.
-See `ai-cache.md` for AI prompt caching details.
 See `docs/specs/openapi.yaml` for complete API specification.
 See `docs/mcp/tool-catalog.md` for MCP tool definitions.
