@@ -209,7 +209,7 @@
 
   .auth-btn.signup:hover {
     background: var(--color-primary);
-    box-shadow: 0 4px 14px rgba(170, 59, 255, 0.3);
+    box-shadow: 0 4px 14px var(--color-primary-glow);
   }
 
   .anchor-btn {
