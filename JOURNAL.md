@@ -1905,7 +1905,30 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Test updates**: Nav button count 3→5, button labels updated, keyboard tab sequence adjusted.
 - **Validation**: `npm run build` passes with zero warnings.
 
-## 2026-06-06 00:10 — Getting Started redesign + URL routing
+## 2026-06-06 01:45 — Design review polish (3 rounds) + accessibility + performance
+
+- **Card standardization**: All `.card` components now use the cleaner StatusTab style (`rgba(255,255,255,0.05)` border, 12px radius, 1.5rem padding, no glass/shadow). Removed DocsTab's duplicate `.card` override.
+- **Extracted shared styles to global.css**: `.hero` (removed 4x duplication from GuideTab/FAQTab/StatusTab/DocsTab), `.card` classes now single-source in global.css.
+- **Missing `.counter` button styles**: Simulator.svelte had 7 buttons using `class="counter"` with no CSS definition — rendered unstyled. Added proper button styling (hover glow, disabled dimming, pill shape).
+- **AgentCard inline styles → `<style>` block**: Moved 5 inline style attributes to class selectors.
+- **MetricsBar inline styles → `<style>` block**: Extracted 3 identical inline pill styles to class selectors, removing ~200 bytes of JS-inline CSS.
+- **OG meta tags**: Added OG/Twitter card meta tags for social sharing; standardized title/description copy across all meta tags.
+- **`<noscript>` fallback**: Added styled content fallback for users without JavaScript.
+- **Heading hierarchy**: Logo `<h1>` → `<span class="logo-text">`, home hero `<h2>` → `<h1>` for proper document outline.
+- **Auth button contrast**: Fixed sign-up button to meet WCAG AA — darkened bg via `color-mix(in srgb, var(--color-primary), var(--bg-dark) 30%)`.
+- **Hardcoded colors → CSS vars**: Replaced 4 instances of `rgba(170, 59, 255, ...)` with `var(--color-primary-glow)` across App.svelte, GuideTab, and sign-up hover.
+- **Focus-visible**: Swatch circles (ThemeSwitcher/BackgroundSwitcher) and platform tabs (GuideTab) now use `box-shadow` focus rings instead of clipped outlines.
+- **`aria-current="page"`**: Added to active nav button for screen reader context.
+- **`nav aria-label="Main"`**: Added landmark label for accessibility.
+- **Scrollbar**: Added WebKit `::-webkit-scrollbar` styles to LedgerExplorer (previously Firefox-only).
+- **Responsive**: Fixed `.header-right-row` crowding — wrap at 700px, tighter gap at 600px, stack at 400px. Added 400px breakpoint for platform-tabs.
+- **Global transition jank**: Removed `transform` and `box-shadow` from `* { transition }` — only `background-color`, `border-color`, `background-image` remain for smooth theme switching.
+- **`fetchpriority="high"`**: Added to font preload `<link>` for improved LCP.
+- **`noopener,noreferrer`**: Added to GitHub `window.open` call in footer.
+- **`--glass-backdrop` / `--glass-shadow` removed**: Inlined into MetricsBar, removed from global CSS scope.
+- **Playwright smoke test**: Added 3 tab-navigation tests (boot, headings render, back-nav). Fixed 8 pre-existing test assertions broken by CSS-extraction refactors.
+- **robots.txt + sitemap.xml**: Added to `public/` for search engine indexing.
+- **Validation**: `npm run build` zero warnings; all 96 Playwright tests passing.
 
 - **Redesigned GuideTab**: Replaced developer-oriented multi-device guide (Server/MCP/Mobile) with end-user platform guide (Website/AI Agent/Android/iPhone) with 3-4 step cards each.
 - **Brand icons**: Android tab now uses Font Awesome bugdroid SVG (#3DDC84), iPhone tab uses Apple silhouette SVG (#555).
