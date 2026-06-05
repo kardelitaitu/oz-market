@@ -305,7 +305,7 @@
 
   .crypto-card {
     background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--border-glow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 10px;
     padding: 0.8rem 1rem;
   }
