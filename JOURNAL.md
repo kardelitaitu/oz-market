@@ -1465,3 +1465,25 @@ All fixes verified locally: `check.ps1` 6/6 pass, `cargo clippy --workspace --al
 - **Validation**: `check.ps1` 6/6 pass. `redocly lint` 0 warnings. `docs/specs/openapi.yaml` now consistent with code at `actix_handlers.rs:1469` and DB schema at `0014_add_credit_ledger.sql`.
 - **Files changed (1)**: `docs/specs/openapi.yaml` (+2 / -2).
 - **Final audit status**: ALL drift items closed. All 5 MAJOR (M1-M5), all 9 MINOR (m1-m9), all 8 ENV (e1-e8), all 4 doc-drift items, and both spec-drift items (requests_total hardcode + seller_id/agent_id) are now resolved.
+
+## 2026-06-05 17:00 — Metrics request-tracking middleware: wire real request counts into /metrics
+
+- **Problem**: The /metrics endpoint reported `requests_total 0` — the AtomicU64 counter in the observability module was never incremented by any request, making it always show zero regardless of actual traffic.
+- **Fix**:
+  - `actix_runtime.rs`: Added `wrap_fn` middleware that captures `obs_data` and calls `obs.record_request(path, status)` on every HTTP response (success only, errors pass through unmodified). Changed `/metrics` hardcoded `requests_total 0` to `requests_total {}` with format param from `obs.requests_total`.
+  - `actix_handlers.rs`: Added `request_counter_middleware_increments_per_request` regression test (moved from `actix_runtime.rs` which is `#[cfg(not(test))]`, so tests there never ran). Added `use actix_web::test::init_service` for integration test helpers.
+  - **Bug fix (caught)**: Removed extra closing `}` at end of `actix_runtime.rs` that caused a syntax error.
+  - **Bug fix (caught)**: Original test was inside `actix_runtime` but module is `#[cfg(not(test))]` — test never ran. Moved to `actix_handlers.rs`. Test count increased 400→401.
+- **Validation**: cargo check, clippy, all 401 tests pass. code-reviewer-deepseek approved.
+- **Commit**: fc157c4, pushed to origin/main.
+
+## 2026-06-05 17:15 — Audit closure: TODO.md marked resolved + /metrics smoke test
+
+- **Problem**: After the seller_id/agent_id commit (`013c152`) closed the last spec-drift item, the `docs/TODO.md` still showed the 2026-05-06 audit as "MAJOR DRIFT FOUND" with 28 unresolved items, and the wrap_fn middleware had no end-to-end coverage (the unit test only checked the counter, not the `/metrics` scrape output).
+- **Fix**:
+  - `docs/TODO.md`: rewrote the top section to mark the audit closed with a resolution summary table (5 MAJOR + 9 MINOR + 8 ENV + 4 doc + 2 spec = 28 items, all resolved). Archived the original 2026-05-06 audit details under a `## Original audit (2026-05-06, archived)` section for historical reference. Added "next work should go under a new `## NEXT AUDIT` section" instruction. Updated the section headers from "fix first" / "fix in next batch" to "all closed" for the M/m/e groups.
+  - `backend/server/src/http/actix_handlers.rs`: added `metrics_scrape_reflects_wrap_fn_counter` smoke test. Builds a minimal `App` with the same `wrap_fn` as the real server + a dummy `/ping` route + a `/metrics` route that mirrors the real handler's format. Hits `/ping` 5 times, then GETs `/metrics`, and asserts the response body contains `requests_total 5` (the wrap_fn records AFTER the handler renders, so scrapes always see the count of prior requests, not themselves — which is the correct Prometheus semantics).
+- **Discovered during edit**: `backend/server/src/http/mod.rs:6` gates `actix_runtime` as `#[cfg(not(test))]`, so any `#[cfg(test)] mod tests` inside `actix_runtime.rs` is dead code in test builds. The user (in `fc157c4`) caught this and moved the wrap_fn test to `actix_handlers.rs`. My earlier in-progress edit to add the test to `actix_runtime.rs` was a no-op for test purposes; the user-fixed version is the real regression test.
+- **Journal cleanup**: removed a duplicate retroactive entry I had written for `fc157c4` (lines 1455-1464 in the prior journal state) — the user's actual journal entry at line 1475 is more accurate and mentions the `cfg(not(test))` discovery. Net effect: one entry per commit, no dups.
+- **Validation**: `check.ps1` 6/6 pass. `cargo test --lib` 402/402 pass (was 401 — the smoke test added 1).
+- **Files changed (3)**: `docs/TODO.md` (+24 / -12), `actix_handlers.rs` (+83 / -0), `JOURNAL.md` (+11 / -11).

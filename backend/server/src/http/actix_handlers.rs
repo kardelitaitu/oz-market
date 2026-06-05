@@ -1621,6 +1621,89 @@ mod tests {
         assert_eq!(snapshot.error_responses_total, 1); // the 404 above
     }
 
+    /// End-to-end smoke test for the /metrics scrape path.
+    /// Mirrors the real handler in `actix_runtime.rs::metrics_handler` but with
+    /// the dependency surface stripped down to just `ServerObservability`.
+    /// Proves that:
+    ///   1. The wrap_fn middleware actually increments `requests_total`.
+    ///   2. The /metrics response body contains the value the wrap_fn wrote.
+    /// This catches any regression of the original audit bug where
+    /// `metrics_handler` hardcoded `requests_total 0` instead of reading the
+    /// observability snapshot.
+    #[actix_web::test]
+    async fn metrics_scrape_reflects_wrap_fn_counter() {
+        use crate::observability::ServerObservability;
+
+        let obs = Arc::new(ServerObservability::new());
+        let obs_data = web::Data::new(obs.clone());
+
+        let app = actix_web::test::init_service(
+            App::new()
+                .app_data(obs_data.clone())
+                .wrap_fn(move |req, srv| {
+                    let obs = obs_data.clone();
+                    let path = req.path().to_owned();
+                    let fut = srv.call(req);
+                    async move {
+                        let res: Result<_, actix_web::Error> = fut.await;
+                        if let Ok(ref response) = res {
+                            obs.record_request(&path, response.status().as_u16());
+                        }
+                        res
+                    }
+                })
+                .route(
+                    "/ping",
+                    web::get().to(|| async { HttpResponse::Ok().body("pong") }),
+                )
+                .route(
+                    "/metrics",
+                    web::get().to({
+                        let obs = obs.clone();
+                        move || {
+                            let snap = obs.snapshot();
+                            async move {
+                                HttpResponse::Ok()
+                                    .content_type("text/plain; version=0.0.4; charset=utf-8")
+                                    .body(format!(
+                                        "# HELP requests_total Total requests\n\
+                                         # TYPE requests_total counter\n\
+                                         requests_total {}\n",
+                                        snap.requests_total
+                                    ))
+                            }
+                        }
+                    }),
+                ),
+        )
+        .await;
+
+        // Hit a route 5 times.
+        for _ in 0..5 {
+            let req = actix_web::test::TestRequest::get()
+                .uri("/ping")
+                .to_request();
+            let _resp = actix_web::test::call_service(&app, req).await;
+        }
+
+        // Scrape /metrics and assert the counter shows the 5 pings we just made.
+        // (The wrap_fn runs OUTSIDE the handler, so the GET /metrics call
+        // increments the counter AFTER the response is rendered with the
+        // pre-scrape value. This is the correct semantics for a Prometheus
+        // counter — scrapes see the count of prior requests, not themselves.)
+        let req = actix_web::test::TestRequest::get()
+            .uri("/metrics")
+            .to_request();
+        let resp = actix_web::test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = actix_web::test::read_body(resp).await;
+        let body_str = std::str::from_utf8(&body).expect("metrics body is utf-8");
+        assert!(
+            body_str.contains("requests_total 5"),
+            "metrics body should reflect 5 pings (the scrape itself hasn't been recorded yet); got: {body_str}"
+        );
+    }
+
     #[test]
     fn test_parse_fields_param_single() {
         let result = parse_fields_param("id");

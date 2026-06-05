@@ -1,10 +1,26 @@
 # TODO
 
-last audited 05-06-26 by docs-auditor
+last audited 2026-06-05 by docs-auditor (closure pass)
 
-## Status: MAJOR DRIFT FOUND
+## Status: ALL DRIFT RESOLVED (2026-06-05)
 
-The codebase is functionally correct and all 6 CI gates pass, but three independent audits found real drift between code, OpenAPI spec, and done-spec plans. **None of the drift is a runtime bug** — the OpenAPI spec is treated as documentation, not as the source of truth, and the legacy raw-TCP runtime is not the production entry point. But the spec/code mismatch is a liability: a future client written against the spec will break on the legacy path, and the spec is silently decorative in some places (e.g. `CreateReviewRequest` is not bound by the handler).
+All 28 audit items are now closed. The original 2026-05-06 audit found real drift across OpenAPI, env vars, and done specs; this closure pass resolved every item across 9 commits over the 2026-06-05 session.
+
+### Resolution summary
+
+| Group | Items | Closed by |
+|---|---|---|
+| MAJOR (M1-M5) | 5 | d1e1be1, 5f91220, 0f69397, e4d7269, 013c152, fc157c4 |
+| MINOR (m1-m9) | 9 | d1e1be1, 05d62e5, 5f91220, 16a911c, ca296c0, 0f69397 |
+| ENV (e1-e8) | 8 | 081de6e, 5a524f4, e4d7269 |
+| Doc drift | 4 | e4d7269 |
+| Spec drift (2) | seller_id→agent_id rename + requests_total hardcode | fc157c4, 013c152 |
+
+The original audit details follow below for historical reference. New work that emerges after this date should be added under a new "## NEXT AUDIT" section.
+
+## Original audit (2026-05-06, archived)
+
+The codebase was functionally correct and all 6 CI gates passed, but three independent audits found real drift between code, OpenAPI spec, and done-spec plans. **None of the drift was a runtime bug** — the OpenAPI spec was treated as documentation, not as the source of truth, and the legacy raw-TCP runtime was not the production entry point. But the spec/code mismatch was a liability: a future client written against the spec would break on the legacy path, and the spec was silently decorative in some places (e.g. `CreateReviewRequest` was not bound by the handler).
 
 | Audit | Scope | Drift count |
 |---|---|---|
@@ -12,7 +28,7 @@ The codebase is functionally correct and all 6 CI gates pass, but three independ
 | Env vars vs code + docs | `backend/server` env reads ↔ `.env.example` + README + deploy.md | 16 items (2 unused, 9 undocumented, 5 mismatches) |
 | Done specs vs code | specs 0001-0018 ↔ backend | 1 major (0013), 5 minor |
 
-## MAJOR — fix first
+### MAJOR — all closed
 
 ### M1. Pick one HTTP runtime
 
@@ -75,7 +91,7 @@ Spec says `200`; code returns `204 No Content` (semantically correct since no bo
 
 **Fix:** update `openapi.yaml` to `204` for all six. `archive_listing` is already `204` and is the reference.
 
-## MINOR — fix in next batch
+## MINOR — all closed
 
 ### m1. Add `200` response for idempotency replay on `POST /v1/listings` and `POST /v1/negotiations`
 
@@ -113,7 +129,7 @@ Plan §1 said the cache value is `Decimal` (current balance). Actual `LedgerCach
 
 Plan refers to `backend/server/src/http/handlers.rs::admin_adjust_credits`; the function is now `adjust_credits` in `actix_handlers.rs:1539`. Plan also said `POST /v1/admin/sellers/{id}/credits`; current is `POST /internal/v1/sellers/{seller_id}/credits`. **Fix:** update `0012/plan.md` §3 to current path and file.
 
-## ENV VAR DRIFT
+## ENV VAR DRIFT — all closed
 
 ### e1. `.env.example:4` says "All settings are optional"
 
@@ -183,13 +199,9 @@ Says it "maps to full-access demo Claims for both HTTP and MCP". True for HTTP, 
 - `backend/server/src/services/ledger_cache.rs` (M3 — emit hit/miss)
 - `backend/server/src/services/async_committer.rs` (M3 — emit lag/size)
 
-## PROPOSED NEXT MOVES
+## PROPOSED NEXT MOVES — all done
 
-1. **M1** — remove the legacy raw-TCP runtime (`pub use runtime::run` from `mod.rs` + delete `runtime.rs`). Single biggest risk reduction. After this, M2-m6 all reference a single source of truth.
-2. **M3** — add the four ledger metrics. Small, contained, high observability value.
-3. **M5** — flip the six 200→204 in the spec. One-line edits, no code change.
-4. **M2** — add the missing OpenAPI paths (agents, SSE, internal-ops, deprecated). Larger edit but pure documentation.
-5. **e1-e8** — env-var cleanup batch. Update `.env.example`, `.env`, README, `deploy.md`. Pure documentation.
+Items 1-5 above were the recommended next moves from the 2026-05-06 audit. All five were executed in the 2026-06-05 closure pass; see the resolution summary at the top of this file.
 
 Production deployment items (from previous TODO) that are NOT part of this audit:
 
