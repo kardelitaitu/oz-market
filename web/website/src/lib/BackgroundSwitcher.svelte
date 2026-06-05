@@ -62,6 +62,11 @@
     flex-shrink: 0;
   }
 
+  .bg-swatch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-primary);
+  }
+
   .bg-swatch::before {
     content: '';
     position: absolute;

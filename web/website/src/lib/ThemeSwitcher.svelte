@@ -63,6 +63,11 @@
     flex-shrink: 0;
   }
 
+  .theme-swatch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-primary);
+  }
+
   .theme-swatch::before {
     content: '';
     position: absolute;
