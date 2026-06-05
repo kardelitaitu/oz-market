@@ -7,35 +7,6 @@
     margin-bottom: 1.5rem;
   }
 
-  .card {
-    background: var(--bg-card);
-    backdrop-filter: var(--glass-backdrop);
-    border: 1px solid var(--border-glow);
-    border-radius: 16px;
-    padding: 2rem;
-    box-shadow: var(--glass-shadow);
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, transform 0.2s ease, box-shadow 0.4s ease 0.1s;
-  }
-
-  .card h3 {
-    font-family: var(--font-heading);
-    font-size: 1.35rem;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .card p {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    margin-bottom: 1.5rem;
-    flex-grow: 1;
-  }
-
   .docs-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

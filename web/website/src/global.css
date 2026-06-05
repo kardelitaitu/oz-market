@@ -230,23 +230,18 @@ body[data-bg="grid"] {
 /* ── Shared card component ── */
 .card {
   background: var(--bg-card);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--border-glow);
-  border-radius: 16px;
-  padding: 2rem;
-  box-shadow: var(--glass-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   height: 100%;
-  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s, transform 0.2s ease, box-shadow 0.4s ease 0.1s;
+  transition: background-color 0.3s ease, border-color 0.4s ease 0.1s;
 }
 
 .card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-glow-hover);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 15px var(--border-glow);
-  will-change: transform;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .card h3 {
