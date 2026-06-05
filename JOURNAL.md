@@ -1684,3 +1684,17 @@ pm run build compiles clean.
 pm run test:e2e tests pass successfully (7.7s duration).
   - check.ps1 runs pass successfully.
 - **Files changed (1)**: web/website/src/App.svelte (modified).
+
+## 2026-06-05 19:00 - Expand simulator flow with product listing and multi-turn negotiation
+
+- **Goal**: Expand the Interactive Agent Negotiation Simulator to showcase the full lifecycle of agentic commerce (Listing publishing -> Discovery -> Multi-turn negotiation -> Consensus -> Contact Reveal).
+- **Changed**:
+  - Refactored unSimulation and pproveReveal in web/website/src/App.svelte to introduce a listing creation phase and run a multi-turn negotiation (6 bid/counter-offer cycles).
+  - Registered the 'listing' phase in HTML markup to display the "Publishing..." status pill and disable simulator start buttons correctly.
+- **Validation**:
+  - 
+pm run build compiles clean.
+  - 
+pm run test:e2e E2E tests pass successfully (7.8s duration).
+  - check.ps1 runs pass successfully.
+- **Files changed (1)**: web/website/src/App.svelte (modified).

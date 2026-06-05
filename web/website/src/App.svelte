@@ -34,52 +34,81 @@
     clearAllTimeouts();
     if (isPaused) return;
     
-    simState = 'negotiating';
-    simLogs = ['[Buyer Agent] Initiating query for listing ID: #L-8821...'];
+    simState = 'listing';
+    simLogs = [`[${sellerName}] Publishing new product listing: "iPhone 15 Pro" at base price $200.00 (listing_id: #L-8821)...`];
+    currentPrice = 200;
     
     let t1 = setTimeout(() => {
-      simLogs = [...simLogs, `[${buyerName}] Sent initial offer: $160.00 (idempotency_key: tx-771a)`];
-      currentPrice = 160;
-    }, 1000);
+      if (isPaused) return;
+      simLogs = [...simLogs, `[${buyerName}] Discovered active listing #L-8821 via search. Initiating negotiation...`];
+    }, 800);
     
     let t2 = setTimeout(() => {
-      simLogs = [...simLogs, `[${sellerName}] Counter-offer received: $190.00 (min_seller_rating check: PASS)`];
-      currentPrice = 190;
-    }, 2000);
+      if (isPaused) return;
+      simState = 'negotiating';
+      simLogs = [...simLogs, `[${buyerName}] Sent initial low-ball offer: $150.00 (idempotency_key: tx-771a)`];
+      currentPrice = 150;
+    }, 1600);
     
     let t3 = setTimeout(() => {
-      simLogs = [...simLogs, `[${buyerName}] Analyzing price history. Countering with: $180.00`];
-      currentPrice = 180;
-    }, 3000);
+      if (isPaused) return;
+      simLogs = [...simLogs, `[${sellerName}] Counter-offer received: $195.00 (min_seller_rating check: PASS)`];
+      currentPrice = 195;
+    }, 2400);
     
     let t4 = setTimeout(() => {
-      simLogs = [...simLogs, `[${sellerName}] Consensus reached at $180.00. Writing to ledger cache...`];
-      simState = 'consensus';
-      
-      // Auto transition to reveal request in loop
-      let t5 = setTimeout(() => {
-        approveReveal();
-      }, 1500);
-      timeouts.push(t5);
+      if (isPaused) return;
+      simLogs = [...simLogs, `[${buyerName}] Countering with price history average: $165.00`];
+      currentPrice = 165;
+    }, 3200);
+    
+    let t5 = setTimeout(() => {
+      if (isPaused) return;
+      simLogs = [...simLogs, `[${sellerName}] Adjusting bid within discount limits. Counter-offer: $185.00`];
+      currentPrice = 185;
     }, 4000);
     
-    timeouts.push(t1, t2, t3, t4);
+    let t6 = setTimeout(() => {
+      if (isPaused) return;
+      simLogs = [...simLogs, `[${buyerName}] Near upper utility limit. Final offer: $178.00`];
+      currentPrice = 178;
+    }, 4800);
+
+    let t7 = setTimeout(() => {
+      if (isPaused) return;
+      simLogs = [...simLogs, `[${sellerName}] Final counter split difference: $180.00`];
+      currentPrice = 180;
+    }, 5600);
+
+    let t8 = setTimeout(() => {
+      if (isPaused) return;
+      simState = 'consensus';
+      simLogs = [...simLogs, `[${buyerName}] Accept offer $180.00. Consensus reached! Writing to ledger cache...`];
+      
+      let t9 = setTimeout(() => {
+        approveReveal();
+      }, 1200);
+      timeouts.push(t9);
+    }, 6400);
+    
+    timeouts.push(t1, t2, t3, t4, t5, t6, t7, t8);
   }
   
   function approveReveal() {
     if (isPaused) return;
     simState = 'revealing';
-    simLogs = [...simLogs, `[${buyerName}] Requesting phone details (buyer_agent_id authorized)...`];
+    simLogs = [...simLogs, `[${buyerName}] Requesting contact details (buyer_agent_id authorized)...`];
     
     let t1 = setTimeout(() => {
+      if (isPaused) return;
       simLogs = [...simLogs, `[${sellerName}] Authorizing decrypt token. Cryptographic claims matched.`];
-    }, 1000);
+    }, 800);
     
     let t2 = setTimeout(() => {
+      if (isPaused) return;
       simLogs = [...simLogs, '[System] Contact info revealed: +1-555-0199 (Seller: Alice)'];
       simState = 'completed';
       
-      // Pause 5 seconds, reset, and loop again
       let t3 = setTimeout(() => {
         resetSim();
         let t4 = setTimeout(() => {
@@ -88,7 +117,7 @@
         timeouts.push(t4);
       }, 5000);
       timeouts.push(t3);
-    }, 2000);
+    }, 1600);
     
     timeouts.push(t1, t2);
   }
@@ -247,6 +276,7 @@
             <div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Status</div>
             <div style="font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin: 0.25rem 0;">
               {#if simState === 'idle'}Idle
+              {:else if simState === 'listing'}Publishing...
               {:else if simState === 'negotiating'}Negotiating...
               {:else if simState === 'consensus'}Consensus!
               {:else if simState === 'revealing'}Authorizing...
@@ -284,6 +314,10 @@
         {#if simState === 'idle'}
           <button class="counter" onclick={runSimulation}>
             Run Negotiation Simulator
+          </button>
+        {:else if simState === 'listing'}
+          <button class="counter" style="opacity: 0.6; cursor: not-allowed;" disabled>
+            Publishing...
           </button>
         {:else if simState === 'negotiating'}
           <button class="counter" style="opacity: 0.6; cursor: not-allowed;" disabled>
