@@ -1975,6 +1975,17 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Deployment Guide & Env Examples**: Updated `.env.example` to recommend a connection pool limit of 10-15 for free database hosts, and added `DATABASE_MAX_CONNECTIONS` to the configuration reference table in `docs/deploy.md` to document the option clearly.
 - **Validation**: Ran `check.ps1` with all check tests passing successfully.
 
+## 2026-06-06 06:00 — Fix Playwright E2E hang in check.ps1
+
+- **Root cause**: Playwright's `webServer` config starts `vite preview` as a child process. On Windows, Playwright cannot reliably kill the orphaned `vite preview` after tests finish, causing the script to hang indefinitely.
+- **Fix**: Moved preview server lifecycle management into `check.ps1`:
+  - `playwright.config.js`: Made `webServer` conditional on `process.env.NO_E2E_WEBSERVER` not being set. When running from `check.ps1`, this env var suppresses Playwright's built-in server management.
+  - `check.ps1`: Checks if a server is already running on `127.0.0.1:4173`; if yes, reuses it (no start/stop). If not, starts `vite preview` as a PowerShell background job, polls for readiness (up to 30s), runs tests, then kills the job.
+  - Server health check uses `node -e` with `http.get` instead of `[System.Net.HttpWebRequest]` — Vite 8 blocks non-browser HTTP clients with `client_connect_invalid_ip` (403), but Node.js `http` module connections are treated as browser-like and allowed.
+  - Server cleanup is also in the `catch` block for error-path safety, respecting the `serverAlreadyRunning` flag.
+- **Also**: Fixed duplicate leftover lines in `check.ps1` from a partial edit (removed orphaned `Pop-Location`/catch block).
+- **Validation**: Full `check.ps1` run passes — 7/7 steps, all 409 + 99 Playwright E2E tests green.
+
 ## 2026-06-06 05:46 — Sticky footer and scrollbar layout optimizations for E2E tests
 
 - **Conditional Compact Page Layouts**: Implemented reactive body-level CSS class switching via a Svelte 5 `$effect` in `web/website/src/App.svelte`. When on the `/status` or `/getting-started` views, the classes `status-page` or `guide-page` are dynamically added to `document.body`.
@@ -1982,3 +1993,9 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Short Page Fit**: Standardized and compacted list spacings, paddings, and hero margins in both `StatusTab.svelte` and `GuideTab.svelte` (removing redundant inline CSS). This successfully reduced the vertical page height from ~934px to exactly 720px, fitting the Playwright 1280x720 desktop viewport without triggering scrollbars.
 - **Tests Execution Robustness**: Added error logging for caught exceptions in the Tests execution catch block in `check.ps1` to facilitate future diagnostics.
 - **Validation**: Re-built the website cleanly; ran the full `check.ps1` CI suite with all 99 Playwright E2E and cargo tests passing successfully.
+
+## 2026-06-06 06:20 — Neon Database Migrations and Frontend Config for Production Deployment
+
+- **Database Provisioning**: Executed `bootstrap_schema` locally against the Neon PostgreSQL production database connection string. All 14 migrations (`0001_init.sql` to `0014_add_credit_ledger.sql`) successfully compiled and applied, completing the schema configuration on Neon.
+- **Dynamic Backend URL Injection**: Modified Svelte frontend entry point `web/website/src/main.js` to read `import.meta.env.VITE_BACKEND_URL` and expose it via `window.__BACKEND_URL` to allow dynamic connection overrides (e.g., when deployed on Netlify to connect to Render).
+- **Validation**: Ran full local verification via `check.ps1`; website build and Playwright E2E tests all pass cleanly with zero errors.

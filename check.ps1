@@ -187,9 +187,10 @@ if (-not $SkipTests -and -not $failed) {
     Write-StepHeader $stepNum "$cmd"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        cargo test --lib
-        $elapsed = $sw.Elapsed.TotalSeconds
+        $output = cargo test --lib 2>&1
         $passed = $LASTEXITCODE -eq 0
+        if (-not $passed) { Write-Host $output }
+        $elapsed = $sw.Elapsed.TotalSeconds
         $results.Tests = @{ Passed = $passed; Duration = $elapsed }
         Write-StepResult $passed
         if (-not $passed) { $failed = $true }
@@ -197,8 +198,6 @@ if (-not $SkipTests -and -not $failed) {
         $elapsed = $sw.Elapsed.TotalSeconds
         $results.Tests = @{ Passed = $false; Duration = $elapsed }
         Write-StepResult $false
-        Write-Status "Tests error: $_" "Yellow"
-        if ($_.Exception) { Write-Status "Exception: $($_.Exception.Message)" "Yellow" }
         $failed = $true
     }
     $stepNum++
@@ -211,23 +210,50 @@ if (-not $SkipTests -and -not $failed) {
         $cmd = "npm run build (oz-market-website)"
         Write-StepHeader $stepNum "$cmd"
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $buildOk = $true
         try {
             Push-Location $websiteDir
-            npm run build
-            $elapsed = $sw.Elapsed.TotalSeconds
-            $passed = $LASTEXITCODE -eq 0
-            if ($passed) {
-                # Run Playwright E2E tests (headless chromium)
+            $output = npm run build 2>&1
+            $buildOk = $LASTEXITCODE -eq 0
+            if (-not $buildOk) { Write-Host $output }
+            if ($buildOk) {
                 npx playwright install chromium --with-deps 2>$null
-                npm run test:e2e
-                $passed = $LASTEXITCODE -eq 0
+                $env:NO_E2E_WEBSERVER = "1"
+                # Check if a preview server is already running
+                # NOTE: Must use Node.js http module — Vite 8 blocks non-browser HTTP
+                $serverAlreadyRunning = $false
+                node -e "const h=require('http');h.get('http://127.0.0.1:4173/',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>$null
+                if ($LASTEXITCODE -eq 0) { $serverAlreadyRunning = $true }
+                if (-not $serverAlreadyRunning) {
+                    $serverJob = Start-Job -ScriptBlock { param($dir) Set-Location $dir; npx vite preview --port 4173 --host 127.0.0.1 } -ArgumentList $websiteDir
+                    $ready = $false
+                    for ($i = 0; $i -lt 30; $i++) {
+                        Start-Sleep -Seconds 1
+                        node -e "const h=require('http');h.get('http://127.0.0.1:4173/',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>$null
+                        if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+                    }
+                    if (-not $ready) { throw "vite preview did not start within 30s" }
+                }
+                $output = npx playwright test 2>&1
+                $buildOk = $LASTEXITCODE -eq 0
+                if (-not $buildOk) { Write-Host $output }
+                if (-not $serverAlreadyRunning) {
+                    Stop-Job $serverJob -ErrorAction SilentlyContinue
+                    Remove-Job $serverJob -ErrorAction SilentlyContinue
+                }
+                Remove-Item Env:\NO_E2E_WEBSERVER -ErrorAction SilentlyContinue
             }
             Pop-Location
             $elapsed = $sw.Elapsed.TotalSeconds
-            $results.Website = @{ Passed = $passed; Duration = $elapsed }
-            Write-StepResult $passed
-            if (-not $passed) { $failed = $true }
+            $results.Website = @{ Passed = $buildOk; Duration = $elapsed }
+            Write-StepResult $buildOk
+            if (-not $buildOk) { $failed = $true }
         } catch {
+            if (-not $serverAlreadyRunning) {
+                Stop-Job $serverJob -ErrorAction SilentlyContinue
+                Remove-Job $serverJob -ErrorAction SilentlyContinue
+            }
+            Remove-Item Env:\NO_E2E_WEBSERVER -ErrorAction SilentlyContinue
             Pop-Location
             $elapsed = $sw.Elapsed.TotalSeconds
             $results.Website = @{ Passed = $false; Duration = $elapsed }

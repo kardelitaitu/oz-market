@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-export default defineConfig({
+const config = {
   testDir: './tests',
   fullyParallel: false, // Run sequentially to prevent timing conflicts
   forbidOnly: !!process.env.CI,
@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',
   },
   projects: [
@@ -17,12 +17,18 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npx vite preview --port 4173 --host 0.0.0.0',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
+};
+
+// When invoked from check.ps1, the preview server is managed externally
+if (!process.env.NO_E2E_WEBSERVER) {
+  config.webServer = {
+    command: 'npx vite preview --port 4173 --host 127.0.0.1',
+    url: 'http://127.0.0.1:4173',
+    reuseExistingServer: false,
     stdout: 'pipe',
     stderr: 'pipe',
     timeout: 180000,
-  },
-});
+  };
+}
+
+export default defineConfig(config);
