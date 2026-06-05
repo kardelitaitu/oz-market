@@ -2,7 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
 
 :root {
-  /* Color Palette - Premium HSL Dark Mode */
+  /* Color Palette - Default Midnight Theme */
   --bg-dark: HSL(224, 25%, 8%);
   --bg-card: HSL(224, 25%, 12%, 0.7);
   --bg-card-hover: HSL(224, 25%, 16%, 0.8);
@@ -20,6 +20,9 @@
   --color-success: HSL(142, 70%, 45%);
   --color-accent: HSL(320, 85%, 60%);
   
+  --bg-glow-1: HSL(263, 90%, 65%, 0.08);
+  --bg-glow-2: HSL(190, 90%, 50%, 0.05);
+
   /* Fonts */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-heading: 'Outfit', var(--font-sans);
@@ -32,11 +35,102 @@
   color-scheme: dark;
 }
 
+/* 5 Themes Custom Variables Override on Body */
+body[data-theme="midnight"] {
+  --bg-dark: HSL(224, 25%, 8%);
+  --bg-card: HSL(224, 25%, 12%, 0.7);
+  --bg-card-hover: HSL(224, 25%, 16%, 0.8);
+  --border-glow: HSL(263, 70%, 50%, 0.2);
+  --border-glow-hover: HSL(263, 70%, 50%, 0.4);
+  --text-primary: HSL(210, 40%, 98%);
+  --text-secondary: HSL(215, 20%, 65%);
+  --text-muted: HSL(215, 16%, 47%);
+  --color-primary: HSL(263, 90%, 65%);
+  --color-primary-glow: HSL(263, 90%, 65%, 0.15);
+  --color-secondary: HSL(190, 90%, 50%);
+  --color-secondary-glow: HSL(190, 90%, 50%, 0.15);
+  --color-accent: HSL(320, 85%, 60%);
+  --bg-glow-1: HSL(263, 90%, 65%, 0.08);
+  --bg-glow-2: HSL(190, 90%, 50%, 0.05);
+}
+
+body[data-theme="emerald"] {
+  --bg-dark: HSL(140, 30%, 6%);
+  --bg-card: HSL(140, 25%, 10%, 0.7);
+  --bg-card-hover: HSL(140, 25%, 14%, 0.8);
+  --border-glow: HSL(142, 70%, 45%, 0.2);
+  --border-glow-hover: HSL(142, 70%, 45%, 0.4);
+  --text-primary: HSL(140, 40%, 98%);
+  --text-secondary: HSL(140, 15%, 65%);
+  --text-muted: HSL(140, 12%, 47%);
+  --color-primary: HSL(142, 80%, 50%);
+  --color-primary-glow: HSL(142, 80%, 50%, 0.15);
+  --color-secondary: HSL(160, 90%, 45%);
+  --color-secondary-glow: HSL(160, 90%, 45%, 0.15);
+  --color-accent: HSL(84, 80%, 55%);
+  --bg-glow-1: HSL(142, 80%, 50%, 0.06);
+  --bg-glow-2: HSL(160, 90%, 45%, 0.04);
+}
+
+body[data-theme="crimson"] {
+  --bg-dark: HSL(345, 20%, 8%);
+  --bg-card: HSL(345, 15%, 12%, 0.7);
+  --bg-card-hover: HSL(345, 15%, 16%, 0.8);
+  --border-glow: HSL(342, 75%, 50%, 0.2);
+  --border-glow-hover: HSL(342, 75%, 50%, 0.4);
+  --text-primary: HSL(345, 30%, 98%);
+  --text-secondary: HSL(345, 12%, 65%);
+  --text-muted: HSL(345, 10%, 47%);
+  --color-primary: HSL(342, 85%, 60%);
+  --color-primary-glow: HSL(342, 85%, 60%, 0.15);
+  --color-secondary: HSL(25, 95%, 55%);
+  --color-secondary-glow: HSL(25, 95%, 55%, 0.15);
+  --color-accent: HSL(315, 80%, 65%);
+  --bg-glow-1: HSL(342, 85%, 60%, 0.07);
+  --bg-glow-2: HSL(25, 95%, 55%, 0.04);
+}
+
+body[data-theme="solar"] {
+  --bg-dark: HSL(28, 15%, 7%);
+  --bg-card: HSL(28, 12%, 11%, 0.7);
+  --bg-card-hover: HSL(28, 12%, 15%, 0.8);
+  --border-glow: HSL(38, 85%, 50%, 0.2);
+  --border-glow-hover: HSL(38, 85%, 50%, 0.4);
+  --text-primary: HSL(35, 40%, 98%);
+  --text-secondary: HSL(35, 15%, 65%);
+  --text-muted: HSL(35, 12%, 47%);
+  --color-primary: HSL(38, 95%, 55%);
+  --color-primary-glow: HSL(38, 95%, 55%, 0.15);
+  --color-secondary: HSL(20, 90%, 55%);
+  --color-secondary-glow: HSL(20, 90%, 55%, 0.15);
+  --color-accent: HSL(45, 90%, 50%);
+  --bg-glow-1: HSL(38, 95%, 55%, 0.08);
+  --bg-glow-2: HSL(20, 90%, 55%, 0.05);
+}
+
+body[data-theme="nordic"] {
+  --bg-dark: HSL(210, 25%, 9%);
+  --bg-card: HSL(210, 20%, 13%, 0.7);
+  --bg-card-hover: HSL(210, 20%, 17%, 0.8);
+  --border-glow: HSL(200, 75%, 50%, 0.2);
+  --border-glow-hover: HSL(200, 75%, 50%, 0.4);
+  --text-primary: HSL(200, 30%, 98%);
+  --text-secondary: HSL(200, 15%, 70%);
+  --text-muted: HSL(200, 10%, 50%);
+  --color-primary: HSL(200, 85%, 60%);
+  --color-primary-glow: HSL(200, 85%, 60%, 0.15);
+  --color-secondary: HSL(180, 70%, 50%);
+  --color-secondary-glow: HSL(180, 70%, 50%, 0.15);
+  --color-accent: HSL(220, 85%, 65%);
+  --bg-glow-1: HSL(200, 85%, 60%, 0.08);
+  --bg-glow-2: HSL(180, 70%, 50%, 0.05);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease, background-image 0.3s ease;
 }
 
 body {
@@ -46,8 +140,8 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
   background-image: 
-    radial-gradient(circle at 10% 20%, HSL(263, 90%, 65%, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 90% 80%, HSL(190, 90%, 50%, 0.05) 0%, transparent 40%);
+    radial-gradient(circle at 10% 20%, var(--bg-glow-1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, var(--bg-glow-2) 0%, transparent 40%);
   background-attachment: fixed;
 }
 
@@ -91,7 +185,7 @@ header {
 nav {
   display: flex;
   gap: 0.5rem;
-  background: HSL(224, 25%, 6%);
+  background: rgba(0, 0, 0, 0.25);
   padding: 0.35rem;
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -235,7 +329,7 @@ nav button.active {
 }
 
 .doc-item {
-  background: HSL(224, 25%, 10%);
+  background: var(--bg-card);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   padding: 1.25rem;
@@ -246,7 +340,7 @@ nav button.active {
 
 .doc-item:hover {
   border-color: var(--color-primary);
-  background: HSL(224, 25%, 13%);
+  background: var(--bg-card-hover);
 }
 
 .doc-info {
@@ -297,7 +391,7 @@ th, td {
 }
 
 th {
-  background: HSL(224, 25%, 10%);
+  background: rgba(255, 255, 255, 0.03);
   font-family: var(--font-heading);
   font-weight: 600;
   color: var(--text-primary);
@@ -308,12 +402,12 @@ tr:last-child td {
 }
 
 tr:hover td {
-  background: HSL(224, 25%, 14%, 0.3);
+  background: var(--color-primary-glow);
 }
 
 /* Code & Command Blocks */
 pre {
-  background: HSL(224, 25%, 5%);
+  background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   padding: 1rem;
@@ -341,7 +435,7 @@ code {
 }
 
 .device-tab {
-  background: HSL(224, 25%, 10%);
+  background: var(--bg-card);
   border: 1px solid rgba(255, 255, 255, 0.05);
   padding: 1rem;
   border-radius: 12px;
@@ -379,7 +473,7 @@ code {
 
 .guide-step {
   margin-bottom: 2rem;
-  background: HSL(224, 25%, 10%, 0.5);
+  background: rgba(255, 255, 255, 0.02);
   padding: 1.5rem;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.03);
@@ -408,4 +502,42 @@ footer {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+/* Theme Selector Styling */
+.theme-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 0.4rem 0.8rem;
+  transition: all 0.3s ease;
+}
+
+.theme-selector-container:hover {
+  border-color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.theme-selector-container span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.theme-select {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.theme-select option {
+  background: var(--bg-dark);
+  color: var(--text-primary);
 }

@@ -28,8 +28,21 @@ function Test-JournalAppendOnly {
         return @{ Passed = $true; Message = "$Path is unchanged (append-only)" }
     }
 
-    $hasRemovals = $diff | Select-String "^-" | Where-Object { $_ -notmatch "^\-\-\-" }
-    if ($hasRemovals) {
+    # Filter out removals. A pure append should only have '+' lines.
+    # However, if the last line of the file did not have a trailing newline in HEAD,
+    # git diff will report it as a removal of the line without newline, and addition of the line with newline.
+    # We detect and allow this specific case if the removed line is identical to an added line.
+    $removedLines = $diff | Where-Object { $_ -match "^-[^-]" } | ForEach-Object { $_.Substring(1) }
+    $addedLines = $diff | Where-Object { $_ -match "^\+[^+]" } | ForEach-Object { $_.Substring(1) }
+
+    $realRemovals = @()
+    foreach ($r in $removedLines) {
+        if ($addedLines -notcontains $r) {
+            $realRemovals += $r
+        }
+    }
+
+    if ($realRemovals.Count -gt 0) {
         return @{ Passed = $false; Message = "$Path changed before the append-only boundary" }
     }
 

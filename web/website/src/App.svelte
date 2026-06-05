@@ -3,6 +3,9 @@
   let currentTab = $state('home');
   let deviceTab = $state('server');
   
+  // Theme selection state
+  let currentTheme = $state(localStorage.getItem('oz-market-theme') || 'midnight');
+  
   // Simulator States
   let simState = $state('idle'); // idle, negotiating, consensus, revealing, completed
   let simLogs = $state([]);
@@ -133,6 +136,12 @@
     }
   }
   
+  // Svelte 5 $effect to bind the active theme to document body
+  $effect(() => {
+    document.body.setAttribute('data-theme', currentTheme);
+    localStorage.setItem('oz-market-theme', currentTheme);
+  });
+
   // Svelte 5 $effect to trigger autoplay and metrics polling
   $effect(() => {
     if (!isPaused) {
@@ -159,6 +168,16 @@
     <button class={currentTab === 'guide' ? 'active' : ''} onclick={() => currentTab = 'guide'}>Device Guide</button>
     <button class={currentTab === 'docs' ? 'active' : ''} onclick={() => currentTab = 'docs'}>Documentation</button>
   </nav>
+  <div class="theme-selector-container">
+    <span>Theme:</span>
+    <select bind:value={currentTheme} class="theme-select" aria-label="Select Theme">
+      <option value="midnight">Midnight</option>
+      <option value="emerald">Emerald</option>
+      <option value="crimson">Crimson</option>
+      <option value="solar">Solar</option>
+      <option value="nordic">Nordic</option>
+    </select>
+  </div>
 </header>
 
 <main class="container">
@@ -205,7 +224,7 @@
         Click below to simulate how autonomous buyer and seller AI agents discover, negotiate, and transact on listings using the frozen `openapi.yaml` contract.
       </p>
       
-      <div style="background: HSL(224, 25%, 6%); border-radius: 12px; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1.5rem;">
+      <div style="background: rgba(0, 0, 0, 0.25); border-radius: 12px; padding: 2rem; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 1.5rem;">
         <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1.5rem;">
           <!-- Buyer Agent Card -->
           <div style="background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.5rem; border-radius: 12px; min-width: 200px; text-align: center; max-width: 280px; overflow: hidden;">
@@ -245,7 +264,7 @@
             <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
           {:else}
             {#each simLogs as log}
-              <div style="font-family: var(--font-mono); font-size: 0.85rem; color: HSL(190, 80%, 75%); margin-bottom: 0.25rem;">{log}</div>
+              <div style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-secondary); margin-bottom: 0.25rem;">{log}</div>
             {/each}
           {/if}
         </div>

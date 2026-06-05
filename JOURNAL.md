@@ -1622,3 +1622,19 @@ pm run build compiles clean with zero warnings.
 pm run build compiles clean.
   - check.ps1 runs pass successfully.
 - **Files changed (2)**: web/website/package.json and web/website/src/App.svelte (modified).
+
+## 2026-06-05 18:30 - Implement Multi-Theme Switcher
+
+- **Goal**: Add 5 premium themes (Midnight, Emerald, Crimson, Solar, Nordic) to the website with Svelte 5 state binding and persistence.
+- **Changed**:
+  - Defined HSL color schemes and spot glow variables for 5 themes in web/website/src/global.css.
+  - Added .theme-selector-container and .theme-select CSS styles.
+  - Refactored legacy hardcoded backgrounds (nav, doc-item, pre, device-tab, guide-step) and table headers/hover states to reference theme variables.
+  - Added Svelte 5 reactive theme state currentTheme and a $effect block in web/website/src/App.svelte to bind the selected theme to document.body attributes and persist it in localStorage.
+  - Inserted the custom-designed select dropdown in the <header> container next to the navigation links.
+  - Swapped hardcoded HSL colors in the simulator background and logs to use transparent overrides and --color-secondary.
+- **Validation**:
+  - 
+pm run build compiles clean with zero warnings.
+  - check.ps1 runs clean on all 6 validation stages (Journal, ActiveSpecs, Build, Format, Clippy, Tests).
+- **Files changed (2)**: web/website/src/global.css and web/website/src/App.svelte (modified).
