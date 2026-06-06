@@ -662,7 +662,7 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     let database_url = load_database_url(database_url_env)
-        .unwrap_or_else(|| "postgresql://neondb_owner:npg_8YFsTIDRAP3n@ep-polished-recipe-aoqng0w6.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require".to_string());
+        .unwrap_or_else(|| "postgresql://neondb_owner:npg_gli6uPKtrHv7@ep-polished-recipe-aoqng0w6-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require".to_string());
 
     let app = build_postgres_app(&database_url).await?;
     run_agent(app, claims).await

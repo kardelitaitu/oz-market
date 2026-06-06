@@ -2058,3 +2058,8 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 - **NPM Package Version Bump Script**: Updated `backend/mcp/npm/build-npm.ps1` to implement a semver rollover capping mechanism at `99` (e.g. `1.0.99` rolls over to `1.1.0` and `1.1.99` rolls over to `1.2.0`). This applies to both manual bumps and registry-existence checks during compilation.
 - **Validation**: Bounded package version to `1.0.99` and successfully verified compilation auto-rolled the version to `1.1.0`. Restored version to `1.0.2` and verified that running the build auto-bumps to `1.0.3` since `1.0.2` is already published. Ran `check.ps1` successfully.
+
+## 2026-06-06 16:20 — Update MCP Database Credentials Fallback
+
+- **MCP Database Connection Fallback**: Updated the hardcoded fallback database connection string in `backend/mcp/src/runtime.rs` to use the rotated Neon PostgreSQL database credentials and pooler host.
+- **Validation**: Compiled Windows and Linux binaries containing the new credentials fallback successfully; verified repository health via `check.ps1`.
