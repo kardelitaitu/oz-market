@@ -1,0 +1,2 @@
+# Local built binaries should not be committed to Git
+binaries/

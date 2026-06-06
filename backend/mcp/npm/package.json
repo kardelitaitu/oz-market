@@ -1,0 +1,16 @@
+{
+  "name": "@kardelitaitu/oz-market-mcp",
+  "version": "1.0.0",
+  "description": "NPM wrapper for the Rust oz-market-mcp binary",
+  "main": "bin/index.js",
+  "bin": {
+    "oz-market-mcp": "./bin/index.js"
+  },
+  "files": [
+    "bin/",
+    "binaries/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

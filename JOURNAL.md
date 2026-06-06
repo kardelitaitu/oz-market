@@ -2018,3 +2018,13 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 - **Git Ignore**: Added `.netlify` folder to `.gitignore` to prevent tracking local Netlify state and functions metadata files.
 - **Validation**: Verified build and deploy config; git status clean.
+
+## 2026-06-06 09:40 — NPM Packaging for oz-market-mcp Server
+
+- **NPM Package Wrapper**: Created the npm wrapper structure in `backend/mcp/npm/` containing:
+  - `package.json` to publish the `@kardelitaitu/oz-market-mcp` package.
+  - `bin/index.js` as the Node.js wrapper that detects the platform (`win32` etc.) and spawns the compiled Rust binary, with fallback to local release/debug workspace builds.
+  - `README.md` containing end-user instructions and configuration example for Claude Desktop.
+  - `build-npm.ps1` to compile the release version of `oz-market-mcp` and package it in `binaries/win32/`.
+  - `.gitignore` to avoid checking the platform binaries into Git.
+- **Validation**: Built the binary and successfully verified the `npx` wrapper startup behavior locally; ran the root `check.ps1` validation suite (all 7 steps passed).
