@@ -1,0 +1,4 @@
+# Force LF line endings for SQL migration files to ensure consistent
+# SHA-256 checksums across Windows and Linux builds (sqlx embeds the
+# file bytes at compile time via include_str!).
+*.sql text eol=lf

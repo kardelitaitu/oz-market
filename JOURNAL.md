@@ -2004,5 +2004,12 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 ## 2026-06-06 07:23 — Fix Render build failure: "migration 6 was previously applied but has been modified"
 
-- **Root cause**: Migration `0006_create_reviews_table.sql` was modified after being applied to the production database. The original (commit `8fc6cc1`) contained the `update_seller_rating()` function + INSERT/UPDATE/DELETE triggers. Commit `b138254` stripped them out to move triggers to a separate script. This changed the SQLx checksum, so on next deploy SQLx refused to run.
-- **Fix**: Reverted `0006_create_reviews_table.sql` back to its original content (matching commit `8fc6cc1`). The database already has these objects; this just restores the checksum match so SQLx passes validation.
+- **First fix (incorrect)**: Reverted `0006_create_reviews_table.sql` to original `8fc6cc1` version (with triggers/function). This was wrong — the DB was provisioned at `a5fbec1` with the stripped version.
+
+## 2026-06-06 07:40 — Real fix: CRLF/LF line ending mismatch in migration files
+
+- **Root cause**: Migrations 0006, 0007, 0013 had CRLF line endings in the working tree (`w/crlf`) while stored as LF in git (`i/lf`). When `bootstrap_schema` was run locally on Windows, `include_str!` read CRLF bytes → SHA256(CRLF) stored in `_sqlx_migrations`. When Docker builds on Linux, `include_str!` reads LF bytes → SHA256(LF) embedded in binary. SHA256(CRLF) ≠ SHA256(LF) → SQLx checksum mismatch.
+- **Fix**:
+  - Created `.gitattributes` with `*.sql text eol=lf` to force LF line endings for all SQL migration files
+  - Normalized all 14 migration files to LF endings
+  - Reverted `0006_create_reviews_table.sql` back to stripped version (no triggers) matching the applied DB schema
