@@ -52,20 +52,8 @@ name = "schema_test"
 path = "src/bin/schema_test.rs"
 
 [[bin]]
-name = "bench_concurrent"
-path = "src/bin/bench_concurrent.rs"
-
-[[bin]]
-name = "http_bench"
-path = "src/bin/http_bench.rs"
-
-[[bin]]
 name = "populate_db"
 path = "src/bin/populate_db.rs"
-
-[[bin]]
-name = "pg_search_bench"
-path = "src/bin/pg_search_bench.rs"
 
 [[bin]]
 name = "sse_bench"
@@ -82,8 +70,3 @@ protoc-bin-vendored = "3.0"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 proptest = "1"
-criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bench]]
-name = "search_bench"
-harness = false

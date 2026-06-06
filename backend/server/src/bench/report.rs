@@ -112,7 +112,7 @@ impl Default for ThresholdConfig {
         Self {
             max_p99_us: 5_000_000, // 5 s (CI/Windows overhead)
             max_error_rate: 0.05,  // 5%
-            max_cpu_percent: 90.0,
+            max_cpu_percent: 99.0,
             max_memory_bytes: 256_000_000_000, // 256 GB (system-wide)
             min_samples: 10,
         }

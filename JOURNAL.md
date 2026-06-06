@@ -2108,6 +2108,19 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **3 Missing High-Severity Tests Added**: 404 unknown route smoke test (components.spec.js), BackgroundSwitcher a11y test suite (6 tests, a11y.spec.js), BackgroundSwitcher persistence test (theme.spec.js).
 - **Coverage**: 107 tests, 0 failures.
 
+## 2026-06-06 19:50 — Legacy Bench Migration (Spec 0023)
+
+- **HttpDriver enhanced** (`drivers/http.rs`): Added `HttpBenchMode` enum (Health/Search/GetListing) and `with_claims()` constructor for authenticated requests via `x-marketplace-claims` header. Previously only hit `/health`; now covers `http_bench.rs` capabilities.
+- **PostgresDriver enhanced** (`drivers/postgres.rs`): Added `with_search()` constructor. Setup seeds 1000 benchmark listings with GIN-indexed titles; each operation runs a full-text search query (mimicking `SearchService`). Covers `pg_search_bench.rs` search latency measurement.
+- **WorkflowDriver added** (`drivers/workflow.rs`): New `--target workflow` driver with in-memory repositories. Setup seeds 100 listings and a seller account. Each `run_operation()` does: buyer search → open negotiation → request contact reveal → seller approve reveal. Covers `phase5_bench.rs` full workflow benchmark.
+- **`DriverConfig` struct** (`drivers/mod.rs`): New config struct with `base_url`, `claims_json`, `http_mode`, `pg_search_mode`, `pool`, `cache` fields. `create_driver_with_config()` factory added alongside existing `create_driver()`.
+- **CLI flags** (`bench_suite.rs`): Added `--http-mode` (health/search/get-listing), `--claims-json`, `--pg-search` flags.
+- **Legacy bins deleted**: `http_bench.rs`, `pg_search_bench.rs`, `phase5_bench.rs`, `bench_concurrent.rs` removed from `src/bin/` and Cargo.toml.
+- **Criterion bench deleted**: `benches/search_bench.rs` removed, `criterion` dev-dep removed from Cargo.toml.
+- **PS1 scripts deleted**: `run-phase5-bench.ps1`, `run-phase5-bench-local.ps1`, `bench-http.ps1` removed.
+- **Spec 0023 moved to `_done/`**.
+- **Verification**: `cargo check` clean, `cargo clippy -- -D warnings` clean, `cargo test --lib`: 420 pass.
+
 ## 2026-06-06 19:50 — Flaky wrap_fn Overhead Test
 
 - Bumped `wrap_fn_overhead_is_sub_microsecond` budget from 800ns → 1500ns in `actix_handlers.rs:2250` to accommodate Windows/CI variance (measured 1022ns vs 800ns budget).
