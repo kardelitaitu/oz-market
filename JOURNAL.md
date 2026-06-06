@@ -2043,3 +2043,12 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **NPM Package Config & Docs**: Simplified `backend/mcp/npm/README.md` to remove the database URL from the required Claude Desktop configuration example (so users only need to specify their API key). Bumped version in `package.json` to `1.0.2`.
 - **Version Bump Automation**: Added automated version checking and incrementation to `backend/mcp/npm/build-npm.ps1`. The script queries the npm registry via `npm view` to check if the current `package.json` version is already published. If it is (or if the `-Bump` switch is passed), it automatically increments the patch version in `package.json` before building, preventing future 403 publish collision errors.
 - **Validation**: Compiled Windows native and Linux Docker binaries for version `1.0.2` successfully using the new script; ran the full `check.ps1` CI checks suite successfully.
+
+## 2026-06-06 15:45 — NPM Package Successfully Published to Registry
+
+- **NPM Package Registry Publication**: Successfully authenticated with the npm registry under the `@kardelitaitu` organization scope and published the package `@kardelitaitu/oz-market-mcp@1.0.2`.
+- **Packaging Content**: The published package contains:
+  - Multi-platform precompiled release binaries for Windows (`binaries/win32/oz-market-mcp.exe`) and Linux (`binaries/linux/oz-market-mcp`), the latter built inside a Debian Docker container.
+  - Node.js wrapper binary launcher script (`bin/index.js`) to parse client operating systems and spawn the correct native execution engine.
+  - Simplified Claude Desktop configuration guides, allowing end-users to use the marketplace tools sidecar via `npx` with just their `MARKETPLACE_API_KEY`.
+- **Validation**: Verified package availability in the npm registry via `npm info`, confirming version `1.0.2` is the active, live target version for all `npx` installations.
