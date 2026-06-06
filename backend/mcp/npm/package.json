@@ -4,7 +4,7 @@
   "description": "NPM wrapper for the Rust oz-market-mcp binary",
   "main": "bin/index.js",
   "bin": {
-    "oz-market-mcp": "./bin/index.js"
+    "oz-market-mcp": "bin/index.js"
   },
   "files": [
     "bin/",
