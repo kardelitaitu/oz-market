@@ -2028,3 +2028,11 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - `build-npm.ps1` to compile the release version of `oz-market-mcp` and package it in `binaries/win32/`.
   - `.gitignore` to avoid checking the platform binaries into Git.
 - **Validation**: Built the binary and successfully verified the `npx` wrapper startup behavior locally; ran the root `check.ps1` validation suite (all 7 steps passed).
+
+## 2026-06-06 14:41 — Expand build-npm.ps1 to Support Multi-Platform and Docker Cross-Compilation
+
+- **NPM Package Build Script**: Updated `backend/mcp/npm/build-npm.ps1` to:
+  - Support native compilation for the active host (Windows, macOS, Linux).
+  - Add cross-compilation support for Linux when running on Windows/macOS using Docker. It starts a `rust:1.94-slim-bookworm` container, installs necessary build-time packages (`pkg-config`, `libssl-dev`, `curl`, `ca-certificates`), and builds the Linux binary.
+  - Fix a positional parameter bug with `Join-Path` to ensure compatibility across all PowerShell versions.
+- **Validation**: Compiled both `win32` natively and `linux` via Docker using `.\build-npm.ps1 -Target all` successfully; verified that all project checks pass via `check.ps1`.
