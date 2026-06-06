@@ -651,16 +651,21 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let claims = load_claims()?;
-    match load_database_url(std::env::var("MARKETPLACE_MCP_DATABASE_URL").ok()) {
-        Some(database_url) => {
-            let app = build_postgres_app(&database_url).await?;
-            run_agent(app, claims).await
-        }
-        None => {
+    let database_url_env = std::env::var("MARKETPLACE_MCP_DATABASE_URL").ok();
+
+    if let Some(ref val) = database_url_env {
+        if val.trim() == "in-memory" {
+            eprintln!("using in-memory app for MCP agent");
             let app = build_in_memory_app();
-            run_agent(app, claims).await
+            return run_agent(app, claims).await;
         }
     }
+
+    let database_url = load_database_url(database_url_env)
+        .unwrap_or_else(|| "postgresql://neondb_owner:npg_8YFsTIDRAP3n@ep-polished-recipe-aoqng0w6.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require".to_string());
+
+    let app = build_postgres_app(&database_url).await?;
+    run_agent(app, claims).await
 }
 
 async fn run_agent<LR, IR, RR, CR>(

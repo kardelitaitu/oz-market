@@ -14,7 +14,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet("win32", "darwin", "linux", "all", "native")]
-    [string]$Target = "native"
+    [string]$Target = "native",
+    [switch]$Bump
 )
 
 $ErrorActionPreference = "Stop"
@@ -100,6 +101,62 @@ function Build-LinuxDocker {
 }
 
 # Main Execution Flow
+# 1. Version Bump Automation
+$packageJsonPath = Join-Path $scriptRoot "package.json"
+if (Test-Path $packageJsonPath) {
+    $content = Get-Content $packageJsonPath -Raw
+    if ($content -match '"version":\s*"(\d+)\.(\d+)\.(\d+)"') {
+        $major = [int]$Matches[1]
+        $minor = [int]$Matches[2]
+        $patch = [int]$Matches[3]
+        $currentVersion = "$major.$minor.$patch"
+        
+        Write-Host "Checking version status for $currentVersion..." -ForegroundColor Gray
+        
+        # Check npm registry to see if this version is already published
+        $packageName = "@kardelitaitu/oz-market-mcp"
+        $versionExists = $false
+        try {
+            $publishedJson = & npm view $packageName versions --json 2>$null
+            if ($publishedJson) {
+                $published = $publishedJson | ConvertFrom-Json
+                [array]$publishedList = @()
+                if ($published -is [array]) {
+                    $publishedList = $published
+                } elseif ($published -is [string]) {
+                    $publishedList = @($published)
+                }
+                if ($publishedList -contains $currentVersion) {
+                    $versionExists = $true
+                }
+            }
+        } catch {
+            # Package might not exist yet
+        }
+        
+        if ($versionExists -or $Bump) {
+            $newPatch = $patch + 1
+            $newVersion = "$major.$minor.$newPatch"
+            
+            if ($versionExists) {
+                Write-Host "Version $currentVersion is already published on the NPM registry. Auto-bumping version..." -ForegroundColor Yellow
+                while ($publishedList -contains $newVersion) {
+                    $newPatch++
+                    $newVersion = "$major.$minor.$newPatch"
+                }
+            } else {
+                Write-Host "Manual version bump requested..." -ForegroundColor Cyan
+            }
+            
+            $content = $content -replace '"version":\s*"\d+\.\d+\.\d+"', ('"version": "' + $newVersion + '"')
+            $content | Out-File $packageJsonPath -Encoding utf8
+            Write-Host "Successfully bumped package.json version to: $newVersion" -ForegroundColor Green
+        } else {
+            Write-Host "Version $currentVersion is available to publish. No auto-bump needed." -ForegroundColor Gray
+        }
+    }
+}
+
 Write-Host "Starting build execution with Target: $Target..." -ForegroundColor Green
 
 switch ($Target) {

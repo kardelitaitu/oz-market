@@ -2036,3 +2036,10 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - Add cross-compilation support for Linux when running on Windows/macOS using Docker. It starts a `rust:1.94-slim-bookworm` container, installs necessary build-time packages (`pkg-config`, `libssl-dev`, `curl`, `ca-certificates`), and builds the Linux binary.
   - Fix a positional parameter bug with `Join-Path` to ensure compatibility across all PowerShell versions.
 - **Validation**: Compiled both `win32` natively and `linux` via Docker using `.\build-npm.ps1 -Target all` successfully; verified that all project checks pass via `check.ps1`.
+
+## 2026-06-06 15:04 — Hardcoded Database Fallback & Version Bump Automation
+
+- **MCP Database Connection Fallback**: Updated the `async_run()` loop in `backend/mcp/src/runtime.rs` to default to the production Neon PostgreSQL database URL if the `MARKETPLACE_MCP_DATABASE_URL` environment variable is omitted. Added an explicit `"in-memory"` string override check to still allow local memory-only tests.
+- **NPM Package Config & Docs**: Simplified `backend/mcp/npm/README.md` to remove the database URL from the required Claude Desktop configuration example (so users only need to specify their API key). Bumped version in `package.json` to `1.0.2`.
+- **Version Bump Automation**: Added automated version checking and incrementation to `backend/mcp/npm/build-npm.ps1`. The script queries the npm registry via `npm view` to check if the current `package.json` version is already published. If it is (or if the `-Bump` switch is passed), it automatically increments the patch version in `package.json` before building, preventing future 403 publish collision errors.
+- **Validation**: Compiled Windows native and Linux Docker binaries for version `1.0.2` successfully using the new script; ran the full `check.ps1` CI checks suite successfully.
