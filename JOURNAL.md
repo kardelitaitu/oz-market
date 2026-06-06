@@ -2068,3 +2068,8 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 - **Infrastructure Mapping**: Created `DEPLOYMENT.md` in the root directory to document the integration and setup details of the Neon Serverless Database, Render Backend API Server, Netlify Frontend Svelte Site, and the client sidecars (NPM MCP wrapper).
 - **Validation**: Verified repository health via `check.ps1`.
+
+## 2026-06-06 18:05 — Git Branch Cleanup
+
+- **Git Branch Management**: Cleaned up remote repository branches by deleting the outdated feature branch `feat/roadmap-goals-15042398115971111392` on origin.
+- **Repository State**: Standardized the active repository branches to only contain the three core targets: `main` and `0.0.1` (both local and remote), and remote `HEAD -> origin/main`.
