@@ -2051,4 +2051,5 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - Multi-platform precompiled release binaries for Windows (`binaries/win32/oz-market-mcp.exe`) and Linux (`binaries/linux/oz-market-mcp`), the latter built inside a Debian Docker container.
   - Node.js wrapper binary launcher script (`bin/index.js`) to parse client operating systems and spawn the correct native execution engine.
   - Simplified Claude Desktop configuration guides, allowing end-users to use the marketplace tools sidecar via `npx` with just their `MARKETPLACE_API_KEY`.
+  - Added step-by-step installation instructions for the NPM package wrapper to the root-level `README.md`.
 - **Validation**: Verified package availability in the npm registry via `npm info`, confirming version `1.0.2` is the active, live target version for all `npx` installations.

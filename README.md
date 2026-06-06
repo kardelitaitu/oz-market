@@ -116,6 +116,32 @@ To validate ledger and throughput performance:
 powershell -File backend/server/scripts/run-local-postgres-dev.ps1
 ```
 
+### 4. Model Context Protocol (MCP) Server Setup
+The marketplace MCP server allows AI agents (like Claude Desktop) to connect directly to the marketplace and call tools natively (such as creating listings, searching items, and making offers) on behalf of the user.
+
+To configure the MCP server in Claude Desktop:
+1. Open your Claude Desktop configuration file:
+   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+2. Add the package to the `mcpServers` definition:
+   ```json
+   {
+     "mcpServers": {
+       "oz-market": {
+         "command": "npx",
+         "args": [
+           "-y",
+           "@kardelitaitu/oz-market-mcp"
+         ],
+         "env": {
+           "MARKETPLACE_API_KEY": "your-api-key-here"
+         }
+       }
+     }
+   }
+   ```
+3. Restart Claude Desktop. The `oz-market` tools will now be available for AI agents to call.
+
 ---
 
 ## 📄 LICENSE
