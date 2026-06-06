@@ -135,14 +135,33 @@ if (Test-Path $packageJsonPath) {
         }
         
         if ($versionExists -or $Bump) {
+            $newMajor = $major
+            $newMinor = $minor
             $newPatch = $patch + 1
-            $newVersion = "$major.$minor.$newPatch"
+            
+            if ($newPatch -gt 99) {
+                $newPatch = 0
+                $newMinor++
+                if ($newMinor -gt 99) {
+                    $newMinor = 0
+                    $newMajor++
+                }
+            }
+            $newVersion = "$newMajor.$newMinor.$newPatch"
             
             if ($versionExists) {
                 Write-Host "Version $currentVersion is already published on the NPM registry. Auto-bumping version..." -ForegroundColor Yellow
                 while ($publishedList -contains $newVersion) {
                     $newPatch++
-                    $newVersion = "$major.$minor.$newPatch"
+                    if ($newPatch -gt 99) {
+                        $newPatch = 0
+                        $newMinor++
+                        if ($newMinor -gt 99) {
+                            $newMinor = 0
+                            $newMajor++
+                        }
+                    }
+                    $newVersion = "$newMajor.$newMinor.$newPatch"
                 }
             } else {
                 Write-Host "Manual version bump requested..." -ForegroundColor Cyan

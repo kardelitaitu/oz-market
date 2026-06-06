@@ -2053,3 +2053,8 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - Simplified Claude Desktop configuration guides, allowing end-users to use the marketplace tools sidecar via `npx` with just their `MARKETPLACE_API_KEY`.
   - Added step-by-step installation instructions for the NPM package wrapper to the root-level `README.md`.
 - **Validation**: Verified package availability in the npm registry via `npm info`, confirming version `1.0.2` is the active, live target version for all `npx` installations.
+
+## 2026-06-06 15:52 — SemVer Rollover Cap of 99 in Version Bump Automation
+
+- **NPM Package Version Bump Script**: Updated `backend/mcp/npm/build-npm.ps1` to implement a semver rollover capping mechanism at `99` (e.g. `1.0.99` rolls over to `1.1.0` and `1.1.99` rolls over to `1.2.0`). This applies to both manual bumps and registry-existence checks during compilation.
+- **Validation**: Bounded package version to `1.0.99` and successfully verified compilation auto-rolled the version to `1.1.0`. Restored version to `1.0.2` and verified that running the build auto-bumps to `1.0.3` since `1.0.2` is already published. Ran `check.ps1` successfully.
