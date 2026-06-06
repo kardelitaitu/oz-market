@@ -1,9 +1,14 @@
 /*
-last audited 06-06-26 by RSA-Agent
+last audited 06-06-26 by RSA-Agent + clippy
 crate: oz-market-server | status: SAFE | lint: CLEAN
-findings: 5 clippy issues fixed (bench/), 2 .lock().unwrap→.expect(), 1 unnecessary clone.
-           async_run() is 185-line monolith — top refactor candidate.
-next: split async_run() into named helpers | perf: no regressions; WAL uses Mutex but is perf-path
+findings: async_run() refactored from 185-line monolith into 8 named helpers
+           (resolve_bind_address, init_tracing, build_moka_caches, init_event_bus,
+            init_ledger_system, init_agent_system, resolve_server_config,
+            build_http_server, setup_graceful_shutdown, run_migrations).
+           AppDependencies struct groups all 15 actix app_data values.
+           AgentSystemDeps type alias for complex return type.
+           clippy -- -D warnings clean, 420 lib tests + 72 integration tests pass.
+next: wire check.ps1 into pre-commit hook | docs-auditor sync complete
 */
 pub mod app;
 pub mod auth;

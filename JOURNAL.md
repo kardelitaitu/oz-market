@@ -2114,6 +2114,12 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - Ran check.ps1 end-to-end: all 6 steps passed (Journal, ActiveSpecs, Build, Format, Clippy, Tests — 420/420 lib tests).
 - Cargo fmt was run across all backend benchmark files to fix formatting drift.
 
+## 2026-06-06 20:30 — Refactor & Commit Batch
+
+- **Doc audit** (`docs/server/module-layout.md`): Audited against actual code using docs-auditor skill. Patched workspace tree (added services/, domain/, bench/, errors/, openapi.rs, test_support.rs, all 14 migrations, 4 missing repos, 3 missing bin files). Updated module responsibilities table. Noted background/ is empty placeholder. Added hot-path tables (credit_ledger, idempotency_keys). Stamped `last audited 06-06-26 by docs-auditor`.
+- **Refactor async_run()**: Split 185-line monolith into 8 named helpers (init_tracing, build_moka_caches, init_event_bus, init_ledger_system, init_agent_system, resolve_server_config, build_http_server, setup_graceful_shutdown, run_migrations). Extracted AppDependencies struct for 15 actix app_data values. Added AgentSystemDeps type alias. Result: cargo check + clippy clean, 420/420 lib tests + 72 integration tests pass.
+- **Commit**: 1781a1d → now committing the doc audit + refactor.
+
 ## 2026-06-06 19:50 — Spec 0022 Completion (Benchmark CI Gating)
 
 - **ThresholdConfig** (`server/src/bench/report.rs`): Added `ThresholdConfig` struct with 5 gating fields (max P99 latency, max error rate, max CPU, max memory, min samples), `Default` impl with conservative CI defaults, and `BenchmarkReport::evaluate()` returning `Vec<ThresholdResult>` with pass/fail per check.

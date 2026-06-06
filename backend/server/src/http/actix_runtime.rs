@@ -30,6 +30,13 @@ use tokio::sync::broadcast;
 use tracing::{error, info};
 use tracing_actix_web::TracingLogger;
 
+type AgentSystemDeps = (
+    web::Data<CircuitBreakerRegistry>,
+    web::Data<AgentRegistry>,
+    web::Data<AgentMetricsCollector>,
+    web::Data<Arc<dyn AgentDispatcher>>,
+);
+
 // OpenAPI documentation
 // use utoipa_swagger_ui::SwaggerUi; // Not used - using redirect to Swagger Editor
 // use crate::openapi::ApiDoc; // Not needed - we serve JSON directly
@@ -48,9 +55,62 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let bind = std::env::var("MARKETPLACE_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+    let bind = resolve_bind_address();
+    init_tracing();
 
-    // Initialize tracing subscriber — LOG_FORMAT=json for production
+    let (pool, audit_repo, outbox_repo) = build_repositories().await?;
+    run_migrations(&pool).await?;
+
+    let app = build_app(pool.clone(), audit_repo, outbox_repo);
+    let observability = Arc::new(ServerObservability::new());
+
+    let (listing_cache, search_cache, listing_cache_max_bytes, search_cache_max_bytes) =
+        build_moka_caches();
+    let event_bus_data = init_event_bus();
+
+    let (ledger_cache_data, batch_tx_data) =
+        init_ledger_system(pool.clone(), observability.clone()).await?;
+
+    let (breaker_registry, agent_registry, metrics_collector, dispatcher_data) =
+        init_agent_system();
+
+    let (actix_workers, shutdown_timeout) = resolve_server_config();
+
+    let deps = AppDependencies {
+        app: web::Data::new(app),
+        observability: web::Data::new(observability),
+        cache_enabled: web::Data::new(cache_enabled()),
+        listing_cache: web::Data::new(listing_cache),
+        search_cache: web::Data::new(search_cache),
+        listing_cache_limit: web::Data::new(listing_cache_max_bytes),
+        search_cache_limit: web::Data::new(search_cache_max_bytes),
+        ledger_cache: ledger_cache_data,
+        batch_tx: batch_tx_data,
+        event_bus: event_bus_data,
+        breaker_registry,
+        agent_registry,
+        metrics_collector,
+        dispatcher: dispatcher_data,
+        pool: web::Data::new(pool),
+    };
+
+    let server = build_http_server(&bind, actix_workers, shutdown_timeout, deps)?;
+
+    setup_graceful_shutdown(server.handle());
+
+    info!("Server ready — listening on {}", bind);
+    server.await?;
+
+    Ok(())
+}
+
+/// Resolve bind address from env or use default.
+fn resolve_bind_address() -> String {
+    std::env::var("MARKETPLACE_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string())
+}
+
+/// Initialize the tracing/logging subscriber based on LOG_FORMAT env var.
+fn init_tracing() {
     let log_filter =
         tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
     if std::env::var("LOG_FORMAT").ok().as_deref() == Some("json") {
@@ -64,45 +124,37 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with(tracing_subscriber::fmt::layer())
             .init();
     }
+}
 
-    let (pool, audit_repo, outbox_repo) = build_repositories().await?;
-
-    // Auto-run database migrations on startup
-    info!("Running database schema migrations...");
-    crate::bootstrap::apply_schema(&pool)
-        .await
-        .map_err(|e| std::io::Error::other(format!("migration failed: {e}")))?;
-    info!("Schema migrations complete");
-
-    let app = build_app(pool.clone(), audit_repo, outbox_repo);
-    let observability = Arc::new(ServerObservability::new());
-
-    let cache_enabled = std::env::var("MARKETPLACE_CACHE_ENABLED")
+/// Check whether the response cache is enabled via env var.
+fn cache_enabled() -> bool {
+    std::env::var("MARKETPLACE_CACHE_ENABLED")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
-        .unwrap_or(true);
+        .unwrap_or(true)
+}
 
-    // Memory-based cache configuration (in MB)
+/// Parse cache size env vars and build Moka in-memory caches for listing & search responses.
+fn build_moka_caches() -> (Cache<String, String>, Cache<String, String>, u64, u64) {
     let listing_cache_max_mb: u64 = std::env::var("LISTING_CACHE_MAX_MB")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(200); // Default 200MB — ~67K listings at 3KB each
+        .unwrap_or(200);
     let search_cache_max_mb: u64 = std::env::var("SEARCH_CACHE_MAX_MB")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(100); // Default 100MB — ~7K search results at 15KB each
+        .unwrap_or(100);
     let listing_cache_max_bytes = listing_cache_max_mb * 1024 * 1024;
     let search_cache_max_bytes = search_cache_max_mb * 1024 * 1024;
 
-    // Create Moka caches — weigher uses string byte length so max_capacity is total bytes
     let listing_cache: Cache<String, String> = Cache::builder()
         .weigher(|_key, value: &String| -> u32 { value.len() as u32 })
         .max_capacity(listing_cache_max_bytes)
-        .time_to_live(std::time::Duration::from_secs(30 * 60)) // 30 minutes TTL
+        .time_to_live(std::time::Duration::from_secs(30 * 60))
         .build();
     let search_cache: Cache<String, String> = Cache::builder()
         .weigher(|_key, value: &String| -> u32 { value.len() as u32 })
         .max_capacity(search_cache_max_bytes)
-        .time_to_live(std::time::Duration::from_secs(15 * 60)) // 15 minutes TTL
+        .time_to_live(std::time::Duration::from_secs(15 * 60))
         .build();
 
     info!(
@@ -110,17 +162,25 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         listing_cache_max_mb, search_cache_max_mb
     );
 
-    // Real-time event bus for SSE negotiation updates
-    let (event_tx, _) = broadcast::channel::<String>(1024);
-    let event_bus_data = web::Data::new(event_tx);
+    (listing_cache, search_cache, listing_cache_max_bytes, search_cache_max_bytes)
+}
 
-    // Credit ledger cache (write-through with TTL)
+/// Create the broadcast channel for SSE-based negotiation event pushes.
+fn init_event_bus() -> web::Data<broadcast::Sender<String>> {
+    let (event_tx, _) = broadcast::channel::<String>(1024);
+    web::Data::new(event_tx)
+}
+
+/// Set up the credit ledger system: repository, write-through cache, WAL recovery, and batch committer.
+async fn init_ledger_system(
+    pool: sqlx::postgres::PgPool,
+    observability: Arc<ServerObservability>,
+) -> Result<(web::Data<LedgerCache>, web::Data<crate::services::async_committer::BatchSender>), Box<dyn Error + Send + Sync>> {
     let ledger_repo: Arc<dyn CreditLedgerRepository> =
-        Arc::new(PostgresCreditLedgerRepository::new(pool.clone()));
+        Arc::new(PostgresCreditLedgerRepository::new(pool));
     let ledger_cache = LedgerCache::new(ledger_repo.clone(), Some(observability.clone()));
     let ledger_cache_data = web::Data::new(ledger_cache);
 
-    // WAL recovery — replay any uncommitted transactions from a prior crash
     info!("Recovering credit ledger WAL...");
     let wal = WalManager::from_env()
         .map_err(|e| std::io::Error::other(format!("WAL initialization failed: {e}")))?;
@@ -129,34 +189,29 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map_err(|e| std::io::Error::other(format!("WAL recovery failed: {e}")))?;
     info!("WAL recovery complete");
 
-    // Async batch committer — background task for batching credit transactions
     let (batch_tx, batch_committer) =
-        batch_channel(ledger_repo, Arc::new(wal), Some(observability.clone()));
+        batch_channel(ledger_repo, Arc::new(wal), Some(observability));
     batch_committer.start();
     let batch_tx_data = web::Data::new(batch_tx);
 
-    // Agent system — circuit breaker, registry, and metrics for agent routing
+    Ok((ledger_cache_data, batch_tx_data))
+}
+
+/// Build the agent routing system: circuit breakers, registry, metrics, and HTTP dispatcher.
+fn init_agent_system() -> AgentSystemDeps {
     let breaker_registry = web::Data::new(CircuitBreakerRegistry::default());
     let agent_registry = web::Data::new(AgentRegistry::default());
     let metrics_collector = web::Data::new(AgentMetricsCollector::default());
 
-    // HTTP dispatcher for routing queries to registered agents
     let agent_dispatcher: Arc<dyn AgentDispatcher> =
         Arc::new(HttpAgentDispatcher::new(std::time::Duration::from_secs(30)));
     let dispatcher_data = web::Data::new(agent_dispatcher);
 
-    let app_data = web::Data::new(app);
-    let obs_data = web::Data::new(observability);
-    let cache_enabled_data = web::Data::new(cache_enabled);
-    let listing_cache_data = web::Data::new(listing_cache);
-    let search_cache_data = web::Data::new(search_cache);
-    let pool_data = web::Data::new(pool);
-    let listing_cache_limit_data = web::Data::new(listing_cache_max_bytes);
-    let search_cache_limit_data = web::Data::new(search_cache_max_bytes);
+    (breaker_registry, agent_registry, metrics_collector, dispatcher_data)
+}
 
-    info!("Starting Actix-web server on {}", bind);
-
-    // Use more workers for high concurrency
+/// Resolve actix worker count and shutdown timeout from env vars.
+fn resolve_server_config() -> (usize, u64) {
     let num_cpus = num_cpus::get();
     let actix_workers = std::env::var("ACTIX_WORKERS")
         .ok()
@@ -166,16 +221,62 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(30);
+    (actix_workers, shutdown_timeout)
+}
 
-    let server = HttpServer::new(move || {
+/// Auto-run pending database migrations.
+async fn run_migrations(pool: &sqlx::postgres::PgPool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    info!("Running database schema migrations...");
+    crate::bootstrap::apply_schema(pool)
+        .await
+        .map_err(|e| std::io::Error::other(format!("migration failed: {e}")))?;
+    info!("Schema migrations complete");
+    Ok(())
+}
+
+/// Shared application state registered as Actix `app_data` for all request handlers.
+struct AppDependencies {
+    app: web::Data<Arc<
+        MarketplaceApp<
+            PostgresListingRepository,
+            PostgresIdempotencyKeyRepository,
+            PostgresReservationLeaseRepository,
+            PostgresContactRevealRepository,
+        >,
+    >>,
+    observability: web::Data<Arc<ServerObservability>>,
+    cache_enabled: web::Data<bool>,
+    listing_cache: web::Data<Cache<String, String>>,
+    search_cache: web::Data<Cache<String, String>>,
+    listing_cache_limit: web::Data<u64>,
+    search_cache_limit: web::Data<u64>,
+    ledger_cache: web::Data<LedgerCache>,
+    batch_tx: web::Data<crate::services::async_committer::BatchSender>,
+    event_bus: web::Data<broadcast::Sender<String>>,
+    breaker_registry: web::Data<CircuitBreakerRegistry>,
+    agent_registry: web::Data<AgentRegistry>,
+    metrics_collector: web::Data<AgentMetricsCollector>,
+    dispatcher: web::Data<Arc<dyn AgentDispatcher>>,
+    pool: web::Data<sqlx::postgres::PgPool>,
+}
+
+/// Build and return the Actix-web HTTP server, fully configured with middleware, app data, and routes.
+fn build_http_server(
+    bind: &str,
+    actix_workers: usize,
+    shutdown_timeout: u64,
+    deps: AppDependencies,
+) -> Result<actix_web::dev::Server, Box<dyn Error + Send + Sync>> {
+    let obs_data = deps.observability.clone();
+
+    info!("Starting Actix-web server on {}", bind);
+
+    Ok(HttpServer::new(move || {
         let obs_for_mw = obs_data.clone();
         App::new()
-            .wrap(actix_web::middleware::Compress::default()) // Response compression (gzip)
-            .wrap(TracingLogger::default()) // Add tracing middleware
+            .wrap(actix_web::middleware::Compress::default())
+            .wrap(TracingLogger::default())
             .wrap_fn(move |req, srv| {
-                // Request counter for the /metrics handler. Wraps every request
-                // so the obs.requests_total field reflects actual HTTP traffic,
-                // not a hardcoded 0.
                 let obs = obs_for_mw.clone();
                 let path = req.path().to_owned();
                 let fut = srv.call(req);
@@ -187,51 +288,44 @@ async fn async_run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     res
                 }
             })
-            .app_data(app_data.clone())
-            .app_data(obs_data.clone())
-            .app_data(cache_enabled_data.clone())
-            .app_data(listing_cache_data.clone())
-            .app_data(search_cache_data.clone())
-            .app_data(listing_cache_limit_data.clone())
-            .app_data(search_cache_limit_data.clone())
-            .app_data(ledger_cache_data.clone())
-            .app_data(batch_tx_data.clone())
-            .app_data(pool_data.clone())
-            .app_data(event_bus_data.clone())
-            .app_data(breaker_registry.clone())
-            .app_data(agent_registry.clone())
-            .app_data(metrics_collector.clone())
-            .app_data(dispatcher_data.clone())
-            // OpenAPI docs
+            .app_data(deps.app.clone())
+            .app_data(deps.observability.clone())
+            .app_data(deps.cache_enabled.clone())
+            .app_data(deps.listing_cache.clone())
+            .app_data(deps.search_cache.clone())
+            .app_data(deps.listing_cache_limit.clone())
+            .app_data(deps.search_cache_limit.clone())
+            .app_data(deps.ledger_cache.clone())
+            .app_data(deps.batch_tx.clone())
+            .app_data(deps.pool.clone())
+            .app_data(deps.event_bus.clone())
+            .app_data(deps.breaker_registry.clone())
+            .app_data(deps.agent_registry.clone())
+            .app_data(deps.metrics_collector.clone())
+            .app_data(deps.dispatcher.clone())
             .route("/docs", web::get().to(crate::openapi::serve_swagger_editor))
             .route(
                 "/api-docs/openapi.json",
                 web::get().to(crate::openapi::serve_openapi_json),
             )
-            // All API routes (listings, negotiations, reveals, internal)
             .configure(crate::http::actix_handlers::register_api_routes)
-            // Metrics + health
             .route("/metrics", web::get().to(metrics_handler))
             .route("/health", web::get().to(health_check))
     })
-    .bind(&bind)?
+    .bind(bind)?
     .workers(actix_workers)
     .shutdown_timeout(shutdown_timeout)
-    .run();
+    .run())
+}
 
-    // Handle graceful shutdown on SIGINT/SIGTERM
-    let server_handle = server.handle();
+/// Install a SIGINT/SIGTERM handler that triggers graceful server shutdown.
+fn setup_graceful_shutdown(server_handle: actix_web::dev::ServerHandle) {
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
         info!("Shutdown signal received, draining connections...");
         server_handle.stop(true).await;
         info!("Server stopped");
     });
-
-    info!("Server ready — listening on {}", bind);
-    server.await?;
-
-    Ok(())
 }
 
 /// Resolve the tokio worker thread count from env var or compute a sensible default.
