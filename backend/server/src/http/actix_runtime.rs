@@ -162,7 +162,12 @@ fn build_moka_caches() -> (Cache<String, String>, Cache<String, String>, u64, u6
         listing_cache_max_mb, search_cache_max_mb
     );
 
-    (listing_cache, search_cache, listing_cache_max_bytes, search_cache_max_bytes)
+    (
+        listing_cache,
+        search_cache,
+        listing_cache_max_bytes,
+        search_cache_max_bytes,
+    )
 }
 
 /// Create the broadcast channel for SSE-based negotiation event pushes.
@@ -175,7 +180,13 @@ fn init_event_bus() -> web::Data<broadcast::Sender<String>> {
 async fn init_ledger_system(
     pool: sqlx::postgres::PgPool,
     observability: Arc<ServerObservability>,
-) -> Result<(web::Data<LedgerCache>, web::Data<crate::services::async_committer::BatchSender>), Box<dyn Error + Send + Sync>> {
+) -> Result<
+    (
+        web::Data<LedgerCache>,
+        web::Data<crate::services::async_committer::BatchSender>,
+    ),
+    Box<dyn Error + Send + Sync>,
+> {
     let ledger_repo: Arc<dyn CreditLedgerRepository> =
         Arc::new(PostgresCreditLedgerRepository::new(pool));
     let ledger_cache = LedgerCache::new(ledger_repo.clone(), Some(observability.clone()));
@@ -207,7 +218,12 @@ fn init_agent_system() -> AgentSystemDeps {
         Arc::new(HttpAgentDispatcher::new(std::time::Duration::from_secs(30)));
     let dispatcher_data = web::Data::new(agent_dispatcher);
 
-    (breaker_registry, agent_registry, metrics_collector, dispatcher_data)
+    (
+        breaker_registry,
+        agent_registry,
+        metrics_collector,
+        dispatcher_data,
+    )
 }
 
 /// Resolve actix worker count and shutdown timeout from env vars.
@@ -236,14 +252,16 @@ async fn run_migrations(pool: &sqlx::postgres::PgPool) -> Result<(), Box<dyn Err
 
 /// Shared application state registered as Actix `app_data` for all request handlers.
 struct AppDependencies {
-    app: web::Data<Arc<
-        MarketplaceApp<
-            PostgresListingRepository,
-            PostgresIdempotencyKeyRepository,
-            PostgresReservationLeaseRepository,
-            PostgresContactRevealRepository,
+    app: web::Data<
+        Arc<
+            MarketplaceApp<
+                PostgresListingRepository,
+                PostgresIdempotencyKeyRepository,
+                PostgresReservationLeaseRepository,
+                PostgresContactRevealRepository,
+            >,
         >,
-    >>,
+    >,
     observability: web::Data<Arc<ServerObservability>>,
     cache_enabled: web::Data<bool>,
     listing_cache: web::Data<Cache<String, String>>,

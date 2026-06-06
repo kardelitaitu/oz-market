@@ -6,7 +6,7 @@ use clap::Parser;
 use sqlx::postgres::PgPoolOptions;
 
 use oz_market_server::bench::distributed;
-use oz_market_server::bench::drivers;
+use oz_market_server::bench::drivers::{self, DriverConfig};
 use oz_market_server::bench::report::{write_report, BenchmarkReport, ThresholdConfig};
 use oz_market_server::bench::resource_monitor::ResourceMonitor;
 use oz_market_server::bench::scheduler;
@@ -68,6 +68,22 @@ pub struct Args {
     /// thresholds. Exits with code 0 on pass or 1 on failure.
     #[clap(long)]
     pub check: bool,
+
+    /// HTTP driver mode: "health" (default), "search", or "get-listing".
+    /// Only used with --target http.
+    #[clap(long, default_value = "health")]
+    pub http_mode: String,
+
+    /// JSON claims header value for authenticated HTTP requests.
+    /// Only used with --target http and --http-mode search or get-listing.
+    #[clap(long)]
+    pub claims_json: Option<String>,
+
+    /// Enable Postgres search-query mode.
+    /// When set, the Postgres driver seeds listings and measures search latency.
+    /// Only used with --target postgres.
+    #[clap(long)]
+    pub pg_search: bool,
 }
 
 fn parse_duration(s: &str) -> Option<Duration> {
@@ -135,13 +151,16 @@ async fn run_standalone(args: Args) {
     let monitor = ResourceMonitor::new();
     let resource_handle = monitor.start();
 
-    // Create and setup the target driver
-    let driver = drivers::create_driver(
-        &args.target,
-        pool.clone(),
-        cache.clone(),
-        Some(&args.base_url),
-    );
+    // Create and setup the target driver with optional config
+    let config = DriverConfig {
+        base_url: Some(args.base_url.clone()),
+        claims_json: args.claims_json.clone(),
+        http_mode: Some(args.http_mode.clone()),
+        pg_search_mode: args.pg_search,
+        pool: pool.clone(),
+        cache: cache.clone(),
+    };
+    let driver = drivers::create_driver_with_config(&args.target, &config);
     let _ = driver.setup().await;
 
     let (histogram, error_count) =
@@ -383,12 +402,15 @@ async fn run_worker(args: Args) {
         .expect("worker failed to connect and sync");
 
     // Create driver with real deps if available
-    let driver = drivers::create_driver(
-        &args.target,
-        pool.clone(),
-        cache.clone(),
-        Some(&args.base_url),
-    );
+    let config = DriverConfig {
+        base_url: Some(args.base_url.clone()),
+        claims_json: args.claims_json.clone(),
+        http_mode: Some(args.http_mode.clone()),
+        pg_search_mode: args.pg_search,
+        pool: pool.clone(),
+        cache: cache.clone(),
+    };
+    let driver = drivers::create_driver_with_config(&args.target, &config);
     driver.setup().await.expect("driver setup failed");
 
     worker
