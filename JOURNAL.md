@@ -2001,3 +2001,8 @@ pm run test:e2e tests pass successfully (7.6s duration).
 - **Dynamic Backend URL Injection**: Modified Svelte frontend entry point `web/website/src/main.js` to read `import.meta.env.VITE_BACKEND_URL` and expose it via `window.__BACKEND_URL` to allow dynamic connection overrides (e.g., when deployed on Netlify to connect to Render).
 - **Stabilized check.ps1 Tests Step**: Removed stdout/stderr redirection from `cargo test --lib` inside `check.ps1` to prevent PowerShell from incorrectly reporting a non-zero exit code when compile output is emitted to stderr.
 - **Validation**: Ran full local verification via `check.ps1`; website build and Playwright E2E tests all pass cleanly with zero errors.
+
+## 2026-06-06 07:23 — Fix Render build failure: "migration 6 was previously applied but has been modified"
+
+- **Root cause**: Migration `0006_create_reviews_table.sql` was modified after being applied to the production database. The original (commit `8fc6cc1`) contained the `update_seller_rating()` function + INSERT/UPDATE/DELETE triggers. Commit `b138254` stripped them out to move triggers to a separate script. This changed the SQLx checksum, so on next deploy SQLx refused to run.
+- **Fix**: Reverted `0006_create_reviews_table.sql` back to its original content (matching commit `8fc6cc1`). The database already has these objects; this just restores the checksum match so SQLx passes validation.
