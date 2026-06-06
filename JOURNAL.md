@@ -2013,3 +2013,8 @@ pm run test:e2e tests pass successfully (7.6s duration).
   - Created `.gitattributes` with `*.sql text eol=lf` to force LF line endings for all SQL migration files
   - Normalized all 14 migration files to LF endings
   - Reverted `0006_create_reviews_table.sql` back to stripped version (no triggers) matching the applied DB schema
+
+## 2026-06-06 09:25 — Ignore Netlify state folder
+
+- **Git Ignore**: Added `.netlify` folder to `.gitignore` to prevent tracking local Netlify state and functions metadata files.
+- **Validation**: Verified build and deploy config; git status clean.

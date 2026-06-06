@@ -34,3 +34,5 @@ mobile/marketplace/build/
 mobile/marketplace/.svelte-kit/
 mobile/marketplace/src-tauri/target/
 mobile/marketplace/src-tauri/gen/
+# Local Netlify folder
+.netlify
