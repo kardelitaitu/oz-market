@@ -2063,3 +2063,8 @@ pm run test:e2e tests pass successfully (7.6s duration).
 
 - **MCP Database Connection Fallback**: Updated the hardcoded fallback database connection string in `backend/mcp/src/runtime.rs` to use the rotated Neon PostgreSQL database credentials and pooler host.
 - **Validation**: Compiled Windows and Linux binaries containing the new credentials fallback successfully; verified repository health via `check.ps1`.
+
+## 2026-06-06 17:53 — Infrastructure Documentation (DEPLOYMENT.md)
+
+- **Infrastructure Mapping**: Created `DEPLOYMENT.md` in the root directory to document the integration and setup details of the Neon Serverless Database, Render Backend API Server, Netlify Frontend Svelte Site, and the client sidecars (NPM MCP wrapper).
+- **Validation**: Verified repository health via `check.ps1`.
