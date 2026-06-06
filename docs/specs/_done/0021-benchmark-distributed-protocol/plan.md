@@ -12,7 +12,7 @@
    - Implement gRPC client connection handler on Worker.
 
 3. **Metrics Serialization**:
-   - Utilize `hdrhistogram::serializing::Serializer` to encode histograms to bytes.
+   - Utilize `hdrhistogram::serialization::Serializer` to encode histograms to bytes.
    - Implement stream handler that periodically sends worker metrics to the coordinator.
 
 4. **Merger Logic**:

@@ -11,7 +11,7 @@ async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls", "json", "macros", "migrate", "rust_decimal", "chrono", "uuid"] }
-tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "sync"] }
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "sync", "fs"] }
 tokio-stream = "0.1"
 chrono = "0.4"
 actix-web = "4"
@@ -31,6 +31,16 @@ serde_yaml = "0.9"
 num_cpus = "1.16"
 futures = "0.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# Benchmark suite
+hdrhistogram = { version = "7.5", features = ["serialization"] }
+clap = { version = "4", features = ["derive", "env"] }
+sysinfo = "0.32"
+thiserror = "2"
+
+
+tonic = "0.12"
+prost = "0.13"
 
 
 # OpenAPI generation
@@ -60,6 +70,14 @@ path = "src/bin/pg_search_bench.rs"
 [[bin]]
 name = "sse_bench"
 path = "src/bin/sse_bench.rs"
+
+[[bin]]
+name = "bench_suite"
+path = "src/bin/bench_suite.rs"
+
+[build-dependencies]
+tonic-build = "0.12"
+protoc-bin-vendored = "3.0"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

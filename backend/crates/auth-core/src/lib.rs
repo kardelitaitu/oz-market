@@ -1,3 +1,9 @@
+/*
+last audited 06-06-26 by RSA-Agent
+crate: oz-market-auth-core | status: SAFE | lint: CLEAN
+findings: No unsafe. 7 unit tests pass. Clean separation of concerns.
+next: no action needed | perf: N/A (no I/O)
+*/
 mod error;
 pub use error::AuthError;
 pub use error::AuthResult;

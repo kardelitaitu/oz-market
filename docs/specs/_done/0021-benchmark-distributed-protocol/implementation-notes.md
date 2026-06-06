@@ -53,8 +53,8 @@ message MetricResult {
 
 ```rust
 use hdrhistogram::Histogram;
-use hdrhistogram::serializing::V2Serializer;
-use hdrhistogram::serializing::deserializer::Deserializer;
+use hdrhistogram::serialization::V2Serializer;
+use hdrhistogram::serialization::Deserializer;
 
 pub fn serialize_histogram(hist: &Histogram<u64>) -> Result<Vec<u8>, String> {
     let mut serializer = V2Serializer::new();
@@ -69,8 +69,7 @@ pub fn deserialize_and_merge(
     target_hist: &mut Histogram<u64>,
     payload: &[u8],
 ) -> Result<(), String> {
-    let mut deserializer = Deserializer::new();
-    let remote_hist = deserializer
+    let remote_hist = Deserializer::new()
         .deserialize(&mut &payload[..])
         .map_err(|e| e.to_string())?;
     target_hist.add(remote_hist).map_err(|e| e.to_string())?;

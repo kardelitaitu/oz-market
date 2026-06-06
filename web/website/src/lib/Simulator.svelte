@@ -73,9 +73,9 @@
 </style>
 
 <section class="card" style="margin-bottom: 3rem; border-color: var(--color-primary-glow);">
-  <h3 style="color: var(--color-secondary);">
+  <h2 style="color: var(--color-secondary); font-size: 1.35rem; font-family: var(--font-heading); font-weight: 700; margin-bottom: 1rem;">
     ⚡ Interactive Agent Negotiation Simulator
-  </h3>
+  </h2>
   <p style="margin-bottom: 1.5rem;">
     Click below to simulate how autonomous buyer and seller AI agents discover, negotiate, and transact on listings using the frozen `openapi.yaml` contract.
   </p>
@@ -127,8 +127,8 @@
 
       <!-- Column 1: Simulation Logs -->
       <div>
-        <div bind:this={logContainer} style="text-align: left; height: 175px; overflow-y: auto;">
-          <h5 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h5>
+        <div bind:this={logContainer} style="text-align: left; height: 175px; overflow-y: auto;" role="log" aria-live="polite" aria-atomic="false" aria-relevant="additions" tabindex="0">
+          <h4 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase;">Simulation logs:</h4>
           {#if sim.logs.length === 0}
             <div style="color: var(--text-muted); font-style: italic; font-family: var(--font-mono); font-size: 0.85rem;">Logs are empty. Start the simulation.</div>
           {:else}

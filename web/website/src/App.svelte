@@ -54,16 +54,35 @@
     history.pushState({ tab, platform }, '', path);
   }
 
+  const tabIds = { home: 'tab-home', guide: 'tab-guide', faqs: 'tab-faqs', status: 'tab-status', docs: 'tab-docs' };
+  const tabOrder = ['home', 'guide', 'faqs', 'status', 'docs'];
+
+  function onNavKeydown(e) {
+    const idx = tabOrder.indexOf(currentTab);
+    let nextIdx = -1;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % tabOrder.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabOrder.length) % tabOrder.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = tabOrder.length - 1;
+    else return;
+    e.preventDefault();
+    const next = tabOrder[nextIdx];
+    navigate(next, platformTab);
+    document.getElementById(tabIds[next])?.focus();
+  }
+
   onMount(() => {
     const r = parsePath(window.location.pathname);
     currentTab = r.tab;
     platformTab = r.platform;
 
-    window.addEventListener('popstate', (e) => {
+    function onPop() {
       const r2 = parsePath(window.location.pathname);
       currentTab = r2.tab;
       platformTab = r2.platform;
-    });
+    }
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   });
 
   // Simulation runner — re-runs when sim.isPaused changes.
@@ -239,6 +258,22 @@
     color: var(--color-secondary);
   }
 
+  .skip-link {
+    position: absolute;
+    top: -100%;
+    left: 1rem;
+    background: var(--color-primary);
+    color: var(--bg-dark);
+    padding: 0.5rem 1rem;
+    border-radius: 0 0 8px 8px;
+    z-index: 9999;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .skip-link:focus {
+    top: 0;
+  }
+
   /* ── Hero & Badge ── */
   .hero {
     text-align: center;
@@ -313,9 +348,9 @@
   }
 
   @keyframes pulse {
-    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 242, 254, 0.7); }
-    70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 242, 254, 0); }
-    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 242, 254, 0); }
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-secondary) 70%, transparent); }
+    70% { transform: scale(1); box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-secondary) 0%, transparent); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-secondary) 70%, transparent); }
   }
 
   /* ── Benchmark Table ── */
@@ -409,18 +444,14 @@
     margin-bottom: 0.25rem;
   }
 
-  .footer-links button {
-    background: none;
-    border: none;
-    cursor: pointer;
+  .footer-links a {
     color: var(--text-muted);
     font-size: 0.85rem;
-    text-align: left;
-    padding: 0;
+    text-decoration: none;
     transition: color 0.2s ease;
   }
 
-  .footer-links button:hover {
+  .footer-links a:hover {
     color: var(--color-primary);
   }
 
@@ -434,7 +465,7 @@
     .footer-social {
       flex: 1;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: end;
     }
 
@@ -586,7 +617,6 @@
   :global(body.guide-page footer .footer-inner) {
     padding-top: 0.75rem;
     padding-bottom: 0.75rem;
-    gap: 1rem;
   }
   :global(body.status-page .hero),
   :global(body.guide-page .hero) {
@@ -612,6 +642,8 @@
 
 
 
+<a href="#main-content" class="skip-link">Skip to content</a>
+
 <header>
   <div class="header-inner">
     <div class="logo-container">
@@ -619,12 +651,12 @@
       <span class="logo-text">oz-market</span>
       <span class="wip-badge">WIP</span>
     </div>
-    <nav aria-label="Main">
-      <button class={currentTab === 'home' ? 'active' : ''} aria-current={currentTab === 'home' ? 'page' : undefined} onclick={() => navigate('home')}>Home</button>
-      <button class={currentTab === 'guide' ? 'active' : ''} aria-current={currentTab === 'guide' ? 'page' : undefined} onclick={() => navigate('guide', platformTab)}>Getting Started</button>
-      <button class={currentTab === 'faqs' ? 'active' : ''} aria-current={currentTab === 'faqs' ? 'page' : undefined} onclick={() => navigate('faqs')}>FAQs</button>
-      <button class={currentTab === 'status' ? 'active' : ''} aria-current={currentTab === 'status' ? 'page' : undefined} onclick={() => navigate('status')}>Status</button>
-      <button class={currentTab === 'docs' ? 'active' : ''} aria-current={currentTab === 'docs' ? 'page' : undefined} onclick={() => navigate('docs')}>Docs</button>
+    <nav aria-label="Main" role="tablist" onkeydown={onNavKeydown}>
+      <button id={tabIds.home} role="tab" aria-selected={currentTab === 'home' ? 'true' : 'false'} class={currentTab === 'home' ? 'active' : ''} onclick={() => navigate('home')}>Home</button>
+      <button id={tabIds.guide} role="tab" aria-selected={currentTab === 'guide' ? 'true' : 'false'} class={currentTab === 'guide' ? 'active' : ''} onclick={() => navigate('guide', platformTab)}>Getting Started</button>
+      <button id={tabIds.faqs} role="tab" aria-selected={currentTab === 'faqs' ? 'true' : 'false'} class={currentTab === 'faqs' ? 'active' : ''} onclick={() => navigate('faqs')}>FAQs</button>
+      <button id={tabIds.status} role="tab" aria-selected={currentTab === 'status' ? 'true' : 'false'} class={currentTab === 'status' ? 'active' : ''} onclick={() => navigate('status')}>Status</button>
+      <button id={tabIds.docs} role="tab" aria-selected={currentTab === 'docs' ? 'true' : 'false'} class={currentTab === 'docs' ? 'active' : ''} onclick={() => navigate('docs')}>Docs</button>
     </nav>
     <div class="header-right">
       <div class="header-right-row">
@@ -637,10 +669,10 @@
   </div>
 </header>
 
-<main class="container {currentTab === 'status' ? 'status-page' : ''} {currentTab === 'guide' ? 'guide-page' : ''}">
+<main id="main-content" class="container {currentTab === 'status' ? 'status-page' : ''} {currentTab === 'guide' ? 'guide-page' : ''}">
   {#if currentTab === 'home'}
     <!-- Home Tab -->
-    <section class="hero">
+    <section class="hero" role="tabpanel" aria-labelledby={tabIds.home}>
       <span class="badge">Next-Gen Agentic Commerce</span>
       <h1>Autonomous <span>AI-to-AI</span> Commerce Infrastructure</h1>
       <p>
@@ -675,7 +707,7 @@
       <h3><span>📈</span> Core Performance Benchmarks</h3>
       <p>Simulating concurrent agent search lookups against a local PostgreSQL database with active rate-limiting diagnostics.</p>
 
-      <div class="table-container">
+      <div class="table-container" tabindex="0">
         <table>
           <thead>
             <tr>
@@ -714,19 +746,27 @@
     </section>
 
   {:else if currentTab === 'guide'}
-    <GuideTab {platformTab} onTabChange={(p) => navigate('guide', p)} />
+    <div role="tabpanel" aria-labelledby={tabIds.guide}>
+      <GuideTab {platformTab} onTabChange={(p) => navigate('guide', p)} />
+    </div>
 
   {:else if currentTab === 'faqs'}
-    <FAQTab />
+    <div role="tabpanel" aria-labelledby={tabIds.faqs}>
+      <FAQTab />
+    </div>
 
   {:else if currentTab === 'status'}
-    <StatusTab />
+    <div role="tabpanel" aria-labelledby={tabIds.status}>
+      <StatusTab />
+    </div>
 
   {:else if currentTab === 'docs'}
-    <DocsTab />
+    <div role="tabpanel" aria-labelledby={tabIds.docs}>
+      <DocsTab />
+    </div>
 
   {:else if currentTab === 'not-found'}
-    <section class="hero" style="padding-top: 4rem;">
+    <section class="hero" style="padding-top: 4rem;" role="tabpanel">
       <h2 style="font-size: 5rem; margin-bottom: 0.5rem; opacity: 0.3;">404</h2>
       <p style="font-size: 1.2rem; max-width: 500px; margin-inline: auto;">Page not found. Check the URL or head back <button class="anchor-btn" onclick={() => navigate('home')}>home</button>.</p>
     </section>
@@ -741,11 +781,11 @@
     </div>
     <div class="footer-links">
       <h4>Quick Links</h4>
-      <button onclick={() => navigate('home')}>Home</button>
-      <button onclick={() => navigate('guide', platformTab)}>Getting Started</button>
-      <button onclick={() => navigate('faqs')}>FAQs</button>
-      <button onclick={() => navigate('status')}>Status</button>
-      <button onclick={() => navigate('docs')}>Docs</button>
+      <a href="/" onclick={(e) => { e.preventDefault(); navigate('home'); }}>Home</a>
+      <a href="/getting-started" onclick={(e) => { e.preventDefault(); navigate('guide', platformTab); }}>Getting Started</a>
+      <a href="/faqs" onclick={(e) => { e.preventDefault(); navigate('faqs'); }}>FAQs</a>
+      <a href="/status" onclick={(e) => { e.preventDefault(); navigate('status'); }}>Status</a>
+      <a href="/docs" onclick={(e) => { e.preventDefault(); navigate('docs'); }}>Docs</a>
     </div>
     <div class="footer-right">
       <div class="footer-social">

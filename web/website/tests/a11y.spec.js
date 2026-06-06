@@ -161,7 +161,8 @@ test.describe('Accessibility: Navigation & Tab System', () => {
     const statusBtn = page.locator('nav button:has-text("Status")');
     const docsBtn = page.locator('nav button:has-text("Docs")');
 
-    // Home is first focusable nav element
+    // Skip-link is first; Home is first focusable nav element
+    await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(homeBtn).toBeFocused();
 
@@ -183,7 +184,8 @@ test.describe('Accessibility: Navigation & Tab System', () => {
     const guideBtn = page.locator('nav button:has-text("Getting Started")');
     const docsBtn = page.locator('nav button:has-text("Docs")');
 
-    // Tab to Getting Started button
+    // Tab past skip-link, then to Getting Started button
+    await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(guideBtn).toBeFocused();
@@ -192,7 +194,7 @@ test.describe('Accessibility: Navigation & Tab System', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('h2:has-text("Getting Started")')).toBeVisible();
 
-    // Tab through FAQs, Status to Docs and activate
+    // Tab through Home, FAQs, Status to Docs and activate
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
@@ -216,7 +218,7 @@ test.describe('Accessibility: Navigation & Tab System', () => {
 test.describe('Accessibility: Simulator Controls', () => {
   test('simulator action buttons are <button> elements and focusable', async ({ page }) => {
     await page.goto('/');
-    const simulator = page.locator('section.card:has(h3:text("Interactive Agent Negotiation Simulator"))');
+    const simulator = page.locator('section.card:has(h2:text("Interactive Agent Negotiation Simulator"))');
     const buttons = simulator.locator('button');
     const count = await buttons.count();
     expect(count).toBeGreaterThanOrEqual(2); // At least 2 control buttons
@@ -367,14 +369,14 @@ test.describe('Accessibility: Interactive Element Roles', () => {
     }
   });
 
-  test('simulator uses proper heading hierarchy (h3, h5)', async ({ page }) => {
+  test('simulator uses proper heading hierarchy (h2, h4)', async ({ page }) => {
     await page.goto('/');
-    const simulator = page.locator('section.card:has(h3:text("Interactive Agent Negotiation Simulator"))');
+    const simulator = page.locator('section.card:has(h2:text("Interactive Agent Negotiation Simulator"))');
 
-    // Section has h3 for title
-    await expect(simulator.locator('h3')).toBeVisible();
-    // Logs section has h5 for subtitle
-    await expect(simulator.locator('h5')).toContainText('Simulation logs');
+    // Section has h2 for title
+    await expect(simulator.locator('h2')).toBeVisible();
+    // Logs section has h4 for subtitle
+    await expect(simulator.locator('h4:has-text("Simulation logs")')).toBeVisible();
   });
 
   test('footer uses .footer-copy-bar for copyright text', async ({ page }) => {
@@ -410,5 +412,64 @@ test.describe('Accessibility: Color & Visual Indicators (Non-Color Dependent)', 
     await expect(cards.nth(1)).toContainText('Zero-Knowledge Privacy');
     await expect(cards.nth(2)).toContainText('Dual-Layer Ledger');
     // Each heading has text that communicates the meaning without relying on the emoji
+  });
+});
+
+test.describe('BackgroundSwitcher Accessibility', () => {
+  test('background switcher group has role="group" with aria-label', async ({ page }) => {
+    await page.goto('/');
+    const group = page.locator('[aria-label="Select Background"]');
+    await expect(group).toHaveAttribute('role', 'group');
+  });
+
+  test('all 6 background swatch buttons have aria-label and aria-pressed', async ({ page }) => {
+    await page.goto('/');
+    const bgGroup = page.locator('[aria-label="Select Background"]');
+    const buttons = bgGroup.locator('button');
+    await expect(buttons).toHaveCount(6);
+    for (let i = 0; i < 6; i++) {
+      await expect(buttons.nth(i)).toHaveAttribute('aria-label');
+      await expect(buttons.nth(i)).toHaveAttribute('aria-pressed');
+    }
+  });
+
+  test('default active background swatch has aria-pressed="true" and others have "false"', async ({ page }) => {
+    await page.goto('/');
+    const buttons = page.locator('[aria-label="Select Background"] button');
+    let trueCount = 0;
+    let falseCount = 0;
+    for (let i = 0; i < 6; i++) {
+      const pressed = await buttons.nth(i).getAttribute('aria-pressed');
+      if (pressed === 'true') trueCount++;
+      if (pressed === 'false') falseCount++;
+    }
+    expect(trueCount).toBe(1);
+    expect(falseCount).toBe(5);
+  });
+
+  test('background swatch buttons are focusable', async ({ page }) => {
+    await page.goto('/');
+    const firstBg = page.locator('[aria-label="Select Background"] button').first();
+    await firstBg.focus();
+    await expect(firstBg).toBeFocused();
+  });
+
+  test('background swatches have title attributes', async ({ page }) => {
+    await page.goto('/');
+    const buttons = page.locator('[aria-label="Select Background"] button');
+    for (let i = 0; i < 6; i++) {
+      await expect(buttons.nth(i)).toHaveAttribute('title');
+    }
+  });
+
+  test('activating a background swatch updates aria-pressed', async ({ page }) => {
+    await page.goto('/');
+    const buttons = page.locator('[aria-label="Select Background"] button');
+
+    // Click the second swatch (Honeycomb)
+    await buttons.nth(1).click();
+    await expect(buttons.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    // First should now be false
+    await expect(buttons.nth(0)).toHaveAttribute('aria-pressed', 'false');
   });
 });

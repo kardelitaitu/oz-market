@@ -63,4 +63,19 @@ test.describe('Theme Switcher & UI Interactions', () => {
     await docsTabBtn.click();
     await expect(page.locator('h2:has-text("Documentation Hub")')).toBeVisible();
   });
+
+  test('should change background and persist across reloads', async ({ page }) => {
+    const body = page.locator('body');
+
+    // Default is nebulae
+    await expect(body).toHaveAttribute('data-bg', 'nebulae');
+
+    // Change to honeycomb via swatch button
+    await page.click('[aria-label="Honeycomb background"]');
+    await expect(body).toHaveAttribute('data-bg', 'honeycomb');
+
+    // Reload and check persistence
+    await page.reload();
+    await expect(body).toHaveAttribute('data-bg', 'honeycomb');
+  });
 });

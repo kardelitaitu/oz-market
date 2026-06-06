@@ -1,5 +1,5 @@
 <script>
-  let currentBg = $state(localStorage.getItem('oz-market-bg') || 'nebulae');
+  let currentBg = $state((() => { try { return localStorage.getItem('oz-market-bg') || 'nebulae'; } catch { return 'nebulae'; } })());
 
   const backgrounds = [
     { id: 'nebulae',   label: 'Nebulae'   },
@@ -16,7 +16,7 @@
 
   $effect(() => {
     document.body.setAttribute('data-bg', currentBg);
-    localStorage.setItem('oz-market-bg', currentBg);
+    try { localStorage.setItem('oz-market-bg', currentBg); } catch {}
   });
 </script>
 

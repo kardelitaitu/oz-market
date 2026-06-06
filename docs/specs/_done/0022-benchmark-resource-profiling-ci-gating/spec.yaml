@@ -1,7 +1,7 @@
 version: 1
 id: 0022-benchmark-resource-profiling-ci-gating
 title: Benchmark Resource Profiling and CI Gating
-status: active
+status: done
 owner: backend-team
 implementer: agent
 priority: P2

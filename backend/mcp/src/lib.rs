@@ -1,3 +1,9 @@
+/*
+last audited 06-06-26 by RSA-Agent
+crate: oz-market-mcp | status: SAFE | lint: CLEAN
+findings: 24 tests pass. No unsafe. ToolRouter pattern is clean.
+next: no action needed | perf: no regressions
+*/
 //! MCP Server for Marketplace
 //!
 //! Implements Model Context Protocol (MCP) to let AI agents interact

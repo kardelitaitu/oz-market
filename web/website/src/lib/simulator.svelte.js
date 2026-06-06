@@ -32,40 +32,53 @@ const seedBlocks = [
   { hash: '0x7cd45f183a92', price: 650,  item: 'MacBook Air M3',           ts: '17:22:19', isNew: false },
   { hash: '0xb2e70d9c15f1', price: 210,  item: 'Sony WH-1000XM5',          ts: '17:05:44', isNew: false },
   { hash: '0xf9a3c841de02', price: 890,  item: 'DJI Mini 4 Pro',           ts: '16:48:11', isNew: false },
-  { hash: '0x0d72fe5b8a63', price: 145,  item: 'Apple AirPods Pro 2',      ts: '16:30:57', isNew: false },
+  { hash: '0x0d72fe5b8a63', price: 500,  item: 'iPhone 15 Pro',             ts: '16:30:57', isNew: false },
   { hash: '0x5c1b947e2f80', price: 1100, item: 'ASUS ROG Zephyrus G14',    ts: '16:12:33', isNew: false },
   { hash: '0xe8d04c3791ab', price: 390,  item: 'Google Pixel 8 Pro',       ts: '15:55:08', isNew: false },
   { hash: '0x29fc8b60a347', price: 275,  item: 'Nintendo Switch OLED',     ts: '15:37:44', isNew: false },
-  { hash: '0xc6a51e082d94', price: 560,  item: 'Samsung 49" Odyssey G9',   ts: '15:19:20', isNew: false },
-  { hash: '0x84b3d7f91c50', price: 720,  item: 'iPhone 15 Pro Max',        ts: '15:02:55', isNew: false },
+  { hash: '0xc6a51e082d94', price: 650,  item: 'MacBook Air M3',           ts: '15:19:20', isNew: false },
+  { hash: '0x84b3d7f91c50', price: 620,  item: 'iPad Pro 11" M4',         ts: '15:02:55', isNew: false },
   { hash: '0x1a9e5042bc76', price: 430,  item: 'Fujifilm X-T5 Body',       ts: '14:44:31', isNew: false },
   { hash: '0x6d27cf3e54b8', price: 185,  item: 'Meta Quest 3 (128GB)',      ts: '14:27:06', isNew: false },
   { hash: '0xd50e8f1a7263', price: 310,  item: 'Garmin Fenix 7S Pro',      ts: '14:09:42', isNew: false },
-  { hash: '0x92bc4d6f3e01', price: 95,   item: 'Anker 737 Power Bank',     ts: '13:52:18', isNew: false },
+  { hash: '0x92bc4d6f3e01', price: 185,  item: 'Meta Quest 3 (128GB)',      ts: '13:52:18', isNew: false },
 ];
 
+const MAX_BLOCKS = 500;
+
 // ─── Initial blocks retrieval from localStorage ───
-const initialBlocks = (typeof window !== 'undefined' && window.localStorage)
-  ? (function() {
+const initialBlocks = (function() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
       const stored = localStorage.getItem('oz_market_committed_blocks');
       if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          return [...seedBlocks];
-        }
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
       }
-      return [...seedBlocks];
-    })()
-  : [...seedBlocks];
+    }
+  } catch (_) {}
+  return [...seedBlocks];
+})();
 
-const initialSuccess = (typeof window !== 'undefined' && window.localStorage)
-  ? (parseInt(localStorage.getItem('oz_market_sim_success_count'), 10) || 15)
-  : 15; // default to match 15 seed blocks
+const initialSuccess = (function() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const val = parseInt(localStorage.getItem('oz_market_sim_success_count'), 10);
+      return val || 15;
+    }
+  } catch (_) {}
+  return 15;
+})();
 
-const initialFailed = (typeof window !== 'undefined' && window.localStorage)
-  ? (parseInt(localStorage.getItem('oz_market_sim_failed_count'), 10) || 1)
-  : 1;
+const initialFailed = (function() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const val = parseInt(localStorage.getItem('oz_market_sim_failed_count'), 10);
+      return val || 1;
+    }
+  } catch (_) {}
+  return 1;
+})();
 
 // ─── Shared reactive state (wrapped in object to satisfy Svelte 5 export restriction) ───
 export const sim = $state({
@@ -117,15 +130,18 @@ export function resetSeedLedger() {
   sim.committedBlocks = [...seedBlocks];
   sim.successCount = 15;
   sim.failedCount = 1;
-  if (typeof window !== 'undefined' && window.localStorage) {
-    localStorage.setItem('oz_market_committed_blocks', JSON.stringify(seedBlocks));
-    localStorage.setItem('oz_market_sim_success_count', '15');
-    localStorage.setItem('oz_market_sim_failed_count', '1');
-  }
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem('oz_market_committed_blocks', JSON.stringify(seedBlocks));
+      localStorage.setItem('oz_market_sim_success_count', '15');
+      localStorage.setItem('oz_market_sim_failed_count', '1');
+    }
+  } catch (_) {}
 }
 
 // ─── Real-Time SSE Commits Stream Listener ───
 let eventSource = null;
+let intentionalDisconnect = false;
 
 function connectSSE() {
   if (eventSource) return;
@@ -150,16 +166,19 @@ function connectSSE() {
       };
       
       if (!sim.committedBlocks.some(b => b.hash === newBlock.hash)) {
-        sim.committedBlocks = [newBlock, ...sim.committedBlocks];
+        sim.committedBlocks = [newBlock, ...sim.committedBlocks].slice(0, MAX_BLOCKS);
         sim.successCount++;
-        if (window.localStorage) {
-          localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
-          localStorage.setItem('oz_market_sim_success_count', sim.successCount.toString());
-        }
+        try {
+          if (window.localStorage) {
+            localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
+            localStorage.setItem('oz_market_sim_success_count', sim.successCount.toString());
+          }
+        } catch (_) {}
 
-        setTimeout(() => {
+        const _clearTimer = setTimeout(() => {
           clearNewFlag();
         }, 600);
+        timeouts.push(_clearTimer);
       }
     } catch (e) {
       // ignore
@@ -167,9 +186,19 @@ function connectSSE() {
   });
 
   eventSource.onerror = () => {
-    disconnectSSE();
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (reconnectTimeoutId) {
+      clearTimeout(reconnectTimeoutId);
+      reconnectTimeoutId = null;
+    }
+    if (intentionalDisconnect) {
+      intentionalDisconnect = false;
+      return;
+    }
     sim.reconnectAttempts++;
-    // Reconnect with exponential backoff
     reconnectTimeoutId = setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
       connectSSE();
@@ -178,6 +207,7 @@ function connectSSE() {
 }
 
 function disconnectSSE() {
+  intentionalDisconnect = true;
   if (eventSource) {
     eventSource.close();
     eventSource = null;
@@ -297,9 +327,11 @@ export function runSimulation() {
       sim.logs = [...sim.logs, '[System] Consensus failed: negotiation aborted without contract commit.'];
       
       sim.failedCount++;
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('oz_market_sim_failed_count', sim.failedCount.toString());
-      }
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('oz_market_sim_failed_count', sim.failedCount.toString());
+        }
+      } catch (_) {}
 
       let t3 = setTimeout(() => {
         resetSim();
@@ -329,15 +361,19 @@ export function runSimulation() {
         ts: new Date().toLocaleTimeString('en-US', { hour12: false }),
         isNew: true,
       };
-      sim.committedBlocks = [newBlock, ...sim.committedBlocks];
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
-      }
+      sim.committedBlocks = [newBlock, ...sim.committedBlocks].slice(0, MAX_BLOCKS);
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('oz_market_committed_blocks', JSON.stringify(sim.committedBlocks));
+        }
+      } catch (_) {}
 
       sim.successCount++;
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('oz_market_sim_success_count', sim.successCount.toString());
-      }
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('oz_market_sim_success_count', sim.successCount.toString());
+        }
+      } catch (_) {}
 
       setTimeout(() => {
         clearNewFlag();
@@ -393,8 +429,6 @@ export function togglePause() {
   sim.isPaused = !sim.isPaused;
   if (sim.isPaused) {
     clearAllTimeouts();
-  } else {
-    runSimulation();
   }
 }
 

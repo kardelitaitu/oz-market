@@ -162,7 +162,7 @@
     <span class="metric-label">Avg Discount</span>
     <span class="metric-value" style="color: var(--color-accent);">{avgDiscount.toFixed(1)}%</span>
     <div class="metric-bar-container">
-      <div class="metric-bar" style="width: {avgDiscount * 2}%; background: var(--color-accent);"></div>
+      <div class="metric-bar" style="width: {Math.min(avgDiscount * 2, 100)}%; background: var(--color-accent);"></div>
     </div>
     <span class="metric-desc">Below base price</span>
   </div>

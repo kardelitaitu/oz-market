@@ -5,7 +5,7 @@
 Below is the design for the background resource profiler utilizing `sysinfo`:
 
 ```rust
-use sysinfo::{CpuExt, System, SystemExt};
+use sysinfo::System;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;

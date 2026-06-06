@@ -1,5 +1,5 @@
 <script>
-  let currentTheme = $state(localStorage.getItem('oz-market-theme') || 'midnight');
+  let currentTheme = $state((() => { try { return localStorage.getItem('oz-market-theme') || 'midnight'; } catch { return 'midnight'; } })());
 
   const themes = [
     { id: 'midnight', label: 'Midnight' },
@@ -15,7 +15,7 @@
 
   $effect(() => {
     document.body.setAttribute('data-theme', currentTheme);
-    localStorage.setItem('oz-market-theme', currentTheme);
+    try { localStorage.setItem('oz-market-theme', currentTheme); } catch {}
   });
 </script>
 

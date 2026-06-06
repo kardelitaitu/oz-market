@@ -39,10 +39,11 @@
 
   // UI state
   let copiedField = $state('');
+  let modalCard = $state();
 
   function copyToClipboard(text, field) {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(text).catch(() => {});
       copiedField = field;
       setTimeout(() => {
         copiedField = '';
@@ -59,8 +60,33 @@
   function handleKeydown(e) {
     if (e.key === 'Escape') {
       onclose();
+      return;
+    }
+    if (e.key === 'Tab' && modalCard) {
+      const focusable = modalCard.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   }
+
+  // Focus modal on mount, restore on unmount
+  $effect(() => {
+    if (modalCard) {
+      const prev = document.activeElement;
+      modalCard.focus();
+      return () => {
+        if (prev && typeof prev.focus === 'function') prev.focus();
+      };
+    }
+  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -69,10 +95,10 @@
 <div 
   class="modal-overlay" 
   onclick={handleOverlayClick} 
-  role="presentation"
+  aria-hidden="true"
 >
   <!-- Modal Content Container -->
-  <div class="modal-card" role="document" tabindex="-1">
+  <div class="modal-card" role="dialog" aria-modal="true" tabindex="-1" bind:this={modalCard}>
     <!-- Close Button -->
     <button class="modal-close-btn" onclick={onclose} aria-label="Close modal">×</button>
 
@@ -426,6 +452,6 @@
 
   .action-btn:hover {
     background: var(--color-primary);
-    color: #000;
+    color: var(--bg-dark);
   }
 </style>

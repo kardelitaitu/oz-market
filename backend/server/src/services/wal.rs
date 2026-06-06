@@ -1,3 +1,9 @@
+/*
+last audited 06-06-26 by RSA-Agent
+crate: oz-market-server/services/wal | status: SAFE | lint: CLEAN
+findings: 2 .lock().unwrap()→.expect() fixed. No unsafe.
+next: no action needed | perf: Mutex is fine for this I/O path
+*/
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -82,7 +88,7 @@ impl WalManager {
     /// Append one entry and `sync_all()` to disk immediately.
     pub fn append(&self, entry: &WalEntry) -> std::io::Result<()> {
         let line = serde_json::to_string(entry)?;
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.file.lock().expect("WAL mutex poisoned");
         writeln!(file, "{line}")?;
         file.sync_all()?;
         Ok(())
@@ -121,7 +127,7 @@ impl WalManager {
             .truncate(true)
             .create(true)
             .open(&self.path)?;
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.file.lock().expect("WAL mutex poisoned");
         *file = new_file;
         file.sync_all()?;
         Ok(())

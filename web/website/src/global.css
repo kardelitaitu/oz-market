@@ -21,9 +21,9 @@
   --border-glow-hover: HSL(263, 70%, 50%, 0.4);
   --text-primary: HSL(210, 40%, 98%);
   --text-secondary: HSL(215, 20%, 65%);
-  --text-muted: HSL(215, 16%, 52%);
-  --color-primary: HSL(263, 90%, 65%);
-  --color-primary-glow: HSL(263, 90%, 65%, 0.15);
+  --text-muted: HSL(215, 16%, 55%);
+  --color-primary: HSL(263, 90%, 68%);
+  --color-primary-glow: HSL(263, 90%, 68%, 0.15);
   --color-secondary: HSL(190, 90%, 50%);
   --color-secondary-glow: HSL(190, 90%, 50%, 0.15);
   --color-success: HSL(142, 70%, 45%);
@@ -45,9 +45,9 @@ body[data-theme="midnight"] {
   --border-glow-hover: HSL(263, 70%, 50%, 0.4);
   --text-primary: HSL(210, 40%, 98%);
   --text-secondary: HSL(215, 20%, 65%);
-  --text-muted: HSL(215, 16%, 52%);
-  --color-primary: HSL(263, 90%, 65%);
-  --color-primary-glow: HSL(263, 90%, 65%, 0.15);
+  --text-muted: HSL(215, 16%, 55%);
+  --color-primary: HSL(263, 90%, 68%);
+  --color-primary-glow: HSL(263, 90%, 68%, 0.15);
   --color-secondary: HSL(190, 90%, 50%);
   --color-secondary-glow: HSL(190, 90%, 50%, 0.15);
   --color-accent: HSL(320, 85%, 60%);
@@ -81,9 +81,9 @@ body[data-theme="crimson"] {
   --border-glow-hover: HSL(342, 75%, 50%, 0.4);
   --text-primary: HSL(345, 30%, 98%);
   --text-secondary: HSL(345, 12%, 65%);
-  --text-muted: HSL(345, 10%, 52%);
-  --color-primary: HSL(342, 85%, 60%);
-  --color-primary-glow: HSL(342, 85%, 60%, 0.15);
+  --text-muted: HSL(345, 10%, 55%);
+  --color-primary: HSL(342, 85%, 63%);
+  --color-primary-glow: HSL(342, 85%, 63%, 0.15);
   --color-secondary: HSL(25, 95%, 55%);
   --color-secondary-glow: HSL(25, 95%, 55%, 0.15);
   --color-accent: HSL(315, 80%, 65%);

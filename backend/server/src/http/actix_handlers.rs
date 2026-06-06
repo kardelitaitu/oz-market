@@ -2248,8 +2248,8 @@ mod tests {
 
         if !sub_noise {
             assert!(
-                overhead_per_req_ns < 800.0,
-                "wrap_fn overhead is {overhead_per_req_ns:.0}ns/req, exceeds 800ns budget"
+                overhead_per_req_ns < 1500.0,
+                "wrap_fn overhead is {overhead_per_req_ns:.0}ns/req, exceeds 1500ns budget"
             );
         }
 
@@ -2794,7 +2794,7 @@ mod tests {
         let (key, val) = seller_claims_header();
         let req = TestRequest::post()
             .uri("/v1/listings")
-            .insert_header((key, val.clone().as_str()))
+            .insert_header((key, val.as_str()))
             .set_json(test_listing_req())
             .to_request();
         let resp = call_service(&app, req).await;

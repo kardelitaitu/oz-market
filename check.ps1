@@ -37,6 +37,7 @@ $results = @{
     Tests  = @{ Passed = $false; Duration = 0 }
     Journal = @{ Passed = $false; Duration = 0 }
     ActiveSpecs = @{ Passed = $false; Duration = 0 }
+    BenchGate = @{ Passed = $false; Duration = 0 }
 }
 
 # Dot-source pure helper functions for testability
@@ -263,6 +264,29 @@ if (-not $SkipTests -and -not $failed) {
     }
 }
 
+# ---- BENCHMARK CI GATE ------------------------------------------------
+if (-not $failed) {
+    $cmd = "benchmark ci gate (bench_suite --check)"
+    Write-StepHeader $stepNum "$cmd"
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $output = cargo run --bin bench_suite -- --check 2>&1
+        $passed = $LASTEXITCODE -eq 0
+        if (-not $passed) { Write-Host $output }
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $results.BenchGate = @{ Passed = $passed; Duration = $elapsed }
+        Write-StepResult $passed
+        if (-not $passed) { $failed = $true }
+    } catch {
+        $elapsed = $sw.Elapsed.TotalSeconds
+        $results.BenchGate = @{ Passed = $false; Duration = $elapsed }
+        Write-StepResult $false
+        $failed = $true
+    }
+    Set-Location $originalLocation
+    $stepNum++
+}
+
 # Return to original directory
 Set-Location $originalLocation
 
@@ -270,7 +294,7 @@ Set-Location $originalLocation
 $total = ((Get-Date) - $startTime).TotalSeconds
 Write-Status "CI CHECKER REPORT:" "Yellow"
 $p = 0; $f = 0
-$runOrder = @("Journal", "ActiveSpecs", "Build", "Format", "Clippy", "Tests", "Website")
+$runOrder = @("Journal", "ActiveSpecs", "Build", "Format", "Clippy", "Tests", "Website", "BenchGate")
 foreach ($name in $runOrder) {
     $r = $results.$name
     if ($r.Duration -gt 0 -or $r.Passed) {

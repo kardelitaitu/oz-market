@@ -231,17 +231,18 @@
     <input
       type="text"
       placeholder="Filter by item..."
+      aria-label="Filter ledger blocks by item name"
       bind:value={searchQuery}
       class="ledger-search-input"
     />
     {#if searchQuery}
-      <button class="ledger-clear-btn" onclick={() => searchQuery = ''}>×</button>
+      <button class="ledger-clear-btn" onclick={() => searchQuery = ''} aria-label="Clear search">×</button>
     {/if}
   </div>
-  <div class="ledger-blocks" bind:this={ledgerContainer}>
+  <div class="ledger-blocks" bind:this={ledgerContainer} tabindex="0">
     {#each filteredBlocks as block}
       <div 
-        class="ledger-block {block.isNew ? 'new' : ''}" 
+        class="ledger-block {block.isNew ? 'new' : ''}"
         role="button"
         tabindex="0"
         onclick={() => selectedBlock = block}
